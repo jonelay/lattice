@@ -1,0 +1,50 @@
+[
+  {
+    "number": 1,
+    "title": "Define the adapter contract",
+    "body": "This requirement depends on #2.",
+    "state": "open",
+    "labels": [{"name": "requirement"}, {"name": "planning"}],
+    "assignees": [{"login": "octavia"}],
+    "milestone": {"number": 2, "title": "v1.0", "state": "open"}
+  },
+  {
+    "number": 2,
+    "title": "Document issue ingestion",
+    "body": "No dependencies.",
+    "state": "closed",
+    "labels": [{"name": "requirement"}],
+    "assignees": [],
+    "milestone": {"number": 1, "title": "v0.9", "state": "closed"}
+  },
+  {
+    "number": 3,
+    "title": "Fix pagination",
+    "body": "This bug traces to #1.",
+    "state": "open",
+    "labels": [{"name": "bug"}],
+    "assignees": [{"login": "lin"}],
+    "milestone": null
+  },
+  {
+    "number": 4,
+    "title": "Unclassified follow-up",
+    "body": null,
+    "state": "open",
+    "labels": [{"name": "triage"}],
+    "assignees": [],
+    "milestone": null
+  },
+  {
+    "number": 5,
+    "title": "Implementation pull request",
+    "body": "This PR must not become an issue node.",
+    "state": "open",
+    "labels": [],
+    "assignees": [],
+    "milestone": null,
+    "pull_request": {
+      "url": "https://api.github.com/repos/test-org/test-repo/pulls/5"
+    }
+  }
+]

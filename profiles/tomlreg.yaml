@@ -1,0 +1,55 @@
+name: tomlreg
+profile_version: "1.0.0"
+
+# A minimal, domain-free TOML register. This profile exists so lattice keeps a
+# consumer whose input is not markdown — see openspec/specs/adapter-tomlreg.
+# The axis is named `stage` rather than `phase` on purpose: both real consumers
+# use `phase`, so `phase` working proves nothing about the name being data.
+axes:
+  - stage
+
+adapter:
+  paths:
+    register_dir: "registers"
+    # The register that owns the axis values. The adapter reads stage_order and
+    # current_stage from this file's [register] table and carries no copy.
+    axis_file: "registers/index.toml"
+
+node_kinds:
+  register:
+    # One per file; the ID is the file stem, because that is what a sibling
+    # item's `register` key names.
+    id_pattern: "^[a-z0-9-]+$"
+    attrs:
+      id:               { type: string, required: true }
+      register_version: { type: int, required: true }
+      status:           { type: string, required: true }
+
+  item:
+    # Register-qualified: row ids are local slugs and collide across files.
+    id_pattern: "^[a-z0-9-]+/[A-Za-z0-9._-]+$"
+    attrs:
+      id:    { type: string, required: true }
+      stage: { type: string }
+
+edge_kinds:
+  belongs_to:
+    allowed:
+      - [item, register]
+  references:
+    allowed:
+      - [item, item]
+
+validations:
+  # An item referring to something from a stage the register has not reached is
+  # not a gap yet. The register states which stage each row sits at; core
+  # compares that against current_stage and quiets the ones not yet due.
+  - DANGLING_REF:
+      axis: stage
+      position_attr: stage
+
+  # Most registers here are flat enumerations, so an item with no edges is the
+  # normal case rather than a finding. Left visible as info so it stays
+  # queryable without competing with dangling refs for attention.
+  - ORPHAN_NODE:
+      severity: info

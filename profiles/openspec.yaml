@@ -1,0 +1,79 @@
+name: openspec
+profile_version: "1.3.0"
+
+# An OpenSpec register: openspec/specs/<capability>/spec.md, cited from test
+# files by `Requirement: <title>` comment lines. Lattice's own register is the
+# first consumer — see openspec/specs/adapter-openspec.
+
+adapter:
+  paths:
+    spec_dir: "openspec/specs"
+    # Each entry names where citing tests live and which comment dialect the
+    # adapter reads them in. Paths are profile data: nothing in the adapter
+    # hardcodes them.
+    tests:
+      - glob: "crates/lattice-core/tests/*.rs"
+        dialect: rust
+      - glob: "tests/*.py"
+        dialect: python
+
+node_kinds:
+  capability:
+    # One per spec directory; the ID is the directory name.
+    id_pattern: "^[a-z0-9-]+$"
+
+  requirement:
+    # The ID is the requirement title exactly as the register writes it, so the
+    # pattern only rejects surrounding whitespace, not vocabulary.
+    id_pattern: "^\\S(.*\\S)?$"
+    # The title doubles as the node ID, but the suggestion sidecar reads text
+    # only through declared text attrs — an ID is identity, not ranked content.
+    summary_attr: title
+    # Title and body both: ranking the title alone put the true requirement
+    # first for a quarter of unmarked tests and never surfaced 29% of them.
+    # See notes/bodytext-s39/RESULTS.md.
+    text_attrs: [title, body]
+    # One vector per requirement averages a long requirement's distinctive prose
+    # away, and being long was the strongest predictor of never being surfaced.
+    # Ranking each scenario block separately and keeping the best match takes
+    # hit@1 0.507 -> 0.635 and never-surfaced 18 -> 4 labels. The marker is the
+    # register's, so the profile names it rather than the sidecar.
+    # See notes/chunking-s40/RESULTS.md.
+    text_chunk_line_prefix: "#### Scenario:"
+    attrs:
+      title:     { type: string, required: true }
+      scenarios: { type: int, required: true }
+      body:      { type: string }
+
+  test:
+    # Path, then an optional enclosing class, then the function.
+    id_pattern: "^[^:]+(::[A-Za-z_][A-Za-z0-9_]*){1,2}$"
+    # An uncited test is not a finding on its own; coverage answers the
+    # question from the requirement's side.
+    orphan_ok: true
+    summary_attr: function
+    # The function body pays nothing on its own -- it ranks below the name
+    # alone -- but adds 12 points of hit@1 once the requirement side carries
+    # prose for its code to match against.
+    text_attrs: [function, body]
+    attrs:
+      file:     { type: string, required: true }
+      function: { type: string, required: true }
+      body:     { type: string }
+
+edge_kinds:
+  contains:
+    allowed:
+      - [capability, requirement]
+  verifies:
+    allowed:
+      - [test, requirement]
+
+validations:
+  # Visible on every run, contributes to no exit code — --strict never
+  # promotes hint. Gating on coverage is a separate decision, deferred.
+  # DANGLING_REF keeps its shipped error severity: that set should be empty.
+  - COVERAGE:
+      target_kind: requirement
+      edge_kind: verifies
+      severity: hint

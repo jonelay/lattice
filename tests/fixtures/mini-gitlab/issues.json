@@ -1,0 +1,42 @@
+[
+  {
+    "iid": 1,
+    "project_id": 10,
+    "title": "System shall handle input validation",
+    "state": "opened",
+    "labels": ["requirement"],
+    "assignee": {"username": "jone"},
+    "description": "Full description here.\n\ndepends on #2",
+    "milestone": {"title": "v1.0"}
+  },
+  {
+    "iid": 2,
+    "project_id": 10,
+    "title": "Validation behavior is specified",
+    "state": "closed",
+    "labels": ["requirement"],
+    "assignee": null,
+    "description": "The accepted inputs and errors are defined.",
+    "milestone": null
+  },
+  {
+    "iid": 3,
+    "project_id": 10,
+    "title": "Invalid input bypasses the validator",
+    "state": "opened",
+    "labels": ["bug", "backend"],
+    "assignee": {"username": "mira"},
+    "description": "This regression relates to #1.",
+    "milestone": {"title": "v1.1"}
+  },
+  {
+    "iid": 4,
+    "project_id": 10,
+    "title": "Document validation examples",
+    "state": "opened",
+    "labels": ["documentation"],
+    "assignee": null,
+    "description": null,
+    "milestone": null
+  }
+]

@@ -1,0 +1,6 @@
+#!/bin/sh
+# Contract entry point for the openspec adapter: the program `--adapter` names.
+# Resolves the interpreter relative to this file so the caller's cwd and PATH
+# do not decide which Python reads the register.
+here=$(dirname "$0")
+PYTHONPATH="$here/.." exec "$here/../.venv/bin/python" -m adapters.openspec "$@"

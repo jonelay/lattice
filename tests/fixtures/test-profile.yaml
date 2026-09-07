@@ -1,0 +1,26 @@
+name: test-rm
+profile_version: "1.0.0"
+
+node_kinds:
+  req:
+    id_pattern: "^REQ-\\d{4}$"
+    attrs:
+      text:       { type: string, required: true }
+      domain:     { type: string }
+      status:     { type: enum, values: [done, partial, todo, blocked] }
+      priority:   { type: int }
+      approved:   { type: bool }
+      tags:       { type: list, items: string }
+
+  test:
+    id_pattern: "^test_.*$"
+    attrs:
+      file: { type: string, required: true }
+
+edge_kinds:
+  verifies:
+    allowed:
+      - [test, req]
+  derives:
+    allowed:
+      - [req, req]

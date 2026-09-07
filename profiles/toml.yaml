@@ -1,0 +1,77 @@
+name: toml
+profile_version: "1.0.0"
+
+# A domain-free TOML register proving the core and profile schema are not
+# markdown-shaped. The adapter owns no vocabulary: all table and key names are
+# declared below.
+axes:
+  - stage
+
+adapter:
+  paths:
+    files:
+      - "registers/*.toml"
+  id_prefix: file_stem
+  header:
+    table: register
+    kind: register
+    id: file_stem
+    key_map:
+      id: id
+      register_version: register_version
+      status: status
+  tables:
+    item:
+      kind: item
+      id_key: id
+      key_map:
+        id: id
+        stage: stage
+      edge_keys:
+        register: belongs_to
+        refs: references
+    memo:
+      kind: memo
+      id_key: id
+      key_map:
+        text: text
+      edge_keys: {}
+  axis:
+    source_file: registers/index.toml
+    name: stage
+    order_key: register.stage_order
+    current_key: register.current_stage
+
+node_kinds:
+  register:
+    id_pattern: "^[a-z0-9-]+$"
+    attrs:
+      id:               { type: string, required: true }
+      register_version: { type: int, required: true }
+      status:           { type: string, required: true }
+
+  item:
+    id_pattern: "^[a-z0-9-]+/[A-Za-z0-9._-]+$"
+    attrs:
+      id:    { type: string, required: true }
+      stage: { type: string }
+
+  memo:
+    id_pattern: "^[a-z0-9-]+/[A-Za-z0-9._-]+$"
+    attrs:
+      text: { type: string, required: true }
+
+edge_kinds:
+  belongs_to:
+    allowed:
+      - [item, register]
+  references:
+    allowed:
+      - [item, item]
+
+validations:
+  - DANGLING_REF:
+      axis: stage
+      position_attr: stage
+  - ORPHAN_NODE:
+      severity: info

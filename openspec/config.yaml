@@ -1,0 +1,68 @@
+schema: spec-driven
+
+context: |
+  Lattice — a spec/requirements/verification engine for projects whose registers
+  live as plain text in git. Typed node/edge registers (needs, requirements,
+  spec goals, verification items, risks; derives/verifies/mitigates/cites edges)
+  are loaded into a graph, validated, and queried. Derived state — coverage,
+  status rollups, orphans — is computed on demand, never stored.
+
+  Full architecture, profiles, sequencing and the three scope tests: PROPOSAL.md.
+  Evidence and rationale: docs/design-basis.md.
+
+  Stack: a Rust core (edition 2024, cargo) and Python adapters run from the
+  project venv (`.venv/bin/python` — never bare python), pytest. Commit format:
+  `<component>: <imperative summary>` plus a bullet body.
+
+  Three layers with hard boundaries:
+    1. Core — text to graph, validation framework, queries, output. Domain-free,
+       no vocabulary hardcoded. The trace payload is the contract every interface
+       reads; an interface adds to it rather than computing locally.
+    2. Profiles — node kinds, edge kinds, applicable validations, and an
+       ordering axis. Data, not code, so a core upgrade cannot reinterpret a
+       register.
+    3. Adapters — per-repo ingest. The host repo's existing format stays
+       authoritative; the adapter maps it in. An adapter is a program emitting a
+       serialized graph, not a callable in the core's language.
+
+  Hard constraints. A proposal that violates one of these is wrong:
+    - Lens, never evidence. Registers in the host repo are the law. Lattice
+      output is never cited as verification; the verification command wins.
+    - Stateless. No database, no cache, no index, no store of its own. This
+      becomes a confidentiality requirement the moment a client repo uses it.
+    - Non-gating. Blocking CI gates in strict repos stay hermetic stdlib
+      checkers. Lattice, with its dependencies, lives on the non-gating side.
+    - Clean break from the origin tool. Lattice began as a bespoke character
+      graph in ~/cc/art/crossover/story/lattice/. That code is prior art to be
+      read, never copied. No story vocabulary enters core.
+    - Reads verdicts, never computes them. CI decides whether a test passed, the
+      ledger decides whether an obligation is discharged. Lattice joins what the
+      authority recorded to the graph.
+    - Git is the source of truth and the review surface. Every write is a file
+      edit landing in a reviewed diff, whichever interface initiated it.
+
+  Scope is decided by three tests (PROPOSAL.md): does it store a computed
+  answer; can the capability be stated without naming a requirement, a test or a
+  phase; does it make lattice the authority rather than the reader. Below a few
+  dozen requirements a spreadsheet is the honest answer and lattice is not
+  warranted.
+
+rules:
+  proposal:
+    - State the consumer that needs this before describing what it does.
+    - Include a Non-goals section naming what this change deliberately excludes.
+  specs:
+    - Requirements must be verifiable by a named command or an explicit manual
+      tier (inspection / analysis / demonstration / test). If a requirement has
+      no verification path, say so rather than inventing one.
+  tasks:
+    - Every task ends in a state some command can check. Name the command.
+
+operations:
+  apply:
+    guidance:
+      - Run cargo test and, after cargo build, pytest via the project venv
+        after each task group, not at the end.
+  archive:
+    guidance:
+      - Do not archive while any task's verification command is failing or unrun.

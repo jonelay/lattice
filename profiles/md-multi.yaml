@@ -1,0 +1,41 @@
+name: md-multi
+profile_version: "1.0.0"
+
+adapter:
+  paths:
+    files: ["*.md"]
+  tables:
+    - heading: '^Domain [0-9]+$'
+      kind: requirement
+      id_column: "ID"
+      column_map:
+        "Description": "summary"
+        "Status": "status"
+      edge_columns:
+        "Traces To": "traces_to"
+    - heading: '^Stakeholders$'
+      kind: stakeholder
+      id_column: "ID"
+      column_map:
+        "Name": "name"
+        "Role": "role"
+      edge_columns: {}
+
+node_kinds:
+  requirement:
+    id_pattern: "^REQ-[0-9]+$"
+    summary_attr: summary
+    attrs:
+      summary: { type: string, required: true }
+      status: { type: string }
+  stakeholder:
+    id_pattern: "^STK-[0-9]+$"
+    summary_attr: name
+    attrs:
+      name: { type: string, required: true }
+      role: { type: string }
+
+edge_kinds:
+  traces_to:
+    allowed:
+      - [requirement, requirement]

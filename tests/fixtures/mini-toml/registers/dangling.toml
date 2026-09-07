@@ -1,0 +1,27 @@
+# Fixture register whose references name things no file declares. The adapter
+# still emits the edges; resolving them is the core's job, and an adapter that
+# dropped them would hide the finding.
+#
+# `not_yet` sits at a stage the register has not reached, so its DANGLING_REF is
+# demoted to info by the axis binding. `overdue` sits at the current stage, so
+# its finding stands.
+
+[register]
+id = "reg.dangling"
+register_version = 0
+status = "draft-1"
+
+[[item]]
+id = "overdue"
+stage = "s2"
+refs = ["alpha/absent"]
+
+[[item]]
+id = "not_yet"
+stage = "s3"
+refs = ["beta/absent"]
+
+[[item]]
+id = "points_nowhere"
+stage = "s1"
+register = "nonexistent"

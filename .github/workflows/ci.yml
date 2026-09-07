@@ -1,0 +1,69 @@
+# This pipeline runs the Verifying block in CLAUDE.md, minus the one check it
+# cannot run.
+#
+# HONEST LABEL: green here is NOT the real-data gate. The only real-data check is
+# `lattice validate` against a consumer target, which lives in another repo that CI
+# cannot clone; it stays a by-hand step, and the Python suite skips its
+# consumer-adapter tests when that repo is absent. A green pipeline says the core, the
+# adapters against their fixtures, and the specs are consistent — nothing about
+# live data.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  rust-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.95"
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo build
+      - run: cargo test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lattice-binary
+          path: target/debug/lattice
+
+  python-check:
+    needs: rust-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: lattice-binary
+          path: target/debug
+      # upload-artifact does not preserve the executable bit
+      - run: chmod +x target/debug/lattice && test -x target/debug/lattice
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m venv .venv
+      - run: .venv/bin/pip install --quiet -e ".[test]"
+      # Expect ~18 skips: the consumer-adapter tests skip when that repo is absent,
+      # and it always is here. A green run is a weaker result than a green local one.
+      - run: .venv/bin/python -m pytest -q
+
+  spec-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # Pinned: an unpinned upstream release could redden this pipeline with no
+      # change in the repo, which is exactly the failure-versus-finding confusion
+      # this tool exists to prevent.
+      - run: npm install --global @fission-ai/openspec@1.7.0
+      - run: openspec validate --specs --strict

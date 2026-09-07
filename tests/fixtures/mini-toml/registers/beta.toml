@@ -1,0 +1,16 @@
+# Fixture register: the target of alpha's references, and it reuses the slug
+# `one`, which alpha.toml also declares. Register-qualified IDs keep both.
+
+[register]
+id = "reg.beta"
+register_version = 0
+status = "draft-1"
+
+[[item]]
+id = "one"
+stage = "s1"
+
+[[item]]
+id = "two"
+stage = "s2"
+register = "alpha"

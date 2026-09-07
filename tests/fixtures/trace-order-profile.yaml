@@ -1,0 +1,18 @@
+# Declaration order is deliberately the reverse of lexicographic order, for both
+# node kinds and edge kinds, so an ordering test discriminates between the two.
+name: trace-order
+profile_version: "1.0.0"
+
+node_kinds:
+  zone:
+    id_pattern: "^Z-\\d+$"
+  alpha:
+    id_pattern: "^A-\\d+$"
+
+edge_kinds:
+  verifies:
+    allowed:
+      - [zone, alpha]
+  derives:
+    allowed:
+      - [zone, alpha]

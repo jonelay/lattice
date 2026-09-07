@@ -1,0 +1,53 @@
+BN-1                 need       Protect the public trace contr edges:0 findings:0
+BN-2                 need       Maintain a deliberately discon edges:0 findings:1
+  WARNING ORPHAN_NODE docs/register.md:12 node 'BN-2' has no edges
+UN-1                 need       Maintainers need stable trace  edges:1 findings:0
+UN-2                 need       Reviewers need deterministic g edges:1 findings:0
+REQ-0001             req        The trace gate shall render ev edges:1 findings:1
+  ERROR REGISTER_CONFLICT docs/register.md:53 synthetic conflicting declarations remain visible at error severity
+REQ-0002             req        The report shall treat a paren edges:0 findings:1
+  WARNING EDITORIAL_WARNING docs/register.md:59 synthetic wording needs a maintainer review
+REQ-0003             req        A deriving child shall contrib edges:1 findings:0
+REQ-0004             req        The report shall expose a chil edges:0 findings:3
+  WARNING COVERAGE docs/register.md:72 node 'REQ-0004' (kind 'req') has no incoming 'fulfills' edge
+  WARNING COVERAGE_DEEP docs/register.md:72 node 'REQ-0004' (kind 'req') is not deep-covered: no evidence and no children
+  WARNING ORPHAN_NODE docs/register.md:72 node 'REQ-0004' has no edges
+REQ-0005             req        The report shall identify a pa edges:0 findings:1
+  WARNING COVERAGE_DEEP docs/register.md:79 node 'REQ-0005' (kind 'req') is not deep-covered: uncovered children: 'REQ-0006'
+REQ-0006             req        An uncovered child shall remai edges:1 findings:1
+  WARNING COVERAGE_DEEP docs/register.md:86 node 'REQ-0006' (kind 'req') is not deep-covered: no evidence and no children
+REQ-0007             req        A parent requirement shall bec edges:0 findings:0
+REQ-0008             req        The covered child shall carry  edges:1 findings:0
+REQ-0009             req        A second parent shall demonstr edges:0 findings:0
+REQ-0010             req        The report shall preserve adap edges:1 findings:1
+  ERROR ATTR_REQUIRED docs/register.md:120 node 'REQ-0010': missing required attr 'domain'
+REQ-0011             req        The report shall attach diagno edges:1 findings:1
+  WARNING COVERAGE_DEEP docs/register.md:127 node 'REQ-0011' (kind 'req') is not deep-covered: no evidence and no children
+01-1.1               spec-goal  Ingest a synthetic requirement edges:3 findings:0
+01-1.2               spec-goal  Render direct and rolled-up co edges:3 findings:0
+01-1.3               spec-goal  Report childless and child-cau edges:2 findings:0
+01-1.4               spec-goal  Exercise edge grouping with a  edges:2 findings:1
+  ERROR EDGE_CONSTRAINT docs/spec/01-coverage.md:75 edge '01-1.4'->'REQ-0002' (kind 'derives'): [spec-goal, req] not in allowed pairs
+02-2.1               spec-goal  Keep findings visible in every edges:2 findings:1
+  INFO DESIGN_NOTE docs/spec/02-reporting.md:15 synthetic informational context is attached to this specification goal
+02-2.2               spec-goal  Leave one specification goal d edges:0 findings:1
+  WARNING ORPHAN_NODE docs/spec/02-reporting.md:42 node '02-2.2' has no edges
+tests/test_register.py::TestRendering::test_long_identifier_and_summary_columns test       test_long_identifier_and_summa edges:2 findings:1
+  ERROR DANGLING_REF tests/test_register.py:36 edge 'tests/test_register.py::TestRendering::test_long_identifier_and_summary_columns'->'REQ-9999' (kind 'verifies'): target 'REQ-9999' does not exist
+tests/test_register.py::test_direct_evidence test       test_direct_evidence           edges:1 findings:1
+  HINT REVIEW_SUGGESTION tests/test_register.py:13 synthetic hint demonstrates the lowest-severity rendering
+tests/test_register.py::test_duplicate_evidence_path test       test_duplicate_evidence_path   edges:1 findings:0
+tests/test_register.py::test_first_rollup_child test       test_first_rollup_child        edges:1 findings:0
+tests/test_register.py::test_long_summary_truncation test       test_long_summary_truncation   edges:1 findings:0
+tests/test_register.py::test_second_rollup_child test       test_second_rollup_child       edges:1 findings:0
+tests/test_register.py::test_unattributed_candidate_keeps_coverage_unknown test       test_unattributed_candidate_ke edges:0 findings:0
+SC-001               sc         A maintainer can review a comp edges:0 findings:0
+SC-002               sc         A release gate detects byte-le edges:0 findings:0
+SC-003               sc         A reviewer can distinguish uns edges:0 findings:1
+  WARNING ORPHAN_NODE docs/register.md:210 node 'SC-003' has no edges
+
+Unattachable findings:
+  HINT COVERAGE_UNKNOWN <profile>:0 1 of 6 node(s) of kind 'spec-goal' (16.7%) carry no outgoing 'fulfills' edge; coverage state for 'req' is unknown
+  HINT COVERAGE_UNKNOWN <profile>:0 1 of 7 node(s) of kind 'test' (14.3%) carry no outgoing 'verifies' edge; deep coverage state for 'req' is unknown
+  WARNING SOURCE_MISSING docs/spec/02-reporting.md:41 synthetic cited path 'tests/test_absent.py' does not resolve
+  WARNING PARSE_ERROR docs/unparsed-register-fragment.md:4 synthetic unattachable input diagnostic

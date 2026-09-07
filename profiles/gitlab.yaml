@@ -1,0 +1,62 @@
+name: gitlab
+profile_version: "1.0.0"
+
+adapter:
+  label_map:
+    "requirement": "requirement"
+    "bug": "bug"
+  default_kind: "issue"
+  edge_patterns:
+    'depends on #(\d+)': "depends_on"
+    'relates to #(\d+)': "relates_to"
+
+node_kinds:
+  requirement:
+    id_pattern: "^#[0-9]+$"
+    orphan_ok: true
+    summary_attr: summary
+    attrs:
+      summary: { type: string, required: true }
+      state: { type: string }
+      assignee: { type: string }
+      labels: { type: list, items: string }
+
+  bug:
+    id_pattern: "^#[0-9]+$"
+    orphan_ok: true
+    summary_attr: summary
+    attrs:
+      summary: { type: string, required: true }
+      state: { type: string }
+
+  issue:
+    id_pattern: "^#[0-9]+$"
+    orphan_ok: true
+    summary_attr: summary
+    attrs:
+      summary: { type: string, required: true }
+      state: { type: string }
+
+edge_kinds:
+  depends_on:
+    allowed:
+      - [requirement, requirement]
+      - [requirement, issue]
+      - [issue, requirement]
+      - [issue, issue]
+      - [bug, requirement]
+      - [bug, issue]
+      - [bug, bug]
+      - [requirement, bug]
+      - [issue, bug]
+  relates_to:
+    allowed:
+      - [requirement, requirement]
+      - [requirement, issue]
+      - [issue, requirement]
+      - [issue, issue]
+      - [bug, requirement]
+      - [bug, issue]
+      - [bug, bug]
+      - [requirement, bug]
+      - [issue, bug]

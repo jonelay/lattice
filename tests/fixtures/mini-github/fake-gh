@@ -1,0 +1,14 @@
+#!/bin/sh
+if [ "${FAKE_GH_ERROR:-}" = "1" ]; then
+    echo "fixture authentication failure" >&2
+    exit 1
+fi
+
+if [ "$1" = "api" ] && [ "$2" = "repos/test-org/test-repo/issues" ] && \
+   [ "$3" = "--paginate" ] && [ "$4" = "-q" ] && [ "$5" = ".[]" ]; then
+    here=$(dirname "$0")
+    exec sed -n '1,$p' "$here/issues.json"
+fi
+
+echo "unexpected gh arguments: $*" >&2
+exit 2

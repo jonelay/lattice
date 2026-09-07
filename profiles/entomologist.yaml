@@ -1,0 +1,32 @@
+name: entomologist
+profile_version: "1.0.0"
+
+# Entomologist ("ent") issue register, read from the entomologist-data orphan
+# branch of the target repo. No axis: ent states are per-issue statuses with no
+# register-wide current position, so there is nothing to bind one to.
+
+node_kinds:
+  issue:
+    # Ent issue directories are 32-hex ids; the id is what a dependencies/
+    # entry in another issue names.
+    id_pattern: "^[0-9a-f]{32}$"
+    summary_attr: summary
+    # A flat issue tracker's issues mostly link to nothing; an edge is the
+    # exception, not the health signal. `query orphans` still sees them.
+    orphan_ok: true
+    attrs:
+      summary:  { type: string, required: true }
+      author:   { type: string, required: true }
+      # The vocabulary lives here, not in the adapter: a state ent adds later
+      # is an ATTR_ENUM finding, never an adapter that rejects or rewrites it.
+      state:
+        type: enum
+        required: true
+        values: [new, backlog, blocked, inprogress, done, wontdo]
+      assignee: { type: string }
+      tags:     { type: list, items: string }
+
+edge_kinds:
+  depends_on:
+    allowed:
+      - [issue, issue]

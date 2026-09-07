@@ -1,0 +1,18 @@
+# Fixture register whose fields are recognized but carry the wrong shape.
+# numeric_register must be reported; string_refs is valid (scalar shorthand).
+
+[register]
+id = "reg.wrongshape"
+register_version = 0
+status = "draft-1"
+
+[[item]]
+id = "string_refs"
+stage = "s1"
+# A bare string: accepted as a single-target edge (scalar shorthand for a list).
+refs = "beta/two"
+
+[[item]]
+id = "numeric_register"
+stage = "s1"
+register = 7

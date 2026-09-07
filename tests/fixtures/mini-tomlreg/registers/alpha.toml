@@ -1,0 +1,22 @@
+# Fixture register: the shape a well-formed register takes.
+
+[register]
+id = "reg.alpha"
+register_version = 0
+status = "draft-3"
+
+# A top-level table that is not an array of tables: register metadata, not rows.
+[projection]
+id = "reg.path.projection"
+doc = "carried as metadata, never read as rows"
+
+[[item]]
+id = "one"
+stage = "s1"
+register = "beta"
+refs = ["beta/two"]
+
+[[item]]
+id = "two"
+stage = "s2"
+refs = ["alpha/one", "beta/two"]

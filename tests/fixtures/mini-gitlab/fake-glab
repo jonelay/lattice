@@ -1,0 +1,40 @@
+#!/bin/sh
+set -eu
+
+if [ "${FAKE_GLAB_ERROR:-}" = "1" ]; then
+    echo "simulated GitLab API failure" >&2
+    exit 1
+fi
+
+here=$(dirname "$0")
+if [ "$#" -lt 2 ] || [ "$1" != "api" ]; then
+    echo "unexpected glab arguments: $*" >&2
+    exit 2
+fi
+
+case "$2" in
+    projects/test-group%2Ftest-project/issues)
+        if [ "${3:-}" != "--paginate" ] || [ "$#" -ne 3 ]; then
+            echo "issues request must use --paginate: $*" >&2
+            exit 2
+        fi
+        if [ "${FAKE_GLAB_MALFORMED:-}" = "1" ]; then
+            echo '{not-json'
+        else
+            exec /bin/cat "$here/issues.json"
+        fi
+        ;;
+    projects/test-group%2Ftest-project/issues/*/links)
+        if [ "$#" -ne 2 ]; then
+            echo "links request had unexpected arguments: $*" >&2
+            exit 2
+        fi
+        iid=${2%/links}
+        iid=${iid##*/}
+        exec /bin/cat "$here/links-$iid.json"
+        ;;
+    *)
+        echo "unexpected GitLab API endpoint: $2" >&2
+        exit 2
+        ;;
+esac

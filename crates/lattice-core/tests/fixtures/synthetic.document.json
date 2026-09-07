@@ -1,0 +1,718 @@
+{
+ "contract_version": "1.0",
+ "nodes": [
+  {
+   "id": "tests/test_register.py::test_unattributed_candidate_keeps_coverage_unknown",
+   "kind": "test",
+   "attrs": {
+    "file": "tests/test_register.py",
+    "function": "test_unattributed_candidate_keeps_coverage_unknown",
+    "docstring": "Exercises the evidence-source population without claiming a requirement."
+   },
+   "provenance": {
+    "file": "tests/test_register.py",
+    "line": 88
+   }
+  },
+  {
+   "id": "SC-003",
+   "kind": "sc",
+   "attrs": {
+    "text": "A reviewer can distinguish unsupported claims from incomplete attribution.",
+    "stakeholder": "reviewer",
+    "category": "Nice-to-have"
+   },
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 210
+   }
+  },
+  {
+   "id": "REQ-0010",
+   "kind": "req",
+   "attrs": {
+    "text": "The report shall preserve adapter findings at their declared severity.",
+    "rationale": "Severity is part of the adapter contract."
+   },
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 120
+   }
+  },
+  {
+   "id": "02-2.2",
+   "kind": "spec-goal",
+   "attrs": {
+    "title": "Leave one specification goal deliberately unattributed",
+    "status": "todo",
+    "file": "docs/spec/02-reporting.md"
+   },
+   "provenance": {
+    "file": "docs/spec/02-reporting.md",
+    "line": 42
+   }
+  },
+  {
+   "id": "UN-2",
+   "kind": "need",
+   "attrs": {
+    "text": "Reviewers need deterministic grouping independent of declaration order.",
+    "tier": "user",
+    "traces_to": [
+     "BN-1"
+    ]
+   },
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 24
+   }
+  },
+  {
+   "id": "REQ-0004",
+   "kind": "req",
+   "attrs": {
+    "text": "The report shall expose a childless requirement with no test evidence.",
+    "domain": "coverage",
+    "rationale": "The empty-child case must not pass by vacuous truth."
+   },
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 72
+   }
+  },
+  {
+   "id": "tests/test_register.py::TestRendering::test_long_identifier_and_summary_columns",
+   "kind": "test",
+   "attrs": {
+    "file": "tests/test_register.py",
+    "function": "test_long_identifier_and_summary_columns",
+    "docstring": "Keeps long identifiers visible while the key attribute is truncated to its fixed display width."
+   },
+   "provenance": {
+    "file": "tests/test_register.py",
+    "line": 34
+   }
+  },
+  {
+   "id": "BN-2",
+   "kind": "need",
+   "attrs": {
+    "text": "Maintain a deliberately disconnected business need for orphan reporting.",
+    "tier": "business",
+    "traces_to": []
+   },
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 12
+   }
+  },
+  {
+   "id": "01-1.2",
+   "kind": "spec-goal",
+   "attrs": {
+    "title": "Render direct and rolled-up coverage without storing derived state",
+    "status": "done",
+    "file": "docs/spec/01-coverage.md"
+   },
+   "provenance": {
+    "file": "docs/spec/01-coverage.md",
+    "line": 28
+   }
+  },
+  {
+   "id": "REQ-0007",
+   "kind": "req",
+   "attrs": {
+    "text": "A parent requirement shall become deep-covered when every child is covered.",
+    "domain": "coverage",
+    "rationale": "This is the positive recursive rollup case."
+   },
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 93
+   }
+  },
+  {
+   "id": "SC-001",
+   "kind": "sc",
+   "attrs": {
+    "text": "A maintainer can review a compact but behaviorally broad baseline diff.",
+    "stakeholder": "maintainer",
+    "category": "Must-have"
+   },
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 196
+   }
+  },
+  {
+   "id": "tests/test_register.py::test_direct_evidence",
+   "kind": "test",
+   "attrs": {
+    "file": "tests/test_register.py",
+    "function": "test_direct_evidence",
+    "docstring": "Provides direct evidence for the first synthetic requirement."
+   },
+   "provenance": {
+    "file": "tests/test_register.py",
+    "line": 12
+   }
+  },
+  {
+   "id": "REQ-0002",
+   "kind": "req",
+   "attrs": {
+    "text": "The report shall treat a parent as covered through all covered children.",
+    "domain": "coverage",
+    "rationale": "A parent need not duplicate its children's direct evidence."
+   },
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 58
+   }
+  },
+  {
+   "id": "02-2.1",
+   "kind": "spec-goal",
+   "attrs": {
+    "title": "Keep findings visible in every supported output format",
+    "status": "partial",
+    "file": "docs/spec/02-reporting.md"
+   },
+   "provenance": {
+    "file": "docs/spec/02-reporting.md",
+    "line": 14
+   }
+  },
+  {
+   "id": "UN-1",
+   "kind": "need",
+   "attrs": {
+    "text": "Maintainers need stable trace output for compatible core changes.",
+    "tier": "user",
+    "traces_to": [
+     "BN-1"
+    ]
+   },
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 20
+   }
+  },
+  {
+   "id": "REQ-0009",
+   "kind": "req",
+   "attrs": {
+    "text": "A second parent shall demonstrate that deep rollup is repeatable.",
+    "domain": "coverage",
+    "rationale": "Multiple rollups make accidental single-node special cases visible."
+   },
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 108
+   }
+  },
+  {
+   "id": "tests/test_register.py::test_second_rollup_child",
+   "kind": "test",
+   "attrs": {
+    "file": "tests/test_register.py",
+    "function": "test_second_rollup_child",
+    "docstring": "Covers the child of the second recursive rollup."
+   },
+   "provenance": {
+    "file": "tests/test_register.py",
+    "line": 67
+   }
+  },
+  {
+   "id": "REQ-0005",
+   "kind": "req",
+   "attrs": {
+    "text": "The report shall identify a parent whose child remains uncovered.",
+    "domain": "coverage",
+    "rationale": "The finding must name the immediate uncovered child."
+   },
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 79
+   }
+  },
+  {
+   "id": "01-1.1",
+   "kind": "spec-goal",
+   "attrs": {
+    "title": "Ingest a synthetic requirements register with deliberately long display text",
+    "status": "done",
+    "file": "docs/spec/01-coverage.md"
+   },
+   "provenance": {
+    "file": "docs/spec/01-coverage.md",
+    "line": 6
+   }
+  },
+  {
+   "id": "SC-002",
+   "kind": "sc",
+   "attrs": {
+    "text": "A release gate detects byte-level changes in plain, JSON, and rich trace output.",
+    "stakeholder": "release-engineer",
+    "category": "Should-have"
+   },
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 203
+   }
+  },
+  {
+   "id": "REQ-0001",
+   "kind": "req",
+   "attrs": {
+    "text": "The trace gate shall render every declared node and outgoing edge.",
+    "domain": "rendering",
+    "rationale": "The baseline is a serialization compatibility surface."
+   },
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 51
+   }
+  },
+  {
+   "id": "tests/test_register.py::test_first_rollup_child",
+   "kind": "test",
+   "attrs": {
+    "file": "tests/test_register.py",
+    "function": "test_first_rollup_child",
+    "docstring": "Covers the child whose evidence rolls up to its parent."
+   },
+   "provenance": {
+    "file": "tests/test_register.py",
+    "line": 23
+   }
+  },
+  {
+   "id": "REQ-0008",
+   "kind": "req",
+   "attrs": {
+    "text": "The covered child shall carry direct evidence used by its parent.",
+    "domain": "coverage",
+    "rationale": "This child anchors the second positive rollup."
+   },
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 100
+   }
+  },
+  {
+   "id": "01-1.3",
+   "kind": "spec-goal",
+   "attrs": {
+    "title": "Report childless and child-caused deep coverage gaps",
+    "status": "done",
+    "file": "docs/spec/01-coverage.md"
+   },
+   "provenance": {
+    "file": "docs/spec/01-coverage.md",
+    "line": 51
+   }
+  },
+  {
+   "id": "BN-1",
+   "kind": "need",
+   "attrs": {
+    "text": "Protect the public trace contract with maintainable synthetic examples.",
+    "tier": "business",
+    "traces_to": []
+   },
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 6
+   }
+  },
+  {
+   "id": "REQ-0006",
+   "kind": "req",
+   "attrs": {
+    "text": "An uncovered child shall remain visible even when its parent is specified.",
+    "domain": "coverage",
+    "rationale": "Specification edges do not substitute for test evidence."
+   },
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 86
+   }
+  },
+  {
+   "id": "tests/test_register.py::test_duplicate_evidence_path",
+   "kind": "test",
+   "attrs": {
+    "file": "tests/test_register.py",
+    "function": "test_duplicate_evidence_path",
+    "docstring": "Provides a second evidence source for a covered node."
+   },
+   "provenance": {
+    "file": "tests/test_register.py",
+    "line": 45
+   }
+  },
+  {
+   "id": "REQ-0003",
+   "kind": "req",
+   "attrs": {
+    "text": "A deriving child shall contribute coverage to its parent.",
+    "domain": "coverage",
+    "rationale": "The child is directly evidenced and the parent is not."
+   },
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 65
+   }
+  },
+  {
+   "id": "tests/test_register.py::test_long_summary_truncation",
+   "kind": "test",
+   "attrs": {
+    "file": "tests/test_register.py",
+    "function": "test_long_summary_truncation",
+    "docstring": "Uses a function name long enough to exercise fixed-width rendering."
+   },
+   "provenance": {
+    "file": "tests/test_register.py",
+    "line": 56
+   }
+  },
+  {
+   "id": "01-1.4",
+   "kind": "spec-goal",
+   "attrs": {
+    "title": "Exercise edge grouping with a deliberately invalid cross-kind edge",
+    "status": "blocked",
+    "file": "docs/spec/01-coverage.md"
+   },
+   "provenance": {
+    "file": "docs/spec/01-coverage.md",
+    "line": 73
+   }
+  },
+  {
+   "id": "REQ-0011",
+   "kind": "req",
+   "attrs": {
+    "text": "The report shall attach diagnostics to the node that gives them context.",
+    "domain": "diagnostics",
+    "rationale": "Attached findings are easier to interpret than a global list."
+   },
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 127
+   }
+  }
+ ],
+ "edges": [
+  {
+   "src": "01-1.1",
+   "tgt": "REQ-0003",
+   "kind": "fulfills",
+   "provenance": {
+    "file": "docs/spec/01-coverage.md",
+    "line": 9
+   }
+  },
+  {
+   "src": "UN-2",
+   "tgt": "BN-1",
+   "kind": "derives",
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 25
+   }
+  },
+  {
+   "src": "tests/test_register.py::test_second_rollup_child",
+   "tgt": "REQ-0010",
+   "kind": "verifies",
+   "provenance": {
+    "file": "tests/test_register.py",
+    "line": 68
+   }
+  },
+  {
+   "src": "REQ-0008",
+   "tgt": "REQ-0007",
+   "kind": "derives",
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 101
+   }
+  },
+  {
+   "src": "02-2.1",
+   "tgt": "REQ-0011",
+   "kind": "fulfills",
+   "provenance": {
+    "file": "docs/spec/02-reporting.md",
+    "line": 18
+   }
+  },
+  {
+   "src": "tests/test_register.py::test_direct_evidence",
+   "tgt": "REQ-0001",
+   "kind": "verifies",
+   "provenance": {
+    "file": "tests/test_register.py",
+    "line": 13
+   }
+  },
+  {
+   "src": "REQ-0001",
+   "tgt": "SC-001",
+   "kind": "derives",
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 52
+   }
+  },
+  {
+   "src": "01-1.3",
+   "tgt": "REQ-0006",
+   "kind": "fulfills",
+   "provenance": {
+    "file": "docs/spec/01-coverage.md",
+    "line": 55
+   }
+  },
+  {
+   "src": "01-1.4",
+   "tgt": "REQ-0002",
+   "kind": "derives",
+   "provenance": {
+    "file": "docs/spec/01-coverage.md",
+    "line": 75
+   }
+  },
+  {
+   "src": "tests/test_register.py::test_first_rollup_child",
+   "tgt": "REQ-0003",
+   "kind": "verifies",
+   "provenance": {
+    "file": "tests/test_register.py",
+    "line": 24
+   }
+  },
+  {
+   "src": "REQ-0011",
+   "tgt": "SC-002",
+   "kind": "derives",
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 128
+   }
+  },
+  {
+   "src": "01-1.2",
+   "tgt": "REQ-0008",
+   "kind": "fulfills",
+   "provenance": {
+    "file": "docs/spec/01-coverage.md",
+    "line": 32
+   }
+  },
+  {
+   "src": "REQ-0003",
+   "tgt": "REQ-0002",
+   "kind": "derives",
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 66
+   }
+  },
+  {
+   "src": "tests/test_register.py::test_duplicate_evidence_path",
+   "tgt": "REQ-0001",
+   "kind": "verifies",
+   "provenance": {
+    "file": "tests/test_register.py",
+    "line": 46
+   }
+  },
+  {
+   "src": "01-1.1",
+   "tgt": "REQ-0001",
+   "kind": "fulfills",
+   "provenance": {
+    "file": "docs/spec/01-coverage.md",
+    "line": 8
+   }
+  },
+  {
+   "src": "01-1.3",
+   "tgt": "REQ-0005",
+   "kind": "fulfills",
+   "provenance": {
+    "file": "docs/spec/01-coverage.md",
+    "line": 54
+   }
+  },
+  {
+   "src": "tests/test_register.py::TestRendering::test_long_identifier_and_summary_columns",
+   "tgt": "REQ-0008",
+   "kind": "verifies",
+   "provenance": {
+    "file": "tests/test_register.py",
+    "line": 35
+   }
+  },
+  {
+   "src": "UN-1",
+   "tgt": "BN-1",
+   "kind": "derives",
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 21
+   }
+  },
+  {
+   "src": "02-2.1",
+   "tgt": "REQ-0010",
+   "kind": "fulfills",
+   "provenance": {
+    "file": "docs/spec/02-reporting.md",
+    "line": 17
+   }
+  },
+  {
+   "src": "REQ-0010",
+   "tgt": "REQ-0009",
+   "kind": "derives",
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 121
+   }
+  },
+  {
+   "src": "01-1.2",
+   "tgt": "REQ-0007",
+   "kind": "fulfills",
+   "provenance": {
+    "file": "docs/spec/01-coverage.md",
+    "line": 31
+   }
+  },
+  {
+   "src": "tests/test_register.py::test_long_summary_truncation",
+   "tgt": "REQ-0010",
+   "kind": "verifies",
+   "provenance": {
+    "file": "tests/test_register.py",
+    "line": 57
+   }
+  },
+  {
+   "src": "01-1.4",
+   "tgt": "REQ-0009",
+   "kind": "fulfills",
+   "provenance": {
+    "file": "docs/spec/01-coverage.md",
+    "line": 77
+   }
+  },
+  {
+   "src": "REQ-0006",
+   "tgt": "REQ-0005",
+   "kind": "derives",
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 87
+   }
+  },
+  {
+   "src": "01-1.1",
+   "tgt": "REQ-0002",
+   "kind": "fulfills",
+   "provenance": {
+    "file": "docs/spec/01-coverage.md",
+    "line": 7
+   }
+  },
+  {
+   "src": "tests/test_register.py::TestRendering::test_long_identifier_and_summary_columns",
+   "tgt": "REQ-9999",
+   "kind": "verifies",
+   "provenance": {
+    "file": "tests/test_register.py",
+    "line": 36
+   }
+  },
+  {
+   "src": "01-1.2",
+   "tgt": "REQ-0011",
+   "kind": "fulfills",
+   "provenance": {
+    "file": "docs/spec/01-coverage.md",
+    "line": 33
+   }
+  }
+ ],
+ "axes": [],
+ "issues": [
+  {
+   "severity": "error",
+   "code": "REGISTER_CONFLICT",
+   "message": "synthetic conflicting declarations remain visible at error severity",
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 53
+   },
+   "node_id": "REQ-0001"
+  },
+  {
+   "severity": "warning",
+   "code": "EDITORIAL_WARNING",
+   "message": "synthetic wording needs a maintainer review",
+   "provenance": {
+    "file": "docs/register.md",
+    "line": 59
+   },
+   "node_id": "REQ-0002"
+  },
+  {
+   "severity": "info",
+   "code": "DESIGN_NOTE",
+   "message": "synthetic informational context is attached to this specification goal",
+   "provenance": {
+    "file": "docs/spec/02-reporting.md",
+    "line": 15
+   },
+   "node_id": "02-2.1"
+  },
+  {
+   "severity": "hint",
+   "code": "REVIEW_SUGGESTION",
+   "message": "synthetic hint demonstrates the lowest-severity rendering",
+   "provenance": {
+    "file": "tests/test_register.py",
+    "line": 13
+   },
+   "node_id": "tests/test_register.py::test_direct_evidence"
+  },
+  {
+   "severity": "warning",
+   "code": "PARSE_ERROR",
+   "message": "synthetic unattachable input diagnostic",
+   "provenance": {
+    "file": "docs/unparsed-register-fragment.md",
+    "line": 4
+   },
+   "node_id": null
+  },
+  {
+   "severity": "warning",
+   "code": "SOURCE_MISSING",
+   "message": "synthetic cited path 'tests/test_absent.py' does not resolve",
+   "provenance": {
+    "file": "docs/spec/02-reporting.md",
+    "line": 41
+   }
+  }
+ ]
+}

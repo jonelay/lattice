@@ -1,0 +1,14 @@
+# Fixture register that declares the ordering axis. The register owns both
+# values; the adapter reads them and carries no copy of its own.
+
+[register]
+id = "reg.index"
+register_version = 0
+status = "draft-2"
+stage_order = ["s1", "s2", "s3"]
+current_stage = "s2"
+
+[[item]]
+id = "root"
+stage = "s1"
+register = "alpha"
