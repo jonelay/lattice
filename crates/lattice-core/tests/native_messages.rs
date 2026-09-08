@@ -24,7 +24,7 @@ fn explicit_null_document_arrays_are_reported_with_native_type() {
     for key in ["nodes", "edges", "axes", "issues"] {
         let mut document = json!({"contract_version": "1.0"});
         document[key] = Value::Null;
-        let error = ingest_document(&document).expect_err(&format!(
+        let error = ingest_document(document).expect_err(&format!(
             "'{key}': null must be reported, not read as empty"
         ));
         assert_eq!(

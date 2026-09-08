@@ -64,7 +64,7 @@ pub fn profile_from_files(files: &[(&str, &str)]) -> Result<Profile, ProfileErro
 
 /// Ingest a well-formed contract document, panicking if it is not one.
 pub fn ingest(document: serde_json::Value) -> LatticeGraph {
-    ingest_document(&document).expect("document is well-formed")
+    ingest_document(document).expect("document is well-formed")
 }
 
 pub fn binary() -> PathBuf {

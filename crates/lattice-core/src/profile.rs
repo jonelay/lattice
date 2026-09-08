@@ -145,18 +145,52 @@ pub type ValidationConfig = BTreeMap<String, Value>;
 /// The declared vocabulary of a register: node kinds, edge kinds, checks.
 #[derive(Debug)]
 pub struct Profile {
-    pub name: String,
-    pub profile_version: String,
-    pub node_kinds: BTreeMap<String, NodeKind>,
-    pub edge_kinds: BTreeMap<String, EdgeKind>,
-    pub validation_overrides: BTreeMap<String, Severity>,
-    pub validation_configs: BTreeMap<String, Vec<ValidationConfig>>,
-    pub axes: Vec<String>,
-    pub axis_bindings: BTreeMap<String, AxisBinding>,
+    name: String,
+    profile_version: String,
+    node_kinds: BTreeMap<String, NodeKind>,
+    edge_kinds: BTreeMap<String, EdgeKind>,
+    validation_overrides: BTreeMap<String, Severity>,
+    validation_configs: BTreeMap<String, Vec<ValidationConfig>>,
+    axes: Vec<String>,
+    axis_bindings: BTreeMap<String, AxisBinding>,
     /// The profile after inheritance resolution (if `extends:` was declared) and
     /// parsing, kept so `resolved_document` can re-emit sections the core does
     /// not model (the `adapter:` namespace above all).
-    pub raw: Value,
+    raw: Value,
+}
+
+impl Profile {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn profile_version(&self) -> &str {
+        &self.profile_version
+    }
+
+    pub fn node_kinds(&self) -> &BTreeMap<String, NodeKind> {
+        &self.node_kinds
+    }
+
+    pub fn edge_kinds(&self) -> &BTreeMap<String, EdgeKind> {
+        &self.edge_kinds
+    }
+
+    pub fn validation_overrides(&self) -> &BTreeMap<String, Severity> {
+        &self.validation_overrides
+    }
+
+    pub fn validation_configs(&self) -> &BTreeMap<String, Vec<ValidationConfig>> {
+        &self.validation_configs
+    }
+
+    pub fn axes(&self) -> &[String] {
+        &self.axes
+    }
+
+    pub fn axis_bindings(&self) -> &BTreeMap<String, AxisBinding> {
+        &self.axis_bindings
+    }
 }
 
 /// Convert a parsed profile value to JSON, refusing what JSON cannot carry.

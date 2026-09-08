@@ -166,7 +166,7 @@ fn classify_entries(
 }
 
 /// Read all issues from a pinned ent register tree without checking it out.
-pub fn read(document: &mut Document, target: &Path, entries: Vec<TreeEntry>) {
+pub(crate) fn read(document: &mut Document, target: &Path, entries: Vec<TreeEntry>) {
     let (issues, wanted) = classify_entries(document, entries);
     let fetched_paths: BTreeSet<&str> = wanted.iter().map(|(path, _)| path.as_str()).collect();
     let texts = parse_batch(document, target, &wanted);

@@ -181,17 +181,77 @@ pub struct ReachReport {
     pub nodes: Vec<NodeRef>,
 }
 
-/// Path answer. When `found` is false the vectors are empty — "not connected"
-/// is an answer, and the payload says so rather than being absent.
+/// Path answer: either a validated path or a not-connected result.
 #[derive(Debug)]
 pub struct PathReport {
-    pub src: String,
-    pub tgt: String,
-    pub found: bool,
-    /// The nodes along the path, `src` first, `tgt` last.
-    pub nodes: Vec<String>,
-    /// The edge kinds between them: one fewer than `nodes`.
-    pub edges: Vec<String>,
+    src: String,
+    tgt: String,
+    outcome: PathOutcome,
+}
+
+#[derive(Debug)]
+enum PathOutcome {
+    Found {
+        nodes: Vec<String>,
+        edges: Vec<String>,
+    },
+    NotFound,
+}
+
+impl PathReport {
+    /// Build a found result when nodes and intervening edges form a valid path.
+    pub fn found(
+        src: String,
+        tgt: String,
+        nodes: Vec<String>,
+        edges: Vec<String>,
+    ) -> Result<Self, &'static str> {
+        if nodes.is_empty() {
+            return Err("a found path must contain at least one node");
+        }
+        if edges.len() + 1 != nodes.len() {
+            return Err("a found path must have one fewer edge than nodes");
+        }
+        if nodes.first().map(String::as_str) != Some(&src) {
+            return Err("first node must equal src");
+        }
+        if nodes.last().map(String::as_str) != Some(&tgt) {
+            return Err("last node must equal tgt");
+        }
+        Ok(Self {
+            src,
+            tgt,
+            outcome: PathOutcome::Found { nodes, edges },
+        })
+    }
+
+    /// Build a not-connected result.
+    #[must_use]
+    pub fn not_found(src: String, tgt: String) -> Self {
+        Self {
+            src,
+            tgt,
+            outcome: PathOutcome::NotFound,
+        }
+    }
+
+    #[must_use]
+    pub fn src(&self) -> &str {
+        &self.src
+    }
+
+    #[must_use]
+    pub fn tgt(&self) -> &str {
+        &self.tgt
+    }
+
+    #[must_use]
+    pub fn found_path(&self) -> Option<(&[String], &[String])> {
+        match &self.outcome {
+            PathOutcome::Found { nodes, edges } => Some((nodes, edges)),
+            PathOutcome::NotFound => None,
+        }
+    }
 }
 
 /// One orphan: a declared node no edge names.

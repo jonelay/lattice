@@ -13,7 +13,7 @@ use serde_json::{Map, Value};
 
 use crate::graph::{Edge, LatticeGraph};
 use crate::profile::Profile;
-use crate::trace::build_trace_report;
+use crate::trace::build_trace_report_for_nodes;
 use crate::types::{
     AtReport, CountsReport, DiffReport, EdgeRef, Issue, NodeRef, OrphanEntry, OrphansReport,
     PathReport, ReachReport,
@@ -70,41 +70,37 @@ impl<'a> Adjacency<'a> {
 
     /// Edges leaving `id` in the walk's direction, restricted to `kinds` when
     /// the set is non-empty. Each yielded pair is (edge kind, far endpoint).
-    fn neighbours(
-        &self,
+    fn neighbours<'b>(
+        &'b self,
         id: &str,
         direction: Direction,
-        kinds: &BTreeSet<String>,
-    ) -> Vec<(&'a str, &'a str)> {
+        kinds: &'b BTreeSet<String>,
+    ) -> impl Iterator<Item = (&'a str, &'a str)> + 'b {
         let map = match direction {
             Direction::Forward => &self.forward,
             Direction::Reverse => &self.reverse,
         };
         map.get(id)
-            .map(|edges| {
-                edges
-                    .iter()
-                    .filter(|e| kinds.is_empty() || kinds.contains(&e.kind))
-                    .map(|e| {
-                        let far = match direction {
-                            Direction::Forward => e.tgt.as_str(),
-                            Direction::Reverse => e.src.as_str(),
-                        };
-                        (e.kind.as_str(), far)
-                    })
-                    .collect()
+            .into_iter()
+            .flatten()
+            .filter(move |e| kinds.is_empty() || kinds.contains(&e.kind))
+            .map(move |e| {
+                let far = match direction {
+                    Direction::Forward => e.tgt.as_str(),
+                    Direction::Reverse => e.src.as_str(),
+                };
+                (e.kind.as_str(), far)
             })
-            .unwrap_or_default()
     }
 }
 
 /// Refuse an edge kind the profile does not declare, before any traversal.
 fn check_edge_kinds(profile: &Profile, kinds: &BTreeSet<String>) -> Result<(), QueryError> {
     for kind in kinds {
-        if !profile.edge_kinds.contains_key(kind) {
+        if !profile.edge_kinds().contains_key(kind) {
             return Err(QueryError(format!(
                 "unknown edge kind '{kind}': the profile declares {:?}",
-                profile.edge_kinds.keys().collect::<Vec<_>>()
+                profile.edge_kinds().keys().collect::<Vec<_>>()
             )));
         }
     }
@@ -217,13 +213,12 @@ pub fn path(
         edges.reverse();
     }
 
-    Ok(PathReport {
-        src: src.to_string(),
-        tgt: tgt.to_string(),
-        found,
-        nodes,
-        edges,
-    })
+    if found {
+        PathReport::found(src.to_string(), tgt.to_string(), nodes, edges)
+            .map_err(|message| QueryError(message.to_owned()))
+    } else {
+        Ok(PathReport::not_found(src.to_string(), tgt.to_string()))
+    }
 }
 
 /// Every declared node no edge names, ordered by ID.
@@ -237,11 +232,11 @@ pub fn orphans(
     kind: Option<&str>,
 ) -> Result<OrphansReport, QueryError> {
     if let Some(kind) = kind
-        && !profile.node_kinds.contains_key(kind)
+        && !profile.node_kinds().contains_key(kind)
     {
         return Err(QueryError(format!(
             "unknown node kind '{kind}': the profile declares {:?}",
-            profile.node_kinds.keys().collect::<Vec<_>>()
+            profile.node_kinds().keys().collect::<Vec<_>>()
         )));
     }
 
@@ -275,10 +270,16 @@ pub fn orphans(
 /// edge count must be visible, not absent. A kind the register carries without
 /// a declaration appears too, so counts never under-report what was ingested.
 pub fn counts(graph: &LatticeGraph, profile: &Profile) -> CountsReport {
-    let mut nodes: BTreeMap<String, i64> =
-        profile.node_kinds.keys().map(|k| (k.clone(), 0)).collect();
-    let mut edges: BTreeMap<String, i64> =
-        profile.edge_kinds.keys().map(|k| (k.clone(), 0)).collect();
+    let mut nodes: BTreeMap<String, i64> = profile
+        .node_kinds()
+        .keys()
+        .map(|k| (k.clone(), 0))
+        .collect();
+    let mut edges: BTreeMap<String, i64> = profile
+        .edge_kinds()
+        .keys()
+        .map(|k| (k.clone(), 0))
+        .collect();
     for node in graph.iter_nodes() {
         *nodes.entry(node.kind.clone()).or_insert(0) += 1;
     }
@@ -334,7 +335,13 @@ pub fn at(
         )));
     }
 
-    let report = build_trace_report(profile, graph, issues, lattice_version);
+    let node_ids: BTreeSet<&str> = graph
+        .iter_nodes()
+        .filter(|node| matches(&node.provenance.file))
+        .map(|node| node.id.as_str())
+        .collect();
+    let report =
+        build_trace_report_for_nodes(profile, graph, issues, lattice_version, Some(&node_ids));
     let mut entries = Vec::new();
     let mut findings = Vec::new();
     for entry in report.entries {

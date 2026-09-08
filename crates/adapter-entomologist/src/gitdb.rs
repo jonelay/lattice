@@ -4,17 +4,17 @@ use std::process::{Command, Output, Stdio};
 
 use crate::document::Document;
 
-pub const BRANCH: &str = "entomologist-data";
+pub(crate) const BRANCH: &str = "entomologist-data";
 const REFS: [&str; 2] = [
     "refs/heads/entomologist-data",
     "refs/remotes/origin/entomologist-data",
 ];
 
 #[derive(Debug)]
-pub struct TreeEntry {
-    pub path: String,
-    pub oid: String,
-    pub object_type: String,
+pub(crate) struct TreeEntry {
+    pub(crate) path: String,
+    pub(crate) oid: String,
+    pub(crate) object_type: String,
 }
 
 fn git(target: &Path, args: &[&str]) -> std::io::Result<Output> {
@@ -26,7 +26,7 @@ fn git(target: &Path, args: &[&str]) -> std::io::Result<Output> {
 }
 
 /// Resolve ent's data branch to one immutable commit before reading it.
-pub fn resolve_commit(document: &mut Document, target: &Path) -> Option<String> {
+pub(crate) fn resolve_commit(document: &mut Document, target: &Path) -> Option<String> {
     let toplevel = match git(target, &["rev-parse", "--show-toplevel"]) {
         Ok(output) if output.status.success() => output,
         Ok(_) => {
@@ -101,7 +101,11 @@ pub fn resolve_commit(document: &mut Document, target: &Path) -> Option<String> 
 }
 
 /// List every recursive tree entry from the pinned register commit.
-pub fn list_tree(document: &mut Document, target: &Path, commit: &str) -> Option<Vec<TreeEntry>> {
+pub(crate) fn list_tree(
+    document: &mut Document,
+    target: &Path,
+    commit: &str,
+) -> Option<Vec<TreeEntry>> {
     let output = match git(target, &["ls-tree", "-r", "-z", commit]) {
         Ok(output) => output,
         Err(error) => {
@@ -165,7 +169,7 @@ pub fn list_tree(document: &mut Document, target: &Path, commit: &str) -> Option
 }
 
 /// Fetch all represented blobs in one ordered `cat-file --batch` exchange.
-pub fn cat_file_batch(target: &Path, object_ids: &[&str]) -> std::io::Result<Output> {
+pub(crate) fn cat_file_batch(target: &Path, object_ids: &[&str]) -> std::io::Result<Output> {
     let mut child = Command::new("git")
         .arg("-C")
         .arg(target)

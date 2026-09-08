@@ -92,6 +92,14 @@ pub struct Edge {
     pub provenance: Provenance,
 }
 
+/// The named inputs needed to add an edge to a graph.
+#[derive(Clone, Debug)]
+pub struct EdgeSpec {
+    pub src: String,
+    pub tgt: String,
+    pub kind: String,
+}
+
 /// A typed node/edge register with provenance and accumulated parse issues.
 ///
 /// An edge may name a target no adapter declared, so edges hold endpoint IDs as
@@ -138,17 +146,11 @@ impl LatticeGraph {
         Ok(())
     }
 
-    pub fn add_edge(
-        &mut self,
-        src: impl Into<String>,
-        tgt: impl Into<String>,
-        kind: impl Into<String>,
-        provenance: Provenance,
-    ) {
+    pub fn add_edge(&mut self, edge: EdgeSpec, provenance: Provenance) {
         self.edges.push(Edge {
-            src: src.into(),
-            tgt: tgt.into(),
-            kind: kind.into(),
+            src: edge.src,
+            tgt: edge.tgt,
+            kind: edge.kind,
             provenance,
         });
     }

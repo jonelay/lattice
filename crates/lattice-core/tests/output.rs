@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use common::{ingest, profile_from};
 use lattice_core::output::output_result;
 use lattice_core::trace::build_trace_report;
-use lattice_core::types::{Issue, Provenance, Severity, SummaryReport, TraceReport};
+use lattice_core::types::{Issue, PathReport, Provenance, Severity, SummaryReport, TraceReport};
 use lattice_core::validate::validate;
 use serde_json::{Value, json};
 
@@ -236,6 +236,55 @@ fn trace_key_attr_column_is_filled_from_the_profiles_summary_attr() {
         p_entry.summary_attr, None,
         "kind with no summary_attr is blank"
     );
+}
+
+#[test]
+fn path_report_rejects_a_found_path_without_nodes() {
+    assert!(PathReport::found("A".to_owned(), "B".to_owned(), vec![], vec![]).is_err());
+}
+
+#[test]
+fn path_report_rejects_mismatched_edge_count() {
+    assert!(PathReport::found(
+        "A".to_owned(),
+        "C".to_owned(),
+        vec!["A".to_owned(), "B".to_owned(), "C".to_owned()],
+        vec!["e1".to_owned()],
+    )
+    .is_err());
+}
+
+#[test]
+fn path_report_rejects_wrong_first_node() {
+    assert!(PathReport::found(
+        "A".to_owned(),
+        "B".to_owned(),
+        vec!["X".to_owned(), "B".to_owned()],
+        vec!["e1".to_owned()],
+    )
+    .is_err());
+}
+
+#[test]
+fn path_report_rejects_wrong_last_node() {
+    assert!(PathReport::found(
+        "A".to_owned(),
+        "B".to_owned(),
+        vec!["A".to_owned(), "X".to_owned()],
+        vec!["e1".to_owned()],
+    )
+    .is_err());
+}
+
+#[test]
+fn path_report_accepts_self_loop() {
+    assert!(PathReport::found(
+        "A".to_owned(),
+        "A".to_owned(),
+        vec!["A".to_owned()],
+        vec![],
+    )
+    .is_ok());
 }
 
 #[test]

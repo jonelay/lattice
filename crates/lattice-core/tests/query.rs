@@ -570,6 +570,11 @@ fn at_json_carries_entries_and_findings() {
     let value = json(&output);
     assert_eq!(value["path"], "r.md");
     assert_eq!(value["entries"][0]["id"], "REQ-1");
+    assert_eq!(value["entries"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        value["entries"][0]["edges"]["derives"],
+        serde_json::json!(["N-1"])
+    );
     assert!(value["findings"].is_array(), "{value}");
 }
 

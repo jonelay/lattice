@@ -31,7 +31,7 @@
 //!   "edges": [], "axes": [], "issues": []
 //! }"#;
 //!
-//! let graph = ingest_document(&parse_document(text)?)?;
+//! let graph = ingest_document(parse_document(text)?)?;
 //! let issues = validate(&graph, &profile, false);
 //! let rendered = output_result(&issues, "plain").unwrap();
 //!

@@ -11,6 +11,56 @@ Patch bumps (0.x.y) do not change public surfaces.**
 See `openspec/specs/trace-report/spec.md` for which trace-JSON fields are
 public and what each version axis governs.
 
+## [0.5.0] — 2026-09-08
+
+### Added
+- **Markdown-table adapter.** Reads `|`-delimited tables from
+  profile-selected `.md` files, mapping columns to node attrs and edge
+  targets. `crates/adapter-mdtable/`, `profiles/mdtable.yaml`.
+- **GitHub Issues adapter.** Reads issues via `gh api`, maps labels to
+  node kinds, extracts edges from body text via regex patterns, derives
+  ordering axes from milestones. `crates/adapter-github/`,
+  `profiles/github.yaml`.
+- **GitLab Issues adapter.** Reads issues and issue links via `glab api`,
+  maps labels to node kinds, extracts edges from descriptions and the
+  links API with configurable direction reversal. Uses `iid` (not
+  instance-wide number). `crates/adapter-gitlab/`,
+  `profiles/gitlab.yaml`.
+- **Capability specs for mdtable, GitHub, and GitLab adapters.** Each
+  adapter now has a normative OpenSpec spec under `openspec/specs/`.
+- **`FindingCode` enum with exhaustive `default_severity` match.**
+  Adding a new finding code without a severity mapping is now a compile
+  error.
+- **PathReport endpoint invariant in the query spec.** The path query
+  spec now documents the src/tgt endpoint constraint and self-loop
+  validity.
+
+### Changed
+- **BREAKING (lattice-core public API).** `Profile` fields replaced by
+  read-only accessors; `add_edge` takes a named `EdgeSpec` struct;
+  `ingest_document` takes ownership (`Value`, not `&Value`); `Payload`
+  is `#[non_exhaustive]` and `Debug`; `PathReport` uses a
+  `Found`/`NotFound` enum with a validated constructor. Adapter-crate
+  visibility narrowed to `pub(crate)` (binary-only, no external surface).
+- **GitLab adapter: bounded-concurrency link fetching.** 8-worker
+  scoped-thread pool replaces sequential per-issue subprocess calls;
+  worker panics propagate via `resume_unwind`.
+- **Algorithmic improvements.** Deep-coverage propagation uses a
+  queue-based worklist, O(V+E). Cycle detection uses iterative Kosaraju
+  SCC, O(V+E). `query at` pre-filters nodes before building the trace
+  report. JSON output serializes through typed `Serialize` views; BFS
+  returns an iterator instead of collecting per call.
+
+### Fixed
+- GitLab adapter emits `PARSE_ERROR` when either `project_id` is
+  missing on an issue link, instead of silently assuming the link is
+  local (cross-project misclassification via IID collision).
+- mdtable parser iterates `chars()` instead of `bytes()` in
+  `split_cells`, fixing non-ASCII cell content corruption.
+- Scratch profile file uses `create_new(true)` with a random nonce
+  instead of a predictable PID-only path, preventing symlink redirect
+  and concurrent-call collision.
+
 ## [0.4.0] — 2026-09-07
 
 ### Added

@@ -11,7 +11,8 @@ use serde_json::Value;
 
 use crate::document::{ContractError, entries, err, require, require_str};
 use crate::graph::LatticeGraph;
-use crate::types::{Issue, Provenance, Severity};
+use crate::types::{Issue, Provenance};
+use crate::validate::{FindingCode, default_severity};
 
 /// The suggestion-document version this core prefers.
 pub const SUGGESTION_VERSION: &str = "1.0";
@@ -82,9 +83,10 @@ pub fn render_suggestions(
             .filter(|id| graph.node(id).is_none())
             .collect();
         if !unresolved.is_empty() {
+            let code = FindingCode::SuggestionUnresolved;
             issues.push(Issue::new(
-                Severity::Hint,
-                "SUGGESTION_UNRESOLVED",
+                default_severity(code),
+                code.as_str(),
                 format!(
                     "suggestion from '{}' proposes '{}' {} -> {}: {} does not resolve",
                     producer,
@@ -105,9 +107,10 @@ pub fn render_suggestions(
             || Provenance::new("<suggestions>", 0),
             |n| n.provenance.clone(),
         );
+        let code = FindingCode::SuggestedEdge;
         issues.push(Issue::new(
-            Severity::Hint,
-            "SUGGESTED_EDGE",
+            default_severity(code),
+            code.as_str(),
             format!(
                 "'{}' {} '{}' (score {:.4}, {}): {}",
                 s.src, s.kind, s.tgt, s.score, producer, s.basis

@@ -23,10 +23,10 @@ fn load_error(yaml: &str) -> String {
 #[test]
 fn valid_profile_loads() {
     let profile = profile_from(MINIMAL_PROFILE).expect("minimal profile is valid");
-    assert_eq!(profile.name, "t");
-    assert_eq!(profile.profile_version, "1.0.0");
-    assert!(profile.node_kinds.contains_key("req"));
-    assert!(profile.edge_kinds.contains_key("derives"));
+    assert_eq!(profile.name(), "t");
+    assert_eq!(profile.profile_version(), "1.0.0");
+    assert!(profile.node_kinds().contains_key("req"));
+    assert!(profile.edge_kinds().contains_key("derives"));
 }
 
 #[test]
@@ -42,7 +42,7 @@ fn unrecognised_top_level_key_does_not_reject() {
     // here — that core not reject the key — still holds.
     let profile = profile_from(&format!("{MINIMAL_PROFILE}adapter: example\n"))
         .expect("an uninterpreted top-level key is not an error");
-    assert_eq!(profile.name, "t");
+    assert_eq!(profile.name(), "t");
 }
 
 // Requirement: Node kind declaration
@@ -60,7 +60,7 @@ node_kinds:
 edge_kinds: {}
 "#;
     let profile = profile_from(yaml).unwrap();
-    let req = &profile.node_kinds["req"];
+    let req = &profile.node_kinds()["req"];
     assert_eq!(req.id_pattern_source, r"^REQ-\d{4}$");
     assert!(req.id_matches("REQ-0001"));
     assert!(!req.id_matches("REQ-1"));
@@ -72,7 +72,7 @@ edge_kinds: {}
 #[test]
 fn node_kind_without_attrs_loads_empty() {
     let profile = profile_from(MINIMAL_PROFILE).unwrap();
-    assert!(profile.node_kinds["req"].attrs.is_empty());
+    assert!(profile.node_kinds()["req"].attrs.is_empty());
 }
 
 #[test]
@@ -101,7 +101,7 @@ edge_kinds: {}
 "#;
     let profile = profile_from(yaml).unwrap();
     assert_eq!(
-        profile.node_kinds["req"].summary_attr.as_deref(),
+        profile.node_kinds()["req"].summary_attr.as_deref(),
         Some("text")
     );
 }
@@ -109,7 +109,7 @@ edge_kinds: {}
 #[test]
 fn summary_attr_absent_means_none() {
     let profile = profile_from(MINIMAL_PROFILE).unwrap();
-    assert_eq!(profile.node_kinds["req"].summary_attr, None);
+    assert_eq!(profile.node_kinds()["req"].summary_attr, None);
 }
 
 #[test]
@@ -147,7 +147,7 @@ edge_kinds: {}
 "#;
     let profile = profile_from(yaml).unwrap();
     assert_eq!(
-        profile.node_kinds["req"].text_attrs.as_deref(),
+        profile.node_kinds()["req"].text_attrs.as_deref(),
         Some(["title".to_string(), "body".to_string()].as_slice())
     );
 }
@@ -243,7 +243,7 @@ edge_kinds: {}
 "#;
     let profile = profile_from(yaml).unwrap();
     assert_eq!(
-        profile.node_kinds["req"].text_attrs.as_deref(),
+        profile.node_kinds()["req"].text_attrs.as_deref(),
         Some(["stage".to_string()].as_slice())
     );
 }
@@ -290,9 +290,9 @@ node_kinds:
 edge_kinds: {}
 "#;
     let profile = profile_from(yaml).unwrap();
-    assert_eq!(profile.node_kinds["req"].text_attrs, None);
+    assert_eq!(profile.node_kinds()["req"].text_attrs, None);
     assert_eq!(
-        profile.node_kinds["note"].text_attrs.as_deref(),
+        profile.node_kinds()["note"].text_attrs.as_deref(),
         Some([].as_slice())
     );
 }
@@ -314,7 +314,9 @@ edge_kinds: {}
 "#;
     let profile = profile_from(yaml).unwrap();
     assert_eq!(
-        profile.node_kinds["req"].text_chunk_line_prefix.as_deref(),
+        profile.node_kinds()["req"]
+            .text_chunk_line_prefix
+            .as_deref(),
         Some("#### Scenario:")
     );
 }
@@ -333,7 +335,7 @@ node_kinds:
 edge_kinds: {}
 "#;
     let profile = profile_from(yaml).unwrap();
-    assert_eq!(profile.node_kinds["req"].text_chunk_line_prefix, None);
+    assert_eq!(profile.node_kinds()["req"].text_chunk_line_prefix, None);
 }
 
 #[test]
@@ -448,7 +450,7 @@ edge_kinds: {}
 #[test]
 fn enum_attr_records_its_values() {
     let profile = profile_from(&attr_profile("{type: enum, values: [done, todo]}")).unwrap();
-    let attr = &profile.node_kinds["req"].attrs["status"];
+    let attr = &profile.node_kinds()["req"].attrs["status"];
     assert_eq!(attr.kind, "enum");
     assert_eq!(
         attr.values.as_deref(),
@@ -459,7 +461,7 @@ fn enum_attr_records_its_values() {
 #[test]
 fn list_attr_records_its_item_type() {
     let profile = profile_from(&attr_profile("{type: list, items: string}")).unwrap();
-    let attr = &profile.node_kinds["req"].attrs["status"];
+    let attr = &profile.node_kinds()["req"].attrs["status"];
     assert_eq!(attr.kind, "list");
     assert_eq!(attr.items.as_deref(), Some("string"));
 }
@@ -496,7 +498,7 @@ fn attr_profile(declaration: &str) -> String {
 #[test]
 fn edge_kind_records_its_allowed_pairs() {
     let profile = profile_from(MINIMAL_PROFILE).unwrap();
-    let derives = &profile.edge_kinds["derives"];
+    let derives = &profile.edge_kinds()["derives"];
     assert!(derives.admits("req", "req"));
     assert!(!derives.admits("req", "test"));
 }
@@ -505,7 +507,7 @@ fn edge_kind_records_its_allowed_pairs() {
 fn edge_kind_without_allowed_admits_nothing() {
     let yaml = MINIMAL_PROFILE.replace("    allowed: [[req, req]]\n", "");
     let profile = profile_from(&yaml).unwrap();
-    assert!(!profile.edge_kinds["derives"].admits("req", "req"));
+    assert!(!profile.edge_kinds()["derives"].admits("req", "req"));
 }
 
 #[test]
@@ -523,7 +525,7 @@ fn edge_kind_naming_an_undefined_node_kind_is_rejected() {
 #[test]
 fn supported_major_version_loads() {
     let profile = profile_from(&MINIMAL_PROFILE.replace("1.0.0", "1.9.3")).unwrap();
-    assert_eq!(profile.profile_version, "1.9.3");
+    assert_eq!(profile.profile_version(), "1.9.3");
 }
 
 #[test]
@@ -551,7 +553,7 @@ fn unknown_validator_code_takes_severity() {
         format!("{MINIMAL_PROFILE}validations:\n  - OBLIGATION_UNBACKED:\n      severity: info\n");
     let profile = profile_from(&yaml).unwrap();
     assert_eq!(
-        profile.validation_overrides["OBLIGATION_UNBACKED"],
+        profile.validation_overrides()["OBLIGATION_UNBACKED"],
         lattice_core::types::Severity::Info
     );
 }
@@ -570,7 +572,7 @@ fn adapter_code_takes_an_axis_binding() {
          \x20     axis: phase\n      position_attr: trigger\n"
     );
     let profile = profile_from(&yaml).unwrap();
-    let binding = &profile.axis_bindings["OBLIGATION_UNBACKED"];
+    let binding = &profile.axis_bindings()["OBLIGATION_UNBACKED"];
     assert_eq!(binding.axis, "phase");
     assert_eq!(binding.position_attr, "trigger");
 }
@@ -580,7 +582,7 @@ fn adapter_code_takes_an_axis_binding() {
 #[test]
 fn axis_list_loads() {
     let profile = profile_from(&format!("{MINIMAL_PROFILE}axes: [phase]\n")).unwrap();
-    assert_eq!(profile.axes, ["phase"]);
+    assert_eq!(profile.axes(), ["phase"]);
 }
 
 #[test]
@@ -597,8 +599,8 @@ fn axes_carrying_values_is_rejected() {
 #[test]
 fn no_axes_list_loads_with_no_axes() {
     let profile = profile_from(MINIMAL_PROFILE).unwrap();
-    assert!(profile.axes.is_empty());
-    assert!(profile.axis_bindings.is_empty());
+    assert!(profile.axes().is_empty());
+    assert!(profile.axis_bindings().is_empty());
 }
 
 // Requirement: Validation entry axis binding
@@ -643,7 +645,7 @@ fn repeated_plain_configuration_is_honoured_twice() {
          \x20 - COVERAGE:\n      target_kind: req\n      edge_kind: verifies\n"
     );
     let profile = profile_from(&yaml).unwrap();
-    assert_eq!(profile.validation_configs["COVERAGE"].len(), 2);
+    assert_eq!(profile.validation_configs()["COVERAGE"].len(), 2);
 }
 
 #[test]
@@ -655,8 +657,8 @@ fn one_binding_alongside_a_repeated_configuration() {
          \x20     axis: phase\n      position_attr: trigger\n"
     );
     let profile = profile_from(&yaml).unwrap();
-    assert_eq!(profile.validation_configs["COVERAGE"].len(), 2);
-    assert_eq!(profile.axis_bindings["COVERAGE"].axis, "phase");
+    assert_eq!(profile.validation_configs()["COVERAGE"].len(), 2);
+    assert_eq!(profile.axis_bindings()["COVERAGE"].axis, "phase");
 }
 
 // Shapes the loader must reject rather than read past. Each is a `test_profile.py`
@@ -719,7 +721,7 @@ fn a_severity_override_on_a_built_in_code_is_recorded() {
     let yaml = format!("{MINIMAL_PROFILE}validations:\n  - ORPHAN_NODE:\n      severity: info\n");
     let profile = profile_from(&yaml).unwrap();
     assert_eq!(
-        profile.validation_overrides["ORPHAN_NODE"],
+        profile.validation_overrides()["ORPHAN_NODE"],
         lattice_core::types::Severity::Info
     );
 }
@@ -754,7 +756,7 @@ fn an_unknown_attr_type_names_the_valid_ones() {
 #[test]
 fn a_bare_type_name_is_shorthand_for_a_typed_attr() {
     let profile = profile_from(&attr_profile("string")).unwrap();
-    let attr = &profile.node_kinds["req"].attrs["status"];
+    let attr = &profile.node_kinds()["req"].attrs["status"];
     assert_eq!(attr.kind, "string");
     assert!(
         !attr.required,
@@ -771,7 +773,7 @@ fn a_complete_coverage_config_is_accepted_and_kept() {
          \x20     edge_kind: derives\n      severity: error\n"
     );
     let profile = profile_from(&yaml).unwrap();
-    let config = &profile.validation_configs["COVERAGE"][0];
+    let config = &profile.validation_configs()["COVERAGE"][0];
     assert_eq!(config["target_kind"].as_str(), Some("req"));
     assert_eq!(config["edge_kind"].as_str(), Some("derives"));
 }
@@ -799,8 +801,8 @@ fn node_kinds_declaration_order_is_carried_for_the_trace_sort() {
                 \x20 alpha:\n    id_pattern: \"^A-\\\\d+$\"\nedge_kinds: {}\n";
     let profile = profile_from(yaml).unwrap();
     // Keyed for lookup, so the map is sorted; the declared order is on the kind.
-    assert_eq!(profile.node_kinds["zeta"].declared_index, 0);
-    assert_eq!(profile.node_kinds["alpha"].declared_index, 1);
+    assert_eq!(profile.node_kinds()["zeta"].declared_index, 0);
+    assert_eq!(profile.node_kinds()["alpha"].declared_index, 1);
 }
 
 // Requirement: Profile inheritance via extends
@@ -824,9 +826,9 @@ fn child_inherits_parent_node_and_edge_kinds() {
                  node_kinds: {}\nedge_kinds: {}\n";
     let profile =
         profile_from_files(&[("child.yaml", child), ("parent.yaml", PARENT_PROFILE)]).unwrap();
-    assert!(profile.node_kinds.contains_key("req"));
-    assert!(profile.edge_kinds.contains_key("derives"));
-    assert_eq!(profile.name, "child");
+    assert!(profile.node_kinds().contains_key("req"));
+    assert!(profile.edge_kinds().contains_key("derives"));
+    assert_eq!(profile.name(), "child");
 }
 
 #[test]
@@ -835,7 +837,7 @@ fn scalar_child_wins() {
                  node_kinds: {}\nedge_kinds: {}\n";
     let profile =
         profile_from_files(&[("child.yaml", child), ("parent.yaml", PARENT_PROFILE)]).unwrap();
-    assert_eq!(profile.name, "child");
+    assert_eq!(profile.name(), "child");
 }
 
 #[test]
@@ -849,12 +851,12 @@ fn list_replaces_whole() {
                  validations:\n  - ORPHAN_NODE:\n      severity: error\n";
     let profile = profile_from_files(&[("child.yaml", child), ("parent.yaml", &parent)]).unwrap();
     assert_eq!(
-        profile.validation_overrides.len(),
+        profile.validation_overrides().len(),
         1,
         "child's single validation replaces parent's two"
     );
     assert_eq!(
-        profile.validation_overrides["ORPHAN_NODE"],
+        profile.validation_overrides()["ORPHAN_NODE"],
         lattice_core::types::Severity::Error
     );
 }
@@ -866,7 +868,7 @@ fn mapping_deep_merge_inherits_parent_attrs() {
                  edge_kinds: {}\n";
     let profile =
         profile_from_files(&[("child.yaml", child), ("parent.yaml", PARENT_PROFILE)]).unwrap();
-    let req = &profile.node_kinds["req"];
+    let req = &profile.node_kinds()["req"];
     assert!(req.id_matches("R-1"), "child's pattern should be used");
     assert!(!req.id_matches("REQ-1"), "parent's pattern should be gone");
     assert!(
@@ -891,7 +893,9 @@ fn child_chunk_line_prefix_overrides_the_parents() {
                  edge_kinds: {}\n";
     let profile = profile_from_files(&[("child.yaml", child), ("parent.yaml", parent)]).unwrap();
     assert_eq!(
-        profile.node_kinds["req"].text_chunk_line_prefix.as_deref(),
+        profile.node_kinds()["req"]
+            .text_chunk_line_prefix
+            .as_deref(),
         Some("@@ Case:")
     );
 }
@@ -952,10 +956,10 @@ edge_kinds: {}
         ("gp.yaml", grandparent),
     ])
     .unwrap();
-    assert!(profile.node_kinds.contains_key("alpha"));
-    assert!(profile.node_kinds.contains_key("beta"));
-    assert!(profile.node_kinds.contains_key("gamma"));
-    assert_eq!(profile.name, "c");
+    assert!(profile.node_kinds().contains_key("alpha"));
+    assert!(profile.node_kinds().contains_key("beta"));
+    assert!(profile.node_kinds().contains_key("gamma"));
+    assert_eq!(profile.name(), "c");
 }
 
 // Requirement: Inheritance cycle detection
@@ -1041,13 +1045,14 @@ edge_kinds: {}
                  \x20 gamma:\n    id_pattern: \"^G-\\\\d+$\"\n\
                  edge_kinds: {}\n";
     let profile = profile_from_files(&[("child.yaml", child), ("parent.yaml", parent)]).unwrap();
-    assert_eq!(profile.node_kinds["alpha"].declared_index, 0);
+    assert_eq!(profile.node_kinds()["alpha"].declared_index, 0);
     assert_eq!(
-        profile.node_kinds["beta"].declared_index, 1,
+        profile.node_kinds()["beta"].declared_index,
+        1,
         "override keeps parent position"
     );
-    assert_eq!(profile.node_kinds["delta"].declared_index, 2);
-    assert_eq!(profile.node_kinds["gamma"].declared_index, 3);
+    assert_eq!(profile.node_kinds()["delta"].declared_index, 2);
+    assert_eq!(profile.node_kinds()["gamma"].declared_index, 3);
 }
 
 // Requirement: Profile inheritance via extends
@@ -1085,8 +1090,11 @@ edge_kinds: {}
 "#,
     )
     .unwrap();
-    assert!(profile.node_kinds["test"].orphan_ok);
-    assert!(!profile.node_kinds["req"].orphan_ok, "absence means false");
+    assert!(profile.node_kinds()["test"].orphan_ok);
+    assert!(
+        !profile.node_kinds()["req"].orphan_ok,
+        "absence means false"
+    );
 }
 
 #[test]
@@ -1121,7 +1129,7 @@ fn child_can_unset_an_inherited_chunk_line_prefix_with_null() {
                  node_kinds:\n  req:\n    text_chunk_line_prefix: null\n\
                  edge_kinds: {}\n";
     let profile = profile_from_files(&[("child.yaml", child), ("parent.yaml", parent)]).unwrap();
-    assert_eq!(profile.node_kinds["req"].text_chunk_line_prefix, None);
+    assert_eq!(profile.node_kinds()["req"].text_chunk_line_prefix, None);
 }
 
 #[test]

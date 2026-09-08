@@ -14,8 +14,9 @@ use serde_json::{Value, json};
 
 /// The message of an ingest that was expected to be refused.
 fn refused(document: Value) -> String {
-    match ingest_document(&document) {
-        Ok(_) => panic!("document ingested but should have been refused:\n{document}"),
+    let rendered = document.to_string();
+    match ingest_document(document) {
+        Ok(_) => panic!("document ingested but should have been refused:\n{rendered}"),
         Err(e) => e.0,
     }
 }

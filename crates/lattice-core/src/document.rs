@@ -1,11 +1,17 @@
 //! Ingest: an adapter's contract document becomes a `LatticeGraph`.
 
+use std::collections::hash_map::RandomState;
+use std::fs::{File, OpenOptions};
+use std::hash::BuildHasher;
+use std::io::Write;
 use std::path::Path;
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::Value;
 
-use crate::graph::LatticeGraph;
+use crate::graph::{EdgeSpec, LatticeGraph};
 use crate::types::{Issue, Provenance, Severity};
 
 /// The contract version this core emits and prefers.
@@ -92,17 +98,39 @@ pub(crate) fn require_str<'a>(
     }
 }
 
-fn provenance(entry: &Value, where_: &str) -> Result<Provenance, ContractError> {
-    let raw = require(entry, "provenance", where_)?;
-    let file = require_str(raw, "file", &format!("{where_} provenance"))?.to_string();
-    let line = require(raw, "line", &format!("{where_} provenance"))?;
+fn take(mapping: &mut Value, key: &str, where_: &str) -> Result<Value, ContractError> {
+    let Value::Object(object) = mapping else {
+        return err(format!(
+            "{where_}: expected an object, got {}",
+            type_name(mapping)
+        ));
+    };
+    object
+        .remove(key)
+        .ok_or_else(|| ContractError(format!("{where_}: missing '{key}'")))
+}
+
+fn take_string(mapping: &mut Value, key: &str, where_: &str) -> Result<String, ContractError> {
+    let value = take(mapping, key, where_)?;
+    match value {
+        Value::String(text) => Ok(text),
+        other => err(format!(
+            "{where_}: '{key}' must be a string, got {}",
+            type_name(&other)
+        )),
+    }
+}
+
+fn take_provenance(entry: &mut Value, where_: &str) -> Result<Provenance, ContractError> {
+    let mut raw = take(entry, "provenance", where_)?;
+    let provenance_where = format!("{where_} provenance");
+    let file = take_string(&mut raw, "file", &provenance_where)?;
+    let line = take(&mut raw, "line", &provenance_where)?;
     match line.as_i64() {
-        // A JSON float or boolean line number is a schema failure rather than a
-        // line the core should round or invent.
         Some(line) => Ok(Provenance { file, line }),
         None => err(format!(
-            "{where_} provenance: 'line' must be an integer, got {}",
-            type_name(line)
+            "{provenance_where}: 'line' must be an integer, got {}",
+            type_name(&line)
         )),
     }
 }
@@ -139,25 +167,42 @@ pub(crate) fn entries<'a>(document: &'a Value, key: &str) -> Result<&'a [Value],
     }
 }
 
+fn take_entries(document: &mut Value, key: &str) -> Result<Vec<Value>, ContractError> {
+    let Value::Object(object) = document else {
+        return err(format!(
+            "document: expected an object, got {}",
+            type_name(document)
+        ));
+    };
+    match object.remove(key) {
+        None => Ok(Vec::new()),
+        Some(Value::Array(items)) => Ok(items),
+        Some(other) => err(format!(
+            "document: '{key}' must be a list, got {}",
+            type_name(&other)
+        )),
+    }
+}
+
 /// Add nodes in document order, turning each repeated ID into a finding.
 ///
 /// Document order is what "first occurrence wins" means, so this is a plain
 /// sequential pass and not a sort.
-fn ingest_nodes(graph: &mut LatticeGraph, document: &Value) -> Result<(), ContractError> {
-    for (index, entry) in entries(document, "nodes")?.iter().enumerate() {
+fn ingest_nodes(graph: &mut LatticeGraph, document: &mut Value) -> Result<(), ContractError> {
+    for (index, mut entry) in take_entries(document, "nodes")?.into_iter().enumerate() {
         let where_ = format!("node {index}");
-        let id = require_str(entry, "id", &where_)?.to_string();
-        let kind = require_str(entry, "kind", &where_)?.to_string();
-        let attrs = match require(entry, "attrs", &where_)? {
-            Value::Object(object) => object.clone(),
+        let id = take_string(&mut entry, "id", &where_)?;
+        let kind = take_string(&mut entry, "kind", &where_)?;
+        let attrs = match take(&mut entry, "attrs", &where_)? {
+            Value::Object(object) => object,
             other => {
                 return err(format!(
                     "{where_}: 'attrs' must be an object, got {}",
-                    type_name(other)
+                    type_name(&other)
                 ));
             }
         };
-        let prov = provenance(entry, &where_)?;
+        let prov = take_provenance(&mut entry, &where_)?;
         if let Err(duplicate) = graph.add_node(id, kind, attrs, prov) {
             graph.add_issue(Issue::new(
                 Severity::Error,
@@ -174,14 +219,16 @@ fn ingest_nodes(graph: &mut LatticeGraph, document: &Value) -> Result<(), Contra
     Ok(())
 }
 
-fn ingest_edges(graph: &mut LatticeGraph, document: &Value) -> Result<(), ContractError> {
-    for (index, entry) in entries(document, "edges")?.iter().enumerate() {
+fn ingest_edges(graph: &mut LatticeGraph, document: &mut Value) -> Result<(), ContractError> {
+    for (index, mut entry) in take_entries(document, "edges")?.into_iter().enumerate() {
         let where_ = format!("edge {index}");
         graph.add_edge(
-            require_str(entry, "src", &where_)?.to_string(),
-            require_str(entry, "tgt", &where_)?.to_string(),
-            require_str(entry, "kind", &where_)?.to_string(),
-            provenance(entry, &where_)?,
+            EdgeSpec {
+                src: take_string(&mut entry, "src", &where_)?,
+                tgt: take_string(&mut entry, "tgt", &where_)?,
+                kind: take_string(&mut entry, "kind", &where_)?,
+            },
+            take_provenance(&mut entry, &where_)?,
         );
     }
     Ok(())
@@ -193,11 +240,11 @@ fn ingest_edges(graph: &mut LatticeGraph, document: &Value) -> Result<(), Contra
 /// An invalid axis arriving here means the adapter is broken, and an axis whose
 /// `current` is outside its order would place every bound finding both before and
 /// after it.
-fn ingest_axes(graph: &mut LatticeGraph, document: &Value) -> Result<(), ContractError> {
-    for (index, entry) in entries(document, "axes")?.iter().enumerate() {
+fn ingest_axes(graph: &mut LatticeGraph, document: &mut Value) -> Result<(), ContractError> {
+    for (index, mut entry) in take_entries(document, "axes")?.into_iter().enumerate() {
         let where_ = format!("axis {index}");
-        let axis_name = require_str(entry, "name", &where_)?.to_string();
-        let raw = require(entry, "order", &where_)?;
+        let axis_name = take_string(&mut entry, "name", &where_)?;
+        let raw = take(&mut entry, "order", &where_)?;
         let Value::Array(items) = raw else {
             return err(format!(
                 "{where_} '{axis_name}': 'order' must be a list of strings"
@@ -206,7 +253,7 @@ fn ingest_axes(graph: &mut LatticeGraph, document: &Value) -> Result<(), Contrac
         let mut order = Vec::with_capacity(items.len());
         for item in items {
             match item {
-                Value::String(text) => order.push(text.clone()),
+                Value::String(text) => order.push(text),
                 _ => {
                     return err(format!(
                         "{where_} '{axis_name}': 'order' must be a list of strings"
@@ -214,7 +261,7 @@ fn ingest_axes(graph: &mut LatticeGraph, document: &Value) -> Result<(), Contrac
                 }
             }
         }
-        let current = require_str(entry, "current", &where_)?.to_string();
+        let current = take_string(&mut entry, "current", &where_)?;
         if let Err(axis_error) = graph.set_axis(axis_name, order, current) {
             return err(format!("{where_}: {axis_error}"));
         }
@@ -222,23 +269,27 @@ fn ingest_axes(graph: &mut LatticeGraph, document: &Value) -> Result<(), Contrac
     Ok(())
 }
 
-fn ingest_issues(graph: &mut LatticeGraph, document: &Value) -> Result<(), ContractError> {
-    for (index, entry) in entries(document, "issues")?.iter().enumerate() {
+fn ingest_issues(graph: &mut LatticeGraph, document: &mut Value) -> Result<(), ContractError> {
+    for (index, mut entry) in take_entries(document, "issues")?.into_iter().enumerate() {
         let where_ = format!("issue {index}");
-        let raw_severity = require_str(entry, "severity", &where_)?;
-        let Some(severity) = Severity::parse(raw_severity) else {
+        let raw_severity = take_string(&mut entry, "severity", &where_)?;
+        let Some(severity) = Severity::parse(&raw_severity) else {
             return err(format!("{where_}: unknown severity '{raw_severity}'"));
         };
-        let node_id = match entry.get("node_id") {
+        let node_id = match entry
+            .as_object_mut()
+            .expect("severity extraction established an object")
+            .remove("node_id")
+        {
             None | Some(Value::Null) => None,
-            Some(Value::String(text)) => Some(text.clone()),
+            Some(Value::String(text)) => Some(text),
             Some(_) => return err(format!("{where_}: 'node_id' must be a string or null")),
         };
         graph.add_issue(Issue::new(
             severity,
-            require_str(entry, "code", &where_)?,
-            require_str(entry, "message", &where_)?,
-            provenance(entry, &where_)?,
+            take_string(&mut entry, "code", &where_)?,
+            take_string(&mut entry, "message", &where_)?,
+            take_provenance(&mut entry, &where_)?,
             node_id,
         ));
     }
@@ -275,6 +326,38 @@ impl Drop for ScratchFile {
     }
 }
 
+static SCRATCH_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+fn scratch_nonce() -> u64 {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    RandomState::new().hash_one((
+        std::process::id(),
+        timestamp,
+        SCRATCH_COUNTER.fetch_add(1, Ordering::Relaxed),
+    ))
+}
+
+fn create_scratch_file_in(
+    directory: &Path,
+    mut next_nonce: impl FnMut() -> u64,
+) -> std::io::Result<(ScratchFile, File)> {
+    loop {
+        let path = directory.join(format!(
+            "lattice-profile-{}-{:016x}.json",
+            std::process::id(),
+            next_nonce()
+        ));
+        match OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(file) => return Ok((ScratchFile(path), file)),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+    }
+}
+
 /// Run an adapter program and ingest the document it writes to stdout.
 ///
 /// The resolved profile travels as a scratch-file path so the interface stays
@@ -288,15 +371,21 @@ pub fn run_adapter(
     resolved_profile: &str,
     target_path: &Path,
 ) -> Result<LatticeGraph, ContractError> {
-    let scratch = ScratchFile(
-        std::env::temp_dir().join(format!("lattice-profile-{}.json", std::process::id())),
-    );
-    std::fs::write(&scratch.0, resolved_profile).map_err(|e| {
-        ContractError(format!(
-            "could not write resolved profile {}: {e}",
-            scratch.0.display()
-        ))
-    })?;
+    let (scratch, mut scratch_file) = create_scratch_file_in(&std::env::temp_dir(), scratch_nonce)
+        .map_err(|e| {
+            ContractError(format!(
+                "could not create resolved profile scratch file: {e}"
+            ))
+        })?;
+    scratch_file
+        .write_all(resolved_profile.as_bytes())
+        .map_err(|e| {
+            ContractError(format!(
+                "could not write resolved profile {}: {e}",
+                scratch.0.display()
+            ))
+        })?;
+    drop(scratch_file);
     let output = Command::new(program)
         .arg("--profile")
         .arg(&scratch.0)
@@ -325,26 +414,65 @@ pub fn run_adapter(
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    ingest_document(&parse_document(&stdout)?)
+    ingest_document(parse_document(&stdout)?)
 }
 
 /// Build a graph from an adapter's contract document.
 ///
 /// Fails for anything off-schema. Adapter-collected issues are ingested before
 /// duplicate findings so the adapter's own account of the register reads first.
-pub fn ingest_document(document: &Value) -> Result<LatticeGraph, ContractError> {
+pub fn ingest_document(mut document: Value) -> Result<LatticeGraph, ContractError> {
     if !document.is_object() {
         return err(format!(
             "document: expected an object, got {}",
-            type_name(document)
+            type_name(&document)
         ));
     }
-    check_version(document)?;
+    check_version(&document)?;
 
     let mut graph = LatticeGraph::new();
-    ingest_issues(&mut graph, document)?;
-    ingest_axes(&mut graph, document)?;
-    ingest_nodes(&mut graph, document)?;
-    ingest_edges(&mut graph, document)?;
+    ingest_issues(&mut graph, &mut document)?;
+    ingest_axes(&mut graph, &mut document)?;
+    ingest_nodes(&mut graph, &mut document)?;
+    ingest_edges(&mut graph, &mut document)?;
     Ok(graph)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Write;
+
+    use super::create_scratch_file_in;
+
+    #[test]
+    fn scratch_file_creation_retries_without_overwriting_an_existing_file() {
+        let nonce = 0x1234;
+        let next_nonce = 0x5678;
+        let directory = std::env::temp_dir().join(format!(
+            "lattice-document-test-{}-{next_nonce:016x}",
+            std::process::id()
+        ));
+        std::fs::create_dir(&directory).unwrap();
+        let existing = directory.join(format!(
+            "lattice-profile-{}-{nonce:016x}.json",
+            std::process::id()
+        ));
+        std::fs::write(&existing, "do not overwrite").unwrap();
+        let mut nonces = [nonce, next_nonce].into_iter();
+
+        let (scratch, mut file) =
+            create_scratch_file_in(&directory, || nonces.next().unwrap()).unwrap();
+        file.write_all(b"new profile").unwrap();
+
+        assert_ne!(scratch.0, existing);
+        assert_eq!(
+            std::fs::read_to_string(&existing).unwrap(),
+            "do not overwrite"
+        );
+
+        drop(file);
+        drop(scratch);
+        std::fs::remove_file(existing).unwrap();
+        std::fs::remove_dir(directory).unwrap();
+    }
 }

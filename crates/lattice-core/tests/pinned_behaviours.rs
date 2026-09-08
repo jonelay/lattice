@@ -31,7 +31,7 @@ fn explicit_null_document_arrays_are_reported() {
     for key in ["nodes", "edges", "axes", "issues"] {
         let mut document = json!({"contract_version": "1.0"});
         document[key] = Value::Null;
-        ingest_document(&document).expect_err(&format!(
+        ingest_document(document).expect_err(&format!(
             "'{key}': null must be reported, not read as empty"
         ));
     }
@@ -57,7 +57,7 @@ fn explicit_null_validations_in_a_profile_is_accepted() {
     // rather than tidied away.
     let profile = profile_from(&format!("{MINIMAL_PROFILE}validations: null\n"))
         .expect("'validations: null' is accepted");
-    assert!(profile.validation_configs.is_empty());
+    assert!(profile.validation_configs().is_empty());
 }
 
 // Output behaviour on input the fixture does not contain.
@@ -98,7 +98,10 @@ fn the_shipped_profiles_load_under_the_rust_regex_engine() {
     for name in ["requirements-rm.yaml", "tomlreg.yaml"] {
         let path = root.join("profiles").join(name);
         let profile = load_profile(&path).unwrap_or_else(|e| panic!("{name} must load: {e}"));
-        assert!(!profile.node_kinds.is_empty(), "{name} declares node kinds");
+        assert!(
+            !profile.node_kinds().is_empty(),
+            "{name} declares node kinds"
+        );
     }
 }
 

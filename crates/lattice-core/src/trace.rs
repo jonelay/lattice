@@ -1,6 +1,6 @@
 //! Assembling the trace-report payload: every node with its edges and findings.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::graph::LatticeGraph;
 use crate::profile::Profile;
@@ -26,12 +26,25 @@ pub fn build_trace_report(
     issues: Vec<Issue>,
     lattice_version: &str,
 ) -> TraceReport {
+    build_trace_report_for_nodes(profile, graph, issues, lattice_version, None)
+}
+
+/// Build trace entries only for `node_ids`, while retaining omitted-node
+/// findings as unattachable so callers can still select them by provenance.
+#[must_use]
+pub(crate) fn build_trace_report_for_nodes(
+    profile: &Profile,
+    graph: &LatticeGraph,
+    issues: Vec<Issue>,
+    lattice_version: &str,
+    node_ids: Option<&BTreeSet<&str>>,
+) -> TraceReport {
     let header = BTreeMap::from([
         ("lattice_version".to_string(), lattice_version.to_string()),
-        ("profile".to_string(), profile.name.clone()),
+        ("profile".to_string(), profile.name().to_owned()),
         (
             "profile_version".to_string(),
-            profile.profile_version.clone(),
+            profile.profile_version().to_owned(),
         ),
     ]);
 
@@ -41,7 +54,9 @@ pub fn build_trace_report(
         // A node_id naming no graph node — a DANGLING_REF on a ghost source, say
         // — must not vanish: no entry would ever carry it.
         match issue.node_id.as_deref() {
-            Some(node_id) if graph.has_node(node_id) => {
+            Some(node_id)
+                if graph.has_node(node_id) && node_ids.is_none_or(|ids| ids.contains(node_id)) =>
+            {
                 let key = graph.node(node_id).expect("just checked").id.as_str();
                 findings_by_node.entry(key).or_default().push(issue);
             }
@@ -54,6 +69,9 @@ pub fn build_trace_report(
     // were written rather than by the order the graph was built in.
     let mut adjacency: Adjacency<'_> = BTreeMap::new();
     for edge in graph.iter_edges() {
+        if node_ids.is_some_and(|ids| !ids.contains(edge.src.as_str())) {
+            continue;
+        }
         adjacency
             .entry(&edge.src)
             .or_default()
@@ -72,6 +90,7 @@ pub fn build_trace_report(
 
     let mut entries: Vec<TraceEntry> = graph
         .iter_nodes()
+        .filter(|node| node_ids.is_none_or(|ids| ids.contains(node.id.as_str())))
         .map(|node| {
             let edges = adjacency
                 .get(node.id.as_str())
@@ -89,7 +108,7 @@ pub fn build_trace_report(
                 .unwrap_or_default();
 
             let summary_attr = profile
-                .node_kinds
+                .node_kinds()
                 .get(&node.kind)
                 .and_then(|k| k.summary_attr.clone());
 
@@ -120,7 +139,7 @@ pub fn build_trace_report(
 
 fn kind_rank(profile: &Profile, kind: &str) -> usize {
     profile
-        .node_kinds
+        .node_kinds()
         .get(kind)
         .map_or(UNDECLARED_KIND_RANK, |k| k.declared_index)
 }

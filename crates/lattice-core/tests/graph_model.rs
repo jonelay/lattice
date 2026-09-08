@@ -19,7 +19,7 @@
 //! validator's untested paths live.
 
 use lattice_core::document::ingest_document;
-use lattice_core::graph::LatticeGraph;
+use lattice_core::graph::{EdgeSpec, LatticeGraph};
 use lattice_core::types::{Issue, Provenance, Severity};
 use serde_json::{Map, Value, json};
 
@@ -60,9 +60,11 @@ fn add_a_valid_node() {
 fn add_a_valid_edge() {
     let mut graph = LatticeGraph::new();
     graph.add_edge(
-        "test_fem",
-        "REQ-0704",
-        "verifies",
+        EdgeSpec {
+            src: "test_fem".into(),
+            tgt: "REQ-0704".into(),
+            kind: "verifies".into(),
+        },
         prov("tests/test_fem.py", 9),
     );
 
@@ -162,7 +164,14 @@ fn the_surviving_node_is_the_first_declared() {
 #[test]
 fn edge_added_before_target_node() {
     let mut graph = LatticeGraph::new();
-    graph.add_edge("test_x", "REQ-0701", "verifies", prov("t.py", 1));
+    graph.add_edge(
+        EdgeSpec {
+            src: "test_x".into(),
+            tgt: "REQ-0701".into(),
+            kind: "verifies".into(),
+        },
+        prov("t.py", 1),
+    );
 
     assert_eq!(graph.iter_edges().count(), 1);
     // The edge did not conjure its endpoints: validation, not the builder,
@@ -177,8 +186,16 @@ fn edge_added_before_target_node() {
 #[test]
 fn repeated_edge_keeps_both_provenances() {
     let mut graph = LatticeGraph::new();
-    graph.add_edge("A", "B", "derives", prov("a.md", 1));
-    graph.add_edge("A", "B", "derives", prov("a.md", 9));
+    for line in [1, 9] {
+        graph.add_edge(
+            EdgeSpec {
+                src: "A".into(),
+                tgt: "B".into(),
+                kind: "derives".into(),
+            },
+            prov("a.md", line),
+        );
+    }
 
     let provs: Vec<_> = graph.iter_edges().map(|e| e.provenance.clone()).collect();
     assert_eq!(provs, vec![prov("a.md", 1), prov("a.md", 9)]);
@@ -279,7 +296,7 @@ fn order(positions: &[&str]) -> Vec<String> {
 }
 
 fn ingest(document: Value) -> LatticeGraph {
-    ingest_document(&document).expect("document is well-formed")
+    ingest_document(document).expect("document is well-formed")
 }
 
 // Requirement: Parallel edges are distinct
@@ -293,8 +310,16 @@ fn one_pair_may_carry_several_edge_kinds() {
     graph
         .add_node("REQ-2", "req", Map::new(), Provenance::new("r.md", 2))
         .unwrap();
-    graph.add_edge("REQ-1", "REQ-2", "derives", Provenance::new("r.md", 3));
-    graph.add_edge("REQ-1", "REQ-2", "verifies", Provenance::new("r.md", 4));
+    for (kind, line) in [("derives", 3), ("verifies", 4)] {
+        graph.add_edge(
+            EdgeSpec {
+                src: "REQ-1".into(),
+                tgt: "REQ-2".into(),
+                kind: kind.into(),
+            },
+            Provenance::new("r.md", line),
+        );
+    }
 
     let kinds: Vec<&str> = graph.iter_edges().map(|e| e.kind.as_str()).collect();
     assert_eq!(kinds, ["derives", "verifies"], "neither replaces the other");

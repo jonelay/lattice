@@ -41,7 +41,7 @@ pub fn build_summary(
     graph: &LatticeGraph,
 ) -> Result<SummaryReport, SummaryError> {
     let configs = profile
-        .validation_configs
+        .validation_configs()
         .get("SUMMARY")
         .map_or(&[][..], Vec::as_slice);
     let config = match configs {
@@ -78,7 +78,7 @@ pub fn build_summary(
     let group_by_attr = required("group_by_attr")?;
 
     let mut status_values: BTreeSet<String> = profile
-        .node_kinds
+        .node_kinds()
         .get(&node_kind)
         .and_then(|kind| kind.attrs.get(&status_attr))
         .and_then(|attr| attr.values.as_deref())

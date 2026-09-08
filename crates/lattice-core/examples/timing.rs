@@ -30,6 +30,22 @@ fn best(label: &str, runs: u32, mut body: impl FnMut()) {
     println!("{label:<20} {best:>8.2} ms");
 }
 
+fn best_with_setup<T>(
+    label: &str,
+    runs: u32,
+    mut setup: impl FnMut() -> T,
+    mut body: impl FnMut(T),
+) {
+    let mut best = f64::MAX;
+    for _ in 0..runs {
+        let input = setup();
+        let start = Instant::now();
+        body(input);
+        best = best.min(start.elapsed().as_secs_f64() * 1000.0);
+    }
+    println!("{label:<20} {best:>8.2} ms");
+}
+
 fn main() {
     let mut args = std::env::args().skip(1);
     let profile_path = args.next().expect("usage: timing <profile> <document>");
@@ -44,13 +60,18 @@ fn main() {
         black_box(parse_document(&text).expect("document parses"));
     });
 
-    let parsed = parse_document(&text).expect("document parses");
-    best("ingest_document", RUNS, || {
-        black_box(ingest_document(&parsed).expect("document ingests"));
-    });
+    best_with_setup(
+        "ingest_document",
+        RUNS,
+        || parse_document(&text).expect("document parses"),
+        |parsed| {
+            black_box(ingest_document(parsed).expect("document ingests"));
+        },
+    );
 
     let profile = load_profile(Path::new(&profile_path)).expect("profile loads");
-    let graph = ingest_document(&parsed).expect("document ingests");
+    let graph =
+        ingest_document(parse_document(&text).expect("document parses")).expect("document ingests");
     best("validate", RUNS, || {
         black_box(validate(&graph, &profile, false));
     });
@@ -65,7 +86,7 @@ fn main() {
     best("everything", RUNS, || {
         let profile = load_profile(Path::new(&profile_path)).expect("profile loads");
         let parsed = parse_document(&text).expect("document parses");
-        let graph = ingest_document(&parsed).expect("document ingests");
+        let graph = ingest_document(parsed).expect("document ingests");
         let issues = validate(&graph, &profile, false);
         black_box(output_result(&issues, "plain").expect("format is known"));
     });

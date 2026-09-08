@@ -1,6 +1,6 @@
 //! Checking a graph against its profile: ID syntax, kinds, attrs, edges, coverage.
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 
 use serde_json::Value;
 
@@ -9,26 +9,102 @@ use crate::graph::LatticeGraph;
 use crate::profile::{Profile, ValidationConfig};
 use crate::types::{Issue, Provenance, Severity};
 
-/// The shipped severity of each issue code, before a profile's overrides.
-fn default_severity(code: &str) -> Severity {
-    match code {
-        "ID_FORMAT" | "UNKNOWN_KIND" | "EDGE_CONSTRAINT" | "DANGLING_REF" | "ATTR_REQUIRED"
-        | "ATTR_TYPE" | "ATTR_ENUM" | "ATTR_LIST_ITEMS" | "CONFIG_ERROR" => Severity::Error,
-        // The overlay codes. Registered here so a profile trying to promote one
-        // is reported as a CONFIG_ERROR by the pre-pass in `validate`, which is
-        // the only place that sees the override whether or not a document ran.
-        "COVERAGE_UNKNOWN" | "SUGGESTED_EDGE" | "SUGGESTION_UNRESOLVED" => Severity::Hint,
-        // Explicitly warning, not via the fallthrough: hint is never promotable,
-        // so a hint default here would foreclose gating on deep coverage for
-        // every profile permanently (coverage-query spec).
-        "COVERAGE_DEEP" => Severity::Warning,
-        _ => Severity::Warning,
+#[derive(Clone, Copy)]
+pub(crate) enum FindingCode {
+    AttrEnum,
+    AttrListItems,
+    AttrRequired,
+    AttrType,
+    AxisUnresolved,
+    ConfigError,
+    Coverage,
+    CoverageDeep,
+    CoverageUnknown,
+    DanglingRef,
+    EdgeConstraint,
+    IdFormat,
+    OrphanNode,
+    SuggestedEdge,
+    SuggestionUnresolved,
+    UnknownKind,
+}
+
+impl FindingCode {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::AttrEnum => "ATTR_ENUM",
+            Self::AttrListItems => "ATTR_LIST_ITEMS",
+            Self::AttrRequired => "ATTR_REQUIRED",
+            Self::AttrType => "ATTR_TYPE",
+            Self::AxisUnresolved => "AXIS_UNRESOLVED",
+            Self::ConfigError => "CONFIG_ERROR",
+            Self::Coverage => "COVERAGE",
+            Self::CoverageDeep => "COVERAGE_DEEP",
+            Self::CoverageUnknown => "COVERAGE_UNKNOWN",
+            Self::DanglingRef => "DANGLING_REF",
+            Self::EdgeConstraint => "EDGE_CONSTRAINT",
+            Self::IdFormat => "ID_FORMAT",
+            Self::OrphanNode => "ORPHAN_NODE",
+            Self::SuggestedEdge => "SUGGESTED_EDGE",
+            Self::SuggestionUnresolved => "SUGGESTION_UNRESOLVED",
+            Self::UnknownKind => "UNKNOWN_KIND",
+        }
+    }
+
+    fn from_str(code: &str) -> Option<Self> {
+        match code {
+            "ATTR_ENUM" => Some(Self::AttrEnum),
+            "ATTR_LIST_ITEMS" => Some(Self::AttrListItems),
+            "ATTR_REQUIRED" => Some(Self::AttrRequired),
+            "ATTR_TYPE" => Some(Self::AttrType),
+            "AXIS_UNRESOLVED" => Some(Self::AxisUnresolved),
+            "CONFIG_ERROR" => Some(Self::ConfigError),
+            "COVERAGE" => Some(Self::Coverage),
+            "COVERAGE_DEEP" => Some(Self::CoverageDeep),
+            "COVERAGE_UNKNOWN" => Some(Self::CoverageUnknown),
+            "DANGLING_REF" => Some(Self::DanglingRef),
+            "EDGE_CONSTRAINT" => Some(Self::EdgeConstraint),
+            "ID_FORMAT" => Some(Self::IdFormat),
+            "ORPHAN_NODE" => Some(Self::OrphanNode),
+            "SUGGESTED_EDGE" => Some(Self::SuggestedEdge),
+            "SUGGESTION_UNRESOLVED" => Some(Self::SuggestionUnresolved),
+            "UNKNOWN_KIND" => Some(Self::UnknownKind),
+            _ => None,
+        }
     }
 }
 
-fn severity_for(code: &str, profile: &Profile) -> Severity {
+/// The shipped severity of each core finding code, before profile overrides.
+pub(crate) fn default_severity(code: FindingCode) -> Severity {
+    match code {
+        FindingCode::IdFormat
+        | FindingCode::UnknownKind
+        | FindingCode::EdgeConstraint
+        | FindingCode::DanglingRef
+        | FindingCode::AttrRequired
+        | FindingCode::AttrType
+        | FindingCode::AttrEnum
+        | FindingCode::AttrListItems
+        | FindingCode::ConfigError => Severity::Error,
+        // The overlay codes. Registered here so a profile trying to promote one
+        // is reported as a CONFIG_ERROR by the pre-pass in `validate`, which is
+        // the only place that sees the override whether or not a document ran.
+        FindingCode::CoverageUnknown
+        | FindingCode::SuggestedEdge
+        | FindingCode::SuggestionUnresolved => Severity::Hint,
+        // Explicitly warning, not via the fallthrough: hint is never promotable,
+        // so a hint default here would foreclose gating on deep coverage for
+        // every profile permanently (coverage-query spec).
+        FindingCode::AxisUnresolved
+        | FindingCode::Coverage
+        | FindingCode::CoverageDeep
+        | FindingCode::OrphanNode => Severity::Warning,
+    }
+}
+
+fn severity_for(code: FindingCode, profile: &Profile) -> Severity {
     let default = default_severity(code);
-    match profile.validation_overrides.get(code).copied() {
+    match profile.validation_overrides().get(code.as_str()).copied() {
         // Nothing promotes from hint: an override trying is reported as a
         // CONFIG_ERROR where validate collects them, and changes nothing here.
         Some(o) if default == Severity::Hint && o != Severity::Hint => default,
@@ -38,7 +114,7 @@ fn severity_for(code: &str, profile: &Profile) -> Severity {
 }
 
 fn issue(
-    code: &str,
+    code: FindingCode,
     message: String,
     provenance: Provenance,
     profile: &Profile,
@@ -46,7 +122,7 @@ fn issue(
 ) -> Issue {
     Issue::new(
         severity_for(code, profile),
-        code,
+        code.as_str(),
         message,
         provenance,
         node_id,
@@ -74,13 +150,15 @@ fn apply_overrides(issues: &[Issue], profile: &Profile) -> Vec<Issue> {
         .iter()
         .map(|i| {
             let mut out = i.clone();
-            if let Some(o) = profile.validation_overrides.get(&i.code).copied() {
+            if let Some(o) = profile.validation_overrides().get(&i.code).copied() {
                 if i.severity == Severity::Hint && o != Severity::Hint {
                     // A code core ships as hint is already reported by the
                     // pre-pass in `validate`, which sees the override whether or
                     // not a finding arrives under it. Reporting it here too
                     // would name one fault twice.
-                    if default_severity(&i.code) != Severity::Hint {
+                    if FindingCode::from_str(&i.code)
+                        .is_none_or(|code| default_severity(code) != Severity::Hint)
+                    {
                         refused.insert(i.code.as_str());
                     }
                 } else {
@@ -95,7 +173,7 @@ fn apply_overrides(issues: &[Issue], profile: &Profile) -> Vec<Issue> {
     // per finding would bury the findings it reports about.
     out.extend(refused.into_iter().map(|code| {
         issue(
-            "CONFIG_ERROR",
+            FindingCode::ConfigError,
             format!(
                 "severity override for '{code}': cannot promote from hint; \
                  the override is ignored"
@@ -115,7 +193,7 @@ fn apply_overrides(issues: &[Issue], profile: &Profile) -> Vec<Issue> {
 /// effective severity rather than recomputing it, or an adapter code with no
 /// shipped default would silently drop to the warning fallback.
 fn resolve_axes(issues: Vec<Issue>, graph: &LatticeGraph, profile: &Profile) -> Vec<Issue> {
-    if profile.axis_bindings.is_empty() {
+    if profile.axis_bindings().is_empty() {
         return issues;
     }
 
@@ -127,7 +205,7 @@ fn resolve_axes(issues: Vec<Issue>, graph: &LatticeGraph, profile: &Profile) -> 
     let mut resolved: Vec<Issue> = Vec::with_capacity(issues.len());
 
     for issue in issues {
-        let Some(binding) = profile.axis_bindings.get(&issue.code) else {
+        let Some(binding) = profile.axis_bindings().get(&issue.code) else {
             resolved.push(issue);
             continue;
         };
@@ -137,8 +215,8 @@ fn resolve_axes(issues: Vec<Issue>, graph: &LatticeGraph, profile: &Profile) -> 
                 .entry((issue.code.clone(), binding.axis.clone()))
                 .or_insert_with(|| {
                     Issue::new(
-                        severity_for("AXIS_UNRESOLVED", profile),
-                        "AXIS_UNRESOLVED",
+                        severity_for(FindingCode::AxisUnresolved, profile),
+                        FindingCode::AxisUnresolved.as_str(),
                         format!(
                             "profile binds '{}' to axis '{}', which the target does not declare",
                             issue.code, binding.axis
@@ -226,7 +304,7 @@ fn read_kind_keys(
 ) -> Vec<Option<String>> {
     let config_error = |message: String, issues: &mut Vec<Issue>| {
         issues.push(issue(
-            "CONFIG_ERROR",
+            FindingCode::ConfigError,
             message,
             Provenance::new("<profile>", 0),
             profile,
@@ -252,8 +330,8 @@ fn read_kind_keys(
         };
         out.push(value.filter(|value| {
             let (declared, noun) = match space {
-                KindSpace::Node => (profile.node_kinds.contains_key(value), "node"),
-                KindSpace::Edge => (profile.edge_kinds.contains_key(value), "edge"),
+                KindSpace::Node => (profile.node_kinds().contains_key(value), "node"),
+                KindSpace::Edge => (profile.edge_kinds().contains_key(value), "edge"),
             };
             if !declared {
                 config_error(
@@ -286,10 +364,12 @@ fn read_kind_keys(
 pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Issue> {
     let mut issues: Vec<Issue> = Vec::new();
 
-    for (code, &severity) in &profile.validation_overrides {
-        if default_severity(code) == Severity::Hint && severity != Severity::Hint {
+    for (code, &severity) in profile.validation_overrides() {
+        if FindingCode::from_str(code).is_some_and(|code| default_severity(code) == Severity::Hint)
+            && severity != Severity::Hint
+        {
             issues.push(issue(
-                "CONFIG_ERROR",
+                FindingCode::ConfigError,
                 format!(
                     "severity override for '{code}': cannot promote from hint; \
                      the override is ignored"
@@ -314,9 +394,9 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
     let mut unknown_kind_nodes: HashSet<&str> = HashSet::new();
 
     for node in graph.iter_nodes() {
-        let Some(node_kind) = profile.node_kinds.get(&node.kind) else {
+        let Some(node_kind) = profile.node_kinds().get(&node.kind) else {
             issues.push(issue(
-                "UNKNOWN_KIND",
+                FindingCode::UnknownKind,
                 format!("node '{}' has unknown kind '{}'", node.id, node.kind),
                 node.provenance.clone(),
                 profile,
@@ -328,7 +408,7 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
 
         if !node_kind.id_matches(&node.id) {
             issues.push(issue(
-                "ID_FORMAT",
+                FindingCode::IdFormat,
                 format!(
                     "node '{}' does not match pattern '{}' for kind '{}'",
                     node.id, node_kind.id_pattern_source, node.kind
@@ -343,7 +423,7 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
             let Some(value) = node.attrs.get(attr_name) else {
                 if schema.required {
                     issues.push(issue(
-                        "ATTR_REQUIRED",
+                        FindingCode::AttrRequired,
                         format!("node '{}': missing required attr '{attr_name}'", node.id),
                         node.provenance.clone(),
                         profile,
@@ -355,7 +435,7 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
 
             if !check_type(value, &schema.kind) {
                 issues.push(issue(
-                    "ATTR_TYPE",
+                    FindingCode::AttrType,
                     format!(
                         "node '{}': attr '{attr_name}' expected type '{}', got {}",
                         node.id,
@@ -375,7 +455,7 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
                 let text = value.as_str().unwrap_or_default();
                 if !allowed.iter().any(|v| v == text) {
                     issues.push(issue(
-                        "ATTR_ENUM",
+                        FindingCode::AttrEnum,
                         format!(
                             "node '{}': attr '{attr_name}' value '{text}' not in {}",
                             node.id,
@@ -394,7 +474,7 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
                 for (index, item) in array.iter().enumerate() {
                     if !check_type(item, items_type) {
                         issues.push(issue(
-                            "ATTR_LIST_ITEMS",
+                            FindingCode::AttrListItems,
                             format!(
                                 "node '{}': attr '{attr_name}' element {index} \
                                      expected type '{items_type}', got {}",
@@ -412,7 +492,7 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
 
         if !connected.contains(node.id.as_str()) && !node_kind.orphan_ok {
             issues.push(issue(
-                "ORPHAN_NODE",
+                FindingCode::OrphanNode,
                 format!("node '{}' has no edges", node.id),
                 node.provenance.clone(),
                 profile,
@@ -428,10 +508,10 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
         let src_node = graph.node(&edge.src);
         let tgt_node = graph.node(&edge.tgt);
 
-        let edge_kind = profile.edge_kinds.get(&edge.kind);
+        let edge_kind = profile.edge_kinds().get(&edge.kind);
         if edge_kind.is_none() {
             issues.push(issue(
-                "UNKNOWN_KIND",
+                FindingCode::UnknownKind,
                 format!(
                     "edge '{}'->'{}' has unknown kind '{}'",
                     edge.src, edge.tgt, edge.kind
@@ -444,7 +524,7 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
 
         if tgt_node.is_none() {
             issues.push(issue(
-                "DANGLING_REF",
+                FindingCode::DanglingRef,
                 format!(
                     "edge '{}'->'{}' (kind '{}'): target '{}' does not exist",
                     edge.src, edge.tgt, edge.kind, edge.tgt
@@ -457,7 +537,7 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
 
         if src_node.is_none() {
             issues.push(issue(
-                "DANGLING_REF",
+                FindingCode::DanglingRef,
                 format!(
                     "edge '{}'->'{}' (kind '{}'): source '{}' does not exist",
                     edge.src, edge.tgt, edge.kind, edge.src
@@ -481,7 +561,7 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
         let (src_kind, tgt_kind) = (&src_node.kind, &tgt_node.kind);
         if !edge_kind.admits(src_kind, tgt_kind) {
             issues.push(issue(
-                "EDGE_CONSTRAINT",
+                FindingCode::EdgeConstraint,
                 format!(
                     "edge '{}'->'{}' (kind '{}'): [{src_kind}, {tgt_kind}] not in allowed pairs",
                     edge.src, edge.tgt, edge.kind
@@ -495,7 +575,7 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
 
     let no_configs = Vec::new();
     let coverage_configs = profile
-        .validation_configs
+        .validation_configs()
         .get("COVERAGE")
         .unwrap_or(&no_configs);
     for config in coverage_configs {
@@ -537,7 +617,7 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
         // a source toward the config's target kind, with no outgoing edge of it.
         // While any exist, "no incoming edge" cannot distinguish a gap from a
         // missing attribution, so the per-node state is unknown.
-        let edge_kind = &profile.edge_kinds[&edge_name];
+        let edge_kind = &profile.edge_kinds()[&edge_name];
         let source_kinds: BTreeSet<&str> = edge_kind
             .allowed
             .iter()
@@ -563,7 +643,7 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
         for node in graph.iter_nodes() {
             if node.kind == target && !covered.contains(node.id.as_str()) {
                 let mut finding = issue(
-                    "COVERAGE",
+                    FindingCode::Coverage,
                     format!(
                         "node '{}' (kind '{target}') has no incoming '{edge_name}' edge",
                         node.id
@@ -592,7 +672,7 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
             // unstated 1939 reads as an unwired layer, not a 14.8% gap.
             let pct = unattributed as f64 * 100.0 / population as f64;
             issues.push(issue(
-                "COVERAGE_UNKNOWN",
+                FindingCode::CoverageUnknown,
                 format!(
                     "{unattributed} of {population} node(s) of {noun} {kinds} ({pct:.1}%) \
                      carry no outgoing '{edge_name}' edge; coverage state for '{target}' \
@@ -606,7 +686,7 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
     }
 
     let deep_configs = profile
-        .validation_configs
+        .validation_configs()
         .get("COVERAGE_DEEP")
         .unwrap_or(&no_configs);
     for config in deep_configs {
@@ -659,79 +739,98 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
             }
         }
 
-        // Least fixed point: seed with the directly evidenced targets and grow
-        // monotonically. The recursive reading alone has two solutions on a
-        // cycle; seeding picks the least one, so an evidence-free cycle stays
-        // uncovered while an anchored one propagates coverage out. Zero
-        // children grow nothing: `children` has no entry, so a childless,
-        // evidence-less target can never enter.
+        // Least fixed point: seed with directly evidenced targets, then notify
+        // each parent when one of its children becomes covered. Each node enters
+        // the queue once and each `via` edge is visited once. The recursive
+        // reading alone has two solutions on a cycle; seeding picks the least
+        // one, so an evidence-free cycle stays uncovered while an anchored one
+        // propagates coverage out. Childless targets never enter.
         let mut covered: HashSet<&str> = targets
             .iter()
             .copied()
             .filter(|t| evidenced.contains(*t))
             .collect();
-        loop {
-            let mut grew = false;
-            for &t in &targets {
-                if !covered.contains(t)
-                    && let Some(kids) = children.get(t)
-                    && kids.iter().all(|k| covered.contains(*k))
-                {
-                    covered.insert(t);
-                    grew = true;
-                }
+        let mut parents_of: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+        let mut remaining: HashMap<&str, usize> = HashMap::new();
+        for (&parent, kids) in &children {
+            remaining.insert(parent, kids.len());
+            for &kid in kids {
+                parents_of.entry(kid).or_default().push(parent);
             }
-            if !grew {
-                break;
+        }
+        let mut queue: VecDeque<&str> = covered.iter().copied().collect();
+        while let Some(child) = queue.pop_front() {
+            for &parent in parents_of.get(child).into_iter().flatten() {
+                let count = remaining.get_mut(parent).expect("parent has children");
+                *count -= 1;
+                if *count == 0 && covered.insert(parent) {
+                    queue.push_back(parent);
+                }
             }
         }
 
-        // Cycle reporting: reachability along `via` (child -> parent) over the
-        // uncovered targets only; a node on a cycle names its strongly
-        // connected component. Quadratic in the uncovered population, which is
-        // register-sized; correctness and determinism over cleverness.
+        // Find strongly connected components once with iterative Kosaraju walks.
+        // A cyclic uncovered node names every member of its component.
         let uncovered: Vec<&str> = targets
             .iter()
             .copied()
             .filter(|t| !covered.contains(*t))
             .collect();
-        let mut parents_of: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
-        for (&parent, kids) in &children {
-            if covered.contains(parent) {
+        let uncovered_set: HashSet<&str> = uncovered.iter().copied().collect();
+        let mut seen: HashSet<&str> = HashSet::new();
+        let mut finish_order = Vec::with_capacity(uncovered.len());
+        for &start in &uncovered {
+            if !seen.insert(start) {
                 continue;
             }
-            for &kid in kids {
-                if !covered.contains(kid) {
-                    parents_of.entry(kid).or_default().push(parent);
+            let mut stack = vec![(start, 0)];
+            while let Some((node, next)) = stack.last_mut() {
+                let neighbours = parents_of.get(node).map(Vec::as_slice).unwrap_or(&[]);
+                if *next < neighbours.len() {
+                    let neighbour = neighbours[*next];
+                    *next += 1;
+                    if uncovered_set.contains(neighbour) && seen.insert(neighbour) {
+                        stack.push((neighbour, 0));
+                    }
+                } else {
+                    finish_order.push(*node);
+                    stack.pop();
                 }
-            }
-        }
-        let reach = |start: &str| -> HashSet<&str> {
-            let mut seen: HashSet<&str> = HashSet::new();
-            let mut queue: Vec<&str> = parents_of.get(start).cloned().unwrap_or_default();
-            while let Some(node) = queue.pop() {
-                if seen.insert(node) {
-                    queue.extend(parents_of.get(node).into_iter().flatten());
-                }
-            }
-            seen
-        };
-        let reaches: BTreeMap<&str, HashSet<&str>> =
-            uncovered.iter().map(|&u| (u, reach(u))).collect();
-        let mut cycle_members: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
-        for &u in &uncovered {
-            if reaches[u].contains(u) {
-                let mut members: Vec<&str> = uncovered
-                    .iter()
-                    .copied()
-                    .filter(|&v| v == u || (reaches[u].contains(v) && reaches[v].contains(u)))
-                    .collect();
-                members.sort_unstable();
-                cycle_members.insert(u, members);
             }
         }
 
-        let evidence_kind = &profile.edge_kinds[&evidence];
+        seen.clear();
+        let mut cyclic_components: Vec<Vec<&str>> = Vec::new();
+        let mut component_of: HashMap<&str, usize> = HashMap::new();
+        for &start in finish_order.iter().rev() {
+            if !seen.insert(start) {
+                continue;
+            }
+            let mut members = Vec::new();
+            let mut stack = vec![start];
+            while let Some(node) = stack.pop() {
+                members.push(node);
+                for &child in children.get(node).into_iter().flatten() {
+                    if uncovered_set.contains(child) && seen.insert(child) {
+                        stack.push(child);
+                    }
+                }
+            }
+            let self_loop = members.len() == 1
+                && parents_of
+                    .get(start)
+                    .is_some_and(|parents| parents.contains(&start));
+            if members.len() > 1 || self_loop {
+                members.sort_unstable();
+                let component = cyclic_components.len();
+                for &member in &members {
+                    component_of.insert(member, component);
+                }
+                cyclic_components.push(members);
+            }
+        }
+
+        let evidence_kind = &profile.edge_kinds()[&evidence];
         let source_kinds: BTreeSet<&str> = evidence_kind
             .allowed
             .iter()
@@ -761,7 +860,8 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
             let id = node.id.as_str();
             // The immediate cause, so a cascade of ancestor findings stays
             // navigable leaf-ward instead of flooding indistinguishable rows.
-            let detail = if let Some(members) = cycle_members.get(id) {
+            let detail = if let Some(component) = component_of.get(id) {
+                let members = &cyclic_components[*component];
                 format!("in an uncovered '{via}' cycle: {}", members.join(", "))
             } else if let Some(kids) = children.get(id) {
                 let mut bad: Vec<&str> = kids
@@ -781,7 +881,7 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
                 "no evidence and no children".to_string()
             };
             let mut finding = issue(
-                "COVERAGE_DEEP",
+                FindingCode::CoverageDeep,
                 format!("node '{id}' (kind '{target}') is not deep-covered: {detail}"),
                 node.provenance.clone(),
                 profile,
@@ -804,7 +904,7 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
             };
             let pct = unattributed as f64 * 100.0 / population as f64;
             issues.push(issue(
-                "COVERAGE_UNKNOWN",
+                FindingCode::CoverageUnknown,
                 format!(
                     "{unattributed} of {population} node(s) of {noun} {kinds} ({pct:.1}%) \
                      carry no outgoing '{evidence}' edge; deep coverage state for \
@@ -837,4 +937,20 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
 /// keep collection order.
 pub(crate) fn sort_issues(issues: &mut [Issue]) {
     issues.sort_by(|a, b| a.sort_key().cmp(&b.sort_key()));
+}
+
+#[cfg(test)]
+mod default_severity_tests {
+    use super::{FindingCode, default_severity};
+    use crate::types::Severity;
+
+    #[test]
+    fn warning_finding_codes_have_explicit_defaults() {
+        assert_eq!(default_severity(FindingCode::OrphanNode), Severity::Warning);
+        assert_eq!(default_severity(FindingCode::Coverage), Severity::Warning);
+        assert_eq!(
+            default_severity(FindingCode::AxisUnresolved),
+            Severity::Warning
+        );
+    }
 }

@@ -220,6 +220,31 @@ fn a_shared_child_is_one_finding_and_both_parents_name_it() {
     }
 }
 
+#[test]
+fn coverage_propagates_once_through_a_diamond() {
+    let issues = run(
+        vec![
+            node("R-1", "req"),
+            node("R-2", "req"),
+            node("R-3", "req"),
+            node("R-4", "req"),
+            node("T-1", "test"),
+        ],
+        vec![
+            edge("R-2", "R-1", "derives"),
+            edge("R-3", "R-1", "derives"),
+            edge("R-4", "R-2", "derives"),
+            edge("R-4", "R-3", "derives"),
+            edge("T-1", "R-4", "verifies"),
+        ],
+    );
+    assert!(
+        deep_findings(&issues).is_empty(),
+        "{:?}",
+        deep_findings(&issues)
+    );
+}
+
 // Scenario: Evidence-free cycle stays uncovered and is reported
 
 #[test]
@@ -235,6 +260,21 @@ fn an_evidence_free_cycle_stays_uncovered_with_identical_member_messages() {
         assert!(finding.message.contains("R-5, R-6"), "{}", finding.message);
         assert!(finding.message.contains("cycle"), "{}", finding.message);
     }
+}
+
+#[test]
+fn an_evidence_free_self_loop_is_reported_as_a_cycle() {
+    let issues = run(
+        vec![node("R-5", "req")],
+        vec![edge("R-5", "R-5", "derives")],
+    );
+    let finding = deep_for(&issues, "R-5");
+    assert_eq!(finding.len(), 1);
+    assert!(
+        finding[0].message.contains("cycle: R-5"),
+        "{}",
+        finding[0].message
+    );
 }
 
 // Scenario: Anchored cycle propagates coverage out

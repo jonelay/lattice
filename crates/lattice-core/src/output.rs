@@ -3,7 +3,12 @@
 //! One dispatch point, so a format is defined once for every command. Formatting
 //! at a call site is how the three drift apart.
 
-use serde_json::{Map, Value, json};
+use std::borrow::Cow;
+use std::collections::BTreeMap;
+
+use serde::Serialize as DeriveSerialize;
+use serde::ser::{Serialize, SerializeMap, SerializeSeq, Serializer};
+use serde_json::Value;
 
 use crate::types::{
     AtReport, CountsReport, DiffReport, Issue, OrphansReport, PathReport, ReachReport, Severity,
@@ -89,9 +94,9 @@ fn format_plain(issues: &[&Issue]) -> String {
 /// core. Applied to the rendered document rather than through a custom
 /// `Formatter`: non-ASCII can only occur inside JSON string literals, so a pass
 /// over the finished text is equivalent and far smaller.
-fn escape_non_ascii(json: &str) -> String {
+fn escape_non_ascii(json: &str) -> Cow<'_, str> {
     if json.is_ascii() {
-        return json.to_string();
+        return Cow::Borrowed(json);
     }
     let mut out = String::with_capacity(json.len());
     for c in json.chars() {
@@ -105,29 +110,74 @@ fn escape_non_ascii(json: &str) -> String {
             }
         }
     }
-    out
+    Cow::Owned(out)
+}
+
+#[derive(DeriveSerialize)]
+struct ProvenanceJson<'a> {
+    file: &'a str,
+    line: i64,
+}
+
+impl<'a> From<&'a crate::types::Provenance> for ProvenanceJson<'a> {
+    fn from(provenance: &'a crate::types::Provenance) -> Self {
+        Self {
+            file: &provenance.file,
+            line: provenance.line,
+        }
+    }
+}
+
+#[derive(DeriveSerialize)]
+struct FindingJson<'a> {
+    code: &'a str,
+    file: &'a str,
+    line: i64,
+    message: &'a str,
+    node_id: &'a Option<String>,
+    severity: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    state: Option<&'a str>,
+}
+
+impl<'a> From<&'a Issue> for FindingJson<'a> {
+    fn from(issue: &'a Issue) -> Self {
+        Self {
+            code: &issue.code,
+            file: &issue.provenance.file,
+            line: issue.provenance.line,
+            message: &issue.message,
+            node_id: &issue.node_id,
+            severity: issue.severity.as_str(),
+            state: issue.state.as_deref(),
+        }
+    }
+}
+
+struct FindingsJson<'a>(&'a [&'a Issue]);
+
+impl Serialize for FindingsJson<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut sequence = serializer.serialize_seq(Some(self.0.len()))?;
+        for issue in self.0 {
+            sequence.serialize_element(&FindingJson::from(*issue))?;
+        }
+        sequence.end()
+    }
+}
+
+#[derive(DeriveSerialize)]
+struct FindingsRoot<'a> {
+    findings: FindingsJson<'a>,
 }
 
 fn format_json(issues: &[&Issue]) -> String {
-    let findings: Vec<Value> = issues
-        .iter()
-        .map(|i| {
-            let mut entry = Map::new();
-            entry.insert("code".into(), json!(i.code));
-            entry.insert("file".into(), json!(i.provenance.file));
-            entry.insert("line".into(), json!(i.provenance.line));
-            entry.insert("message".into(), json!(i.message));
-            entry.insert("node_id".into(), json!(i.node_id));
-            entry.insert("severity".into(), json!(i.severity.as_str()));
-            if let Some(state) = &i.state {
-                entry.insert("state".into(), json!(state));
-            }
-            Value::Object(entry)
-        })
-        .collect();
-    let mut root = Map::new();
-    root.insert("findings".into(), Value::Array(findings));
-    render_json(&Value::Object(root))
+    render_json(&FindingsRoot {
+        findings: FindingsJson(issues),
+    })
 }
 
 fn format_rich(issues: &[&Issue]) -> String {
@@ -186,25 +236,66 @@ fn format_summary_plain(report: &SummaryReport) -> String {
         .join("\n")
 }
 
-fn format_summary_json(report: &SummaryReport) -> String {
-    let files: Vec<Value> = report
-        .groups
-        .iter()
-        .map(|(group, counts)| {
-            let mut row = Map::new();
-            row.insert(report.group_key.clone(), json!(group));
-            // Python spreads the counts over the group key, so a status named
-            // like the group column wins the collision.
-            for (key, value) in counts {
-                row.insert(key.clone(), json!(value));
+struct SummaryRowsJson<'a>(&'a SummaryReport);
+
+struct SummaryRowJson<'a> {
+    group_key: &'a str,
+    group: &'a str,
+    counts: &'a BTreeMap<String, i64>,
+}
+
+impl Serialize for SummaryRowJson<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let has_collision = self.counts.contains_key(self.group_key);
+        let mut mapping =
+            serializer.serialize_map(Some(self.counts.len() + usize::from(!has_collision)))?;
+        let mut inserted_group = has_collision;
+        for (key, value) in self.counts {
+            if !inserted_group && self.group_key < key.as_str() {
+                mapping.serialize_entry(self.group_key, self.group)?;
+                inserted_group = true;
             }
-            Value::Object(row)
-        })
-        .collect();
-    let mut root = Map::new();
-    root.insert("files".into(), Value::Array(files));
-    root.insert("totals".into(), json!(report.totals()));
-    render_json(&Value::Object(root))
+            mapping.serialize_entry(key, value)?;
+        }
+        if !inserted_group {
+            mapping.serialize_entry(self.group_key, self.group)?;
+        }
+        mapping.end()
+    }
+}
+
+impl Serialize for SummaryRowsJson<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut sequence = serializer.serialize_seq(Some(self.0.groups.len()))?;
+        for (group, counts) in &self.0.groups {
+            sequence.serialize_element(&SummaryRowJson {
+                group_key: &self.0.group_key,
+                group,
+                counts,
+            })?;
+        }
+        sequence.end()
+    }
+}
+
+#[derive(DeriveSerialize)]
+struct SummaryJson<'a> {
+    files: SummaryRowsJson<'a>,
+    totals: &'a BTreeMap<String, i64>,
+}
+
+fn format_summary_json(report: &SummaryReport) -> String {
+    let totals = report.totals();
+    render_json(&SummaryJson {
+        files: SummaryRowsJson(report),
+        totals: &totals,
+    })
 }
 
 fn format_summary_rich(report: &SummaryReport) -> String {
@@ -327,55 +418,90 @@ fn format_trace_plain(report: &TraceReport) -> String {
     lines.join("\n")
 }
 
-fn trace_entry_json(e: &TraceEntry) -> Value {
-    let mut entry = Map::new();
-    entry.insert("attrs".into(), json!(e.attrs));
-    entry.insert("edges".into(), json!(e.edges));
-    entry.insert(
-        "findings".into(),
-        Value::Array(e.findings.iter().map(trace_finding_json).collect()),
-    );
-    entry.insert("id".into(), json!(e.id));
-    entry.insert("kind".into(), json!(e.kind));
-    entry.insert(
-        "provenance".into(),
-        json!({"file": e.provenance.file, "line": e.provenance.line}),
-    );
-    Value::Object(entry)
+#[derive(DeriveSerialize)]
+struct TraceFindingJson<'a> {
+    code: &'a str,
+    file: &'a str,
+    line: i64,
+    message: &'a str,
+    severity: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    state: Option<&'a str>,
+}
+
+impl<'a> From<&'a Issue> for TraceFindingJson<'a> {
+    fn from(issue: &'a Issue) -> Self {
+        Self {
+            code: &issue.code,
+            file: &issue.provenance.file,
+            line: issue.provenance.line,
+            message: &issue.message,
+            severity: issue.severity.as_str(),
+            state: issue.state.as_deref(),
+        }
+    }
+}
+
+struct TraceFindingsJson<'a>(&'a [Issue]);
+
+impl Serialize for TraceFindingsJson<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut sequence = serializer.serialize_seq(Some(self.0.len()))?;
+        for issue in self.0 {
+            sequence.serialize_element(&TraceFindingJson::from(issue))?;
+        }
+        sequence.end()
+    }
+}
+
+#[derive(DeriveSerialize)]
+struct TraceEntryJson<'a> {
+    attrs: &'a BTreeMap<String, Value>,
+    edges: &'a BTreeMap<String, Vec<String>>,
+    findings: TraceFindingsJson<'a>,
+    id: &'a str,
+    kind: &'a str,
+    provenance: ProvenanceJson<'a>,
+}
+
+struct TraceEntriesJson<'a>(&'a [TraceEntry]);
+
+impl Serialize for TraceEntriesJson<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut sequence = serializer.serialize_seq(Some(self.0.len()))?;
+        for entry in self.0 {
+            sequence.serialize_element(&TraceEntryJson {
+                attrs: &entry.attrs,
+                edges: &entry.edges,
+                findings: TraceFindingsJson(&entry.findings),
+                id: &entry.id,
+                kind: &entry.kind,
+                provenance: ProvenanceJson::from(&entry.provenance),
+            })?;
+        }
+        sequence.end()
+    }
+}
+
+#[derive(DeriveSerialize)]
+struct TraceJson<'a> {
+    entries: TraceEntriesJson<'a>,
+    header: &'a BTreeMap<String, String>,
+    unattachable_findings: TraceFindingsJson<'a>,
 }
 
 fn format_trace_json(report: &TraceReport) -> String {
-    let entries: Vec<Value> = report.entries.iter().map(trace_entry_json).collect();
-
-    let mut root = Map::new();
-    root.insert("header".into(), json!(report.header));
-    root.insert("entries".into(), Value::Array(entries));
-    root.insert(
-        "unattachable_findings".into(),
-        Value::Array(
-            report
-                .unattachable_findings
-                .iter()
-                .map(trace_finding_json)
-                .collect(),
-        ),
-    );
-    render_json(&Value::Object(root))
-}
-
-/// A finding inside a trace report, which unlike a `validate` finding carries no
-/// `node_id` — the entry it sits under already answers that.
-fn trace_finding_json(issue: &Issue) -> Value {
-    let mut entry = Map::new();
-    entry.insert("code".into(), json!(issue.code));
-    entry.insert("file".into(), json!(issue.provenance.file));
-    entry.insert("line".into(), json!(issue.provenance.line));
-    entry.insert("message".into(), json!(issue.message));
-    entry.insert("severity".into(), json!(issue.severity.as_str()));
-    if let Some(state) = &issue.state {
-        entry.insert("state".into(), json!(state));
-    }
-    Value::Object(entry)
+    render_json(&TraceJson {
+        entries: TraceEntriesJson(&report.entries),
+        header: &report.header,
+        unattachable_findings: TraceFindingsJson(&report.unattachable_findings),
+    })
 }
 
 fn format_trace_rich(report: &TraceReport) -> String {
@@ -468,17 +594,18 @@ fn format_at_plain(report: &AtReport) -> String {
 }
 
 fn format_at_json(report: &AtReport) -> String {
-    let mut root = Map::new();
-    root.insert(
-        "entries".into(),
-        Value::Array(report.entries.iter().map(trace_entry_json).collect()),
-    );
-    root.insert(
-        "findings".into(),
-        Value::Array(report.findings.iter().map(trace_finding_json).collect()),
-    );
-    root.insert("path".into(), json!(report.path));
-    render_json(&Value::Object(root))
+    #[derive(DeriveSerialize)]
+    struct AtJson<'a> {
+        entries: TraceEntriesJson<'a>,
+        findings: TraceFindingsJson<'a>,
+        path: &'a str,
+    }
+
+    render_json(&AtJson {
+        entries: TraceEntriesJson(&report.entries),
+        findings: TraceFindingsJson(&report.findings),
+        path: &report.path,
+    })
 }
 
 fn format_at_rich(report: &AtReport) -> String {
@@ -543,18 +670,45 @@ fn format_reach_plain(report: &ReachReport) -> String {
         .join("\n")
 }
 
+#[derive(DeriveSerialize)]
+struct NodeRefJson<'a> {
+    id: &'a str,
+    kind: &'a str,
+}
+
+struct NodeRefsJson<'a>(&'a [crate::types::NodeRef]);
+
+impl Serialize for NodeRefsJson<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut sequence = serializer.serialize_seq(Some(self.0.len()))?;
+        for node in self.0 {
+            sequence.serialize_element(&NodeRefJson {
+                id: &node.id,
+                kind: &node.kind,
+            })?;
+        }
+        sequence.end()
+    }
+}
+
 fn format_reach_json(report: &ReachReport) -> String {
-    let nodes: Vec<Value> = report
-        .nodes
-        .iter()
-        .map(|n| json!({"id": n.id, "kind": n.kind}))
-        .collect();
-    render_json(&json!({
-        "direction": report.direction,
-        "edge_kinds": report.edge_kinds,
-        "nodes": nodes,
-        "origin": report.origin,
-    }))
+    #[derive(DeriveSerialize)]
+    struct ReachJson<'a> {
+        direction: &'a str,
+        edge_kinds: &'a [String],
+        nodes: NodeRefsJson<'a>,
+        origin: &'a str,
+    }
+
+    render_json(&ReachJson {
+        direction: &report.direction,
+        edge_kinds: &report.edge_kinds,
+        nodes: NodeRefsJson(&report.nodes),
+        origin: &report.origin,
+    })
 }
 
 fn format_reach_rich(report: &ReachReport) -> String {
@@ -579,37 +733,53 @@ fn format_reach_rich(report: &ReachReport) -> String {
 }
 
 /// The plain path chain: `A -[kind]-> B -[kind]-> C`.
-fn path_chain(report: &PathReport) -> String {
-    let mut out = report.nodes[0].clone();
-    for (kind, node) in report.edges.iter().zip(&report.nodes[1..]) {
+fn path_chain(nodes: &[String], edges: &[String]) -> String {
+    let Some((first, remaining)) = nodes.split_first() else {
+        return String::new();
+    };
+    let mut out = first.clone();
+    for (kind, node) in edges.iter().zip(remaining) {
         out.push_str(&format!(" -[{kind}]-> {node}"));
     }
     out
 }
 
 fn format_path_plain(report: &PathReport) -> String {
-    if report.found {
-        path_chain(report)
+    if let Some((nodes, edges)) = report.found_path() {
+        path_chain(nodes, edges)
     } else {
-        format!("No path from {} to {}.", report.src, report.tgt)
+        format!("No path from {} to {}.", report.src(), report.tgt())
     }
 }
 
 fn format_path_json(report: &PathReport) -> String {
-    render_json(&json!({
-        "edges": report.edges,
-        "found": report.found,
-        "nodes": report.nodes,
-        "src": report.src,
-        "tgt": report.tgt,
-    }))
+    let (found, nodes, edges) = match report.found_path() {
+        Some((nodes, edges)) => (true, nodes, edges),
+        None => (false, &[][..], &[][..]),
+    };
+    #[derive(DeriveSerialize)]
+    struct PathJson<'a> {
+        edges: &'a [String],
+        found: bool,
+        nodes: &'a [String],
+        src: &'a str,
+        tgt: &'a str,
+    }
+
+    render_json(&PathJson {
+        edges,
+        found,
+        nodes,
+        src: report.src(),
+        tgt: report.tgt(),
+    })
 }
 
 fn format_path_rich(report: &PathReport) -> String {
-    if report.found {
-        format!("{}\n\n{} edge(s)", path_chain(report), report.edges.len())
+    if let Some((nodes, edges)) = report.found_path() {
+        format!("{}\n\n{} edge(s)", path_chain(nodes, edges), edges.len())
     } else {
-        format!("No path from {} to {}.", report.src, report.tgt)
+        format!("No path from {} to {}.", report.src(), report.tgt())
     }
 }
 
@@ -626,22 +796,44 @@ fn format_orphans_plain(report: &OrphansReport) -> String {
 }
 
 fn format_orphans_json(report: &OrphansReport) -> String {
-    let orphans: Vec<Value> = report
-        .orphans
-        .iter()
-        .map(|o| {
-            json!({
-                "file": o.provenance.file,
-                "id": o.id,
-                "kind": o.kind,
-                "line": o.provenance.line,
-            })
-        })
-        .collect();
-    render_json(&json!({
-        "kind_filter": report.kind_filter,
-        "orphans": orphans,
-    }))
+    #[derive(DeriveSerialize)]
+    struct OrphanJson<'a> {
+        file: &'a str,
+        id: &'a str,
+        kind: &'a str,
+        line: i64,
+    }
+
+    struct OrphansJson<'a>(&'a [crate::types::OrphanEntry]);
+
+    impl Serialize for OrphansJson<'_> {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            let mut sequence = serializer.serialize_seq(Some(self.0.len()))?;
+            for orphan in self.0 {
+                sequence.serialize_element(&OrphanJson {
+                    file: &orphan.provenance.file,
+                    id: &orphan.id,
+                    kind: &orphan.kind,
+                    line: orphan.provenance.line,
+                })?;
+            }
+            sequence.end()
+        }
+    }
+
+    #[derive(DeriveSerialize)]
+    struct OrphansRoot<'a> {
+        kind_filter: &'a Option<String>,
+        orphans: OrphansJson<'a>,
+    }
+
+    render_json(&OrphansRoot {
+        kind_filter: &report.kind_filter,
+        orphans: OrphansJson(&report.orphans),
+    })
 }
 
 fn format_orphans_rich(report: &OrphansReport) -> String {
@@ -676,10 +868,16 @@ fn format_counts_plain(report: &CountsReport) -> String {
 }
 
 fn format_counts_json(report: &CountsReport) -> String {
-    render_json(&json!({
-        "edges": report.edges,
-        "nodes": report.nodes,
-    }))
+    #[derive(DeriveSerialize)]
+    struct CountsJson<'a> {
+        edges: &'a BTreeMap<String, i64>,
+        nodes: &'a BTreeMap<String, i64>,
+    }
+
+    render_json(&CountsJson {
+        edges: &report.edges,
+        nodes: &report.nodes,
+    })
 }
 
 fn format_counts_rich(report: &CountsReport) -> String {
@@ -734,27 +932,55 @@ fn format_diff_plain(report: &DiffReport) -> String {
     diff_lines(report).join("\n")
 }
 
+#[derive(DeriveSerialize)]
+struct EdgeRefJson<'a> {
+    kind: &'a str,
+    src: &'a str,
+    tgt: &'a str,
+}
+
+struct EdgeRefsJson<'a>(&'a [crate::types::EdgeRef]);
+
+impl Serialize for EdgeRefsJson<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut sequence = serializer.serialize_seq(Some(self.0.len()))?;
+        for edge in self.0 {
+            sequence.serialize_element(&EdgeRefJson {
+                kind: &edge.kind,
+                src: &edge.src,
+                tgt: &edge.tgt,
+            })?;
+        }
+        sequence.end()
+    }
+}
+
 fn format_diff_json(report: &DiffReport) -> String {
-    let nodes = |list: &[crate::types::NodeRef]| -> Vec<Value> {
-        list.iter()
-            .map(|n| json!({"id": n.id, "kind": n.kind}))
-            .collect()
-    };
-    let edges = |list: &[crate::types::EdgeRef]| -> Vec<Value> {
-        list.iter()
-            .map(|e| json!({"kind": e.kind, "src": e.src, "tgt": e.tgt}))
-            .collect()
-    };
-    render_json(&json!({
-        "axes_changed": report.axes_changed,
-        "edges_added": edges(&report.edges_added),
-        "edges_removed": edges(&report.edges_removed),
-        "nodes_added": nodes(&report.nodes_added),
-        "nodes_changed": nodes(&report.nodes_changed),
-        "nodes_removed": nodes(&report.nodes_removed),
-        "rev_a": report.rev_a,
-        "rev_b": report.rev_b,
-    }))
+    #[derive(DeriveSerialize)]
+    struct DiffJson<'a> {
+        axes_changed: &'a [String],
+        edges_added: EdgeRefsJson<'a>,
+        edges_removed: EdgeRefsJson<'a>,
+        nodes_added: NodeRefsJson<'a>,
+        nodes_changed: NodeRefsJson<'a>,
+        nodes_removed: NodeRefsJson<'a>,
+        rev_a: &'a str,
+        rev_b: &'a str,
+    }
+
+    render_json(&DiffJson {
+        axes_changed: &report.axes_changed,
+        edges_added: EdgeRefsJson(&report.edges_added),
+        edges_removed: EdgeRefsJson(&report.edges_removed),
+        nodes_added: NodeRefsJson(&report.nodes_added),
+        nodes_changed: NodeRefsJson(&report.nodes_changed),
+        nodes_removed: NodeRefsJson(&report.nodes_removed),
+        rev_a: &report.rev_a,
+        rev_b: &report.rev_b,
+    })
 }
 
 fn format_diff_rich(report: &DiffReport) -> String {
@@ -769,12 +995,14 @@ fn format_diff_rich(report: &DiffReport) -> String {
 
 /// Serialize a payload the way `json.dumps(indent=2, sort_keys=True)` would.
 ///
-/// Sorted keys come from `serde_json::Map` being a `BTreeMap` here, which sorts
-/// at every level as `sort_keys` does — enabling its `preserve_order` feature
-/// would silently break that.
-fn render_json(value: &Value) -> String {
+/// Serializable views declare fields in sorted order, and nested maps are
+/// `BTreeMap`s, matching `sort_keys` at every level.
+fn render_json(value: &(impl Serialize + ?Sized)) -> String {
     let rendered = serde_json::to_string_pretty(value).expect("payloads are serializable");
-    escape_non_ascii(&rendered)
+    match escape_non_ascii(&rendered) {
+        Cow::Borrowed(_) => rendered,
+        Cow::Owned(escaped) => escaped,
+    }
 }
 
 /// Drop ANSI escape sequences from rendered output.
@@ -822,6 +1050,8 @@ impl std::error::Error for UnknownFormat {}
 
 /// What a command has to show. The dispatcher picks its formatters from this,
 /// so a new payload adds three formatters and no new printing path.
+#[non_exhaustive]
+#[derive(Debug)]
 pub enum Payload<'a> {
     Findings(&'a [Issue]),
     Summary(&'a SummaryReport),

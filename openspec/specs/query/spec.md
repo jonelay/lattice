@@ -79,7 +79,11 @@ connected" is an answer, not a failure. When multiple paths exist, a shortest
 one SHALL be reported, ties broken by node ID order, so output is
 deterministic.
 
-Verified by: `cargo test --test query path`
+The reported path SHALL begin with `<src>` and end with `<tgt>`, with exactly
+one fewer edge than nodes. A self-loop (`<src>` equals `<tgt>`) is a valid
+answer: one node, zero edges.
+
+Verified by: `cargo test --test query path`, `cargo test --test output path_report`
 
 #### Scenario: Connected nodes
 - **WHEN** T-1 verifies REQ-1 and the user runs `lattice query path T-1 REQ-1`

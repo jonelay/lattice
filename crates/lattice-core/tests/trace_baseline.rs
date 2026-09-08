@@ -34,7 +34,7 @@ fn trace_reproduces_the_synthetic_baselines_in_all_three_formats() {
     let profile = load_profile(&root.join("profiles/requirements-rm.yaml")).expect("profile loads");
     let text = std::fs::read_to_string(baselines().join("synthetic.document.json"))
         .expect("the stored document is committed beside the baselines");
-    let graph = ingest_document(&parse_document(&text).unwrap()).expect("document ingests");
+    let graph = ingest_document(parse_document(&text).unwrap()).expect("document ingests");
 
     let issues = validate(&graph, &profile, false);
     let report = build_trace_report(&profile, &graph, issues, BASELINE_VERSION);
