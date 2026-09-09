@@ -523,14 +523,19 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
         }
 
         if tgt_node.is_none() {
-            issues.push(issue(
-                FindingCode::DanglingRef,
+            let severity = if edge_kind.is_some_and(|kind| kind.cross_source) {
+                Severity::Hint
+            } else {
+                severity_for(FindingCode::DanglingRef, profile)
+            };
+            issues.push(Issue::new(
+                severity,
+                FindingCode::DanglingRef.as_str(),
                 format!(
                     "edge '{}'->'{}' (kind '{}'): target '{}' does not exist",
                     edge.src, edge.tgt, edge.kind, edge.tgt
                 ),
                 edge.provenance.clone(),
-                profile,
                 Some(edge.src.clone()),
             ));
         }
@@ -941,8 +946,12 @@ pub(crate) fn sort_issues(issues: &mut [Issue]) {
 
 #[cfg(test)]
 mod default_severity_tests {
-    use super::{FindingCode, default_severity};
-    use crate::types::Severity;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    use super::{FindingCode, default_severity, validate};
+    use crate::graph::{EdgeSpec, LatticeGraph};
+    use crate::profile::load_profile;
+    use crate::types::{Provenance, Severity};
 
     #[test]
     fn warning_finding_codes_have_explicit_defaults() {
@@ -952,5 +961,63 @@ mod default_severity_tests {
             default_severity(FindingCode::AxisUnresolved),
             Severity::Warning
         );
+    }
+
+    fn dangling_severity(cross_source: bool) -> Severity {
+        static NEXT: AtomicU32 = AtomicU32::new(0);
+        let path = std::env::temp_dir().join(format!(
+            "lattice-cross-source-{}-{}.yaml",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        let flag = if cross_source {
+            "    cross_source: true\n"
+        } else {
+            ""
+        };
+        std::fs::write(
+            &path,
+            format!(
+                "name: t\nprofile_version: \"1.0.0\"\n\
+                 node_kinds:\n  req:\n    id_pattern: \"^REQ-[0-9]+$\"\n\
+                 edge_kinds:\n  derives:\n    allowed: [[req, req]]\n{flag}"
+            ),
+        )
+        .expect("profile fixture writes");
+        let profile = load_profile(&path).expect("profile fixture loads");
+
+        let mut graph = LatticeGraph::new();
+        graph
+            .add_node(
+                "REQ-1",
+                "req",
+                Default::default(),
+                Provenance::new("requirements.md", 1),
+            )
+            .expect("source node is unique");
+        graph.add_edge(
+            EdgeSpec {
+                src: "REQ-1".into(),
+                tgt: "REQ-2".into(),
+                kind: "derives".into(),
+            },
+            Provenance::new("requirements.md", 1),
+        );
+
+        validate(&graph, &profile, false)
+            .into_iter()
+            .find(|finding| finding.code == "DANGLING_REF")
+            .expect("dangling edge produces a finding")
+            .severity
+    }
+
+    #[test]
+    fn cross_source_dangling_target_is_a_hint() {
+        assert_eq!(dangling_severity(true), Severity::Hint);
+    }
+
+    #[test]
+    fn ordinary_dangling_target_remains_an_error() {
+        assert_eq!(dangling_severity(false), Severity::Error);
     }
 }

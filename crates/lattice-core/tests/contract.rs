@@ -301,7 +301,7 @@ fn profile_as_json(path: &str) -> Value {
 fn resolved_document_round_trips_every_declared_field() {
     for path in [
         "../../profiles/requirements-rm.yaml",
-        "../../profiles/tomlreg.yaml",
+        "../../profiles/toml.yaml",
     ] {
         let profile = lattice_core::profile::load_profile(std::path::Path::new(path)).unwrap();
         let text = lattice_core::profile::resolved_document(&profile).unwrap();

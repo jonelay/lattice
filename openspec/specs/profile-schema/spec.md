@@ -488,3 +488,33 @@ Verified by: `cargo test --test profile_schema orphan_ok`
 - **WHEN** a node kind declares no `orphan_ok` key
 - **THEN** nodes of that kind are subject to `ORPHAN_NODE` as before
 
+### Requirement: Edge kinds support cross_source flag
+An edge kind declaration in a profile SHALL accept an optional `cross_source: true`
+field. When present, the validation layer SHALL demote DANGLING_REF findings for
+edges of that kind whose target does not resolve to hint severity instead of the
+default error severity. This applies in standalone (single-source) runs only — in a
+program composition context, cross-source edges resolve normally after merge.
+
+The flag is profile data, not core vocabulary. The core reads it as a severity
+modifier during DANGLING_REF collection, not as a behavioral switch.
+
+A profile that does not declare `cross_source` on any edge kind has no change in
+behavior.
+
+Verified by: `cargo test` (validation severity test), and
+`.venv/bin/python -m pytest tests/test_adapter_md.py` (profile with cross_source edge)
+
+#### Scenario: Cross-source edge kind demotes dangling ref
+- **WHEN** a profile declares edge kind `derives` with `cross_source: true` and an
+  edge of that kind targets an ID that does not exist in the graph
+- **THEN** the DANGLING_REF finding for that edge has hint severity, not error
+
+#### Scenario: Non-cross-source edge kind unchanged
+- **WHEN** a profile declares edge kind `contains` without `cross_source` and an edge
+  of that kind targets a missing ID
+- **THEN** the DANGLING_REF finding has its default severity (error)
+
+#### Scenario: Flag absent means no change
+- **WHEN** no edge kind in the profile declares `cross_source`
+- **THEN** all DANGLING_REF findings use their default or profile-overridden severity
+

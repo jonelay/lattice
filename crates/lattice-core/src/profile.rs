@@ -120,6 +120,7 @@ impl NodeKind {
 #[derive(Debug)]
 pub struct EdgeKind {
     pub allowed: Vec<(String, String)>,
+    pub cross_source: bool,
 }
 
 impl EdgeKind {
@@ -590,7 +591,21 @@ fn parse_edge_kind(
         }
     }
 
-    Ok(EdgeKind { allowed })
+    let cross_source = match mapping.get(Value::String("cross_source".into())) {
+        None => false,
+        Some(Value::Bool(value)) => *value,
+        Some(other) => {
+            return err(format!(
+                "{where_}: 'cross_source' must be a bool, got {}",
+                name(other)
+            ));
+        }
+    };
+
+    Ok(EdgeKind {
+        allowed,
+        cross_source,
+    })
 }
 
 fn check_version(raw: &Value) -> Result<String, ProfileError> {

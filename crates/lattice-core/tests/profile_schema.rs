@@ -1,7 +1,7 @@
 //! The `profile-schema` capability's scenarios, against the Rust loader.
 //!
 //! Written from `openspec/specs/profile-schema/spec.md` rather than from
-//! `profile.rs`: the spike's only gate was the a consumer repo baselines, which reach
+//! `profile.rs`: the spike's only gate was consumer baselines, which reach
 //! one profile down one path. Everything a profile can get wrong is unexercised
 //! there, and a test derived from the implementation would agree with it by
 //! construction.

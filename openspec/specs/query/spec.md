@@ -195,7 +195,7 @@ current position) SHALL also be reported. Output is ordered by node ID / edge
 tuple.
 
 Both revisions SHALL be materialized at the same filesystem path: adapters
-embed the target path in attrs (an adapter's `file` attr can), so
+embed the target path in attrs (as an adapter's `file` attr can), so
 materializing the two revisions at different paths would report every such
 node as changed when nothing about it changed.
 

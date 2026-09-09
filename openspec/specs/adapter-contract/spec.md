@@ -21,7 +21,7 @@ become a non-zero exit. When the candidate's identity remains readable, the adap
 SHOULD preserve the node and omit only the unreadable contribution.
 
 Verified by: `cargo test --test contract` and
-`.venv/bin/python -m pytest -q tests/test_adapter_openspec.py -k Unreadable`
+`.venv/bin/python -m pytest -q tests/test_adapter_openspec.py -k undecodable`
 
 #### Scenario: Adapter emits a graph the core ingests
 - **WHEN** an adapter program emits a document with two nodes and one edge between them

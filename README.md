@@ -34,13 +34,13 @@ architecture, profiles, sequencing and the three scope tests.
 
 ```sh
 cargo build --release
-target/release/lattice validate --profile profiles/requirements-rm.yaml \
+target/release/lattice validate --profile profiles/openspec.yaml \
     --adapter ./adapters/openspec --target .
 ```
 
 The core is a Rust binary; an adapter is any program that takes `--profile` and
-`--target` and writes a contract document to stdout. Four adapters are Rust
-binaries (`crates/adapter-*/`); three are stdlib-only Python behind entry-point
+`--target` and writes a contract document to stdout. Five adapters are Rust
+binaries (`crates/adapter-*/`); two are stdlib-only Python behind entry-point
 scripts in `adapters/`. `uv pip install -e '.[test]'` is only for the Python
 adapter test suite.
 
@@ -53,14 +53,14 @@ profile document an adapter or sidecar reads. All take
 exit-code contract: 0 clean, 1 error-severity findings, 2 lattice could not run at
 all. `validate` and `trace` take `--strict`, promoting warnings to errors.
 
-Six adapters ship here: `openspec` (Python — this repo's
-consumer and this repo's self-audit), `entomologist` (Rust — a git-backed issue
-tracker whose register lives on an orphan branch), `mdtable` (Rust — reads
-`|`-delimited markdown tables), `github` and `gitlab` (Rust — read issues via
-`gh api` / `glab api`), and `tomlreg` (Python — a generic TOML register kept as
-a format-agnosticism gate). A suggestion sidecar, `adapters/lattice-suggest`, ranks
-candidate `verifies` edges by text similarity; the core renders its output as
-hints, and a human decides what becomes a marker edit.
+Six adapters ship here: `openspec` (Python — this repo's self-audit),
+`entomologist` (Rust — a git-backed issue tracker whose register lives on an
+orphan branch), `md` (Rust — reads `|`-delimited markdown tables), `github` and
+`gitlab` (Rust — read issues via `gh api` / `glab api`), and `toml` (Rust —
+profile-configurable array-of-tables dispatch, headers, and axes, kept as a
+format-agnosticism gate). A suggestion sidecar, `adapters/lattice-suggest`,
+ranks candidate `verifies` edges by text similarity; the core renders its output
+as hints, and a human decides what becomes a marker edit.
 
 ## Development
 

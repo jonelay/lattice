@@ -466,7 +466,7 @@ pub fn diff(rev_a: &str, a: &LatticeGraph, rev_b: &str, b: &LatticeGraph) -> Dif
 /// One directory both revisions are materialized into, removed on drop.
 ///
 /// One path, not one per revision, and that is load-bearing: adapters embed
-/// the target path in attrs (an adapter's `file` attr can), so two
+/// the target path in attrs (as a consumer adapter's `file` attr can), so two
 /// materialization directories would make every such node "changed" in a diff
 /// of identical content. Extractions are sequential; the second replaces the
 /// first.

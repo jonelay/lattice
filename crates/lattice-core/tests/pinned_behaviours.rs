@@ -95,7 +95,7 @@ fn the_shipped_profiles_load_under_the_rust_regex_engine() {
         .parent()
         .and_then(|p| p.parent())
         .expect("crate sits two levels below the repo root");
-    for name in ["requirements-rm.yaml", "tomlreg.yaml"] {
+    for name in ["requirements-rm.yaml", "toml.yaml"] {
         let path = root.join("profiles").join(name);
         let profile = load_profile(&path).unwrap_or_else(|e| panic!("{name} must load: {e}"));
         assert!(

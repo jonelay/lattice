@@ -66,7 +66,7 @@ profile's `SUMMARY` validation config; `lattice summary` SHALL exit 2 when the p
 declares no usable `SUMMARY` config, since it has nothing to roll up.
 
 #### Scenario: Summary matches spec file counts
-- **WHEN** `lattice summary` runs against a consumer target with the RM profile and adapter
+- **WHEN** `lattice summary` runs against a consumer repo with the RM profile and adapter
 - **THEN** the output contains per-file counts matching the actual spec heading markers
 
 #### Scenario: Summary JSON format

@@ -33,7 +33,7 @@ There is deliberately no parser DSL. A profile is data, not a programming langua
 in YAML, so a register whose on-disk shape differs from every shipped adapter needs an
 adapter — a standalone program taking `--profile` and `--target` and writing a contract
 document to stdout. `openspec/specs/adapter-contract/spec.md` defines that interface, and
-`adapters/tomlreg.py` is a worked example over a non-markdown register.
+`crates/adapter-toml/` is a worked example over a non-markdown register.
 
 ## A minimal profile
 
@@ -102,6 +102,116 @@ adapter:
 
 The core never interprets those paths. It passes them through in the resolved document,
 and the adapter reads them. Put anything your adapter needs here; the shape is yours.
+
+### Markdown table adapter configuration
+
+The markdown adapter's original single-table form applies one schema to every markdown
+table selected by `adapter.paths.files`. The profile must declare exactly one node kind:
+
+```yaml
+adapter:
+  paths:
+    files: ["*.md"]
+  table:
+    id_column: "ID"
+    column_map:
+      "Description": summary
+    edge_columns:
+      "Traces To": traces_to
+```
+
+Use `adapter.tables` when one markdown file contains tables with different schemas. Each
+entry selects tables by matching a regular expression against the text of the most recent
+markdown heading, then supplies that table's node kind and column mappings:
+
+```yaml
+adapter:
+  paths:
+    files: ["**/*.md"]
+  tables:
+    - heading: '^Domain [0-9]+$'
+      kind: requirement
+      id_column: "ID"
+      column_map:
+        "Description": summary
+        "Status": status
+      edge_columns:
+        "Traces To": traces_to
+
+    - heading: '^Stakeholders$'
+      kind: stakeholder
+      id_column: "ID"
+      column_map:
+        "Name": name
+        "Role": role
+      edge_columns: {}
+```
+
+Patterns are tried in list order and the first match wins. They see heading text such as
+`Domain 01`, without the leading `##`. The nearest preceding heading at any level is the
+entire context: a `### Notes` heading replaces an earlier `## Requirements` heading rather
+than inheriting from it. A table before any heading has an empty context. In multi-table
+mode, an unmatched table produces a `PARSE_ERROR` and no nodes or edges; in the singular
+form, an implicit empty pattern matches every table for backward compatibility. Every
+`kind` named by `adapter.tables` must also be declared in `node_kinds`.
+
+### TOML adapter configuration
+
+The TOML adapter selects files with glob patterns in `adapter.paths.files` and maps each
+configured top-level array of tables to a node kind. `adapter.tables` is a map keyed by
+the TOML table name; every entry declares the node `kind`, the source key holding its ID
+(`id_key`), attribute mappings (`key_map`), and edge mappings (`edge_keys`):
+
+```yaml
+adapter:
+  paths:
+    files: ["registers/*.toml"]
+  id_prefix: file_stem
+  tables:
+    item:
+      kind: item
+      id_key: id
+      key_map:
+        id: id
+        stage: stage
+      edge_keys:
+        register: belongs_to
+        refs: references
+```
+
+With `adapter.id_prefix: file_stem`, row IDs are qualified as `<file-stem>/<id>`; omit it
+to keep the value of `id_key` unchanged. The only supported prefix mode is `file_stem`.
+
+An optional `adapter.header` reads one singleton table per selected file. It names the
+TOML `table`, output node `kind`, ID source (`id`), and attribute `key_map`. Set `id` to
+`file_stem` to derive the node ID from the filename, or name a key in the header table:
+
+```yaml
+adapter:
+  header:
+    table: register
+    kind: register
+    id: file_stem
+    key_map:
+      register_version: register_version
+      status: status
+```
+
+An optional `adapter.axis` reads an ordering axis from one file beneath the target.
+`source_file` identifies that file, `name` names the profile axis, and `order_key` and
+`current_key` are dotted paths to the ordered values and current value:
+
+```yaml
+adapter:
+  axis:
+    source_file: registers/index.toml
+    name: stage
+    order_key: register.stage_order
+    current_key: register.current_stage
+```
+
+See `profiles/toml.yaml` for a worked example combining table dispatch, a header node,
+file-stem ID qualification, and an axis reader.
 
 ## Node kinds
 
@@ -196,6 +306,18 @@ edge_kinds:
 
 An edge outside the allowed pairs gets an `EDGE_CONSTRAINT` finding carrying the source
 node's ID. A pair naming a kind not in `node_kinds` is a load error.
+
+**`cross_source`** — `true` marks an edge kind whose targets may live in another source.
+When a target does not resolve in a standalone run, its `DANGLING_REF` is retained at
+hint severity instead of the configured or default severity. The program composition
+layer resolves the same plain target ID against its source-qualified allowed pairs.
+Absent means `false`; source-local edge kinds keep the existing behavior.
+
+```yaml
+edge_kinds:
+  external_verifies:
+    cross_source: true
+```
 
 **An edge kind with no `allowed` key permits nothing.** It loads, but every edge of that
 kind whose endpoints both exist with declared kinds produces `EDGE_CONSTRAINT`. If you

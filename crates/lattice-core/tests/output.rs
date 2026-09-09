@@ -245,46 +245,48 @@ fn path_report_rejects_a_found_path_without_nodes() {
 
 #[test]
 fn path_report_rejects_mismatched_edge_count() {
-    assert!(PathReport::found(
-        "A".to_owned(),
-        "C".to_owned(),
-        vec!["A".to_owned(), "B".to_owned(), "C".to_owned()],
-        vec!["e1".to_owned()],
-    )
-    .is_err());
+    assert!(
+        PathReport::found(
+            "A".to_owned(),
+            "C".to_owned(),
+            vec!["A".to_owned(), "B".to_owned(), "C".to_owned()],
+            vec!["e1".to_owned()],
+        )
+        .is_err()
+    );
 }
 
 #[test]
 fn path_report_rejects_wrong_first_node() {
-    assert!(PathReport::found(
-        "A".to_owned(),
-        "B".to_owned(),
-        vec!["X".to_owned(), "B".to_owned()],
-        vec!["e1".to_owned()],
-    )
-    .is_err());
+    assert!(
+        PathReport::found(
+            "A".to_owned(),
+            "B".to_owned(),
+            vec!["X".to_owned(), "B".to_owned()],
+            vec!["e1".to_owned()],
+        )
+        .is_err()
+    );
 }
 
 #[test]
 fn path_report_rejects_wrong_last_node() {
-    assert!(PathReport::found(
-        "A".to_owned(),
-        "B".to_owned(),
-        vec!["A".to_owned(), "X".to_owned()],
-        vec!["e1".to_owned()],
-    )
-    .is_err());
+    assert!(
+        PathReport::found(
+            "A".to_owned(),
+            "B".to_owned(),
+            vec!["A".to_owned(), "X".to_owned()],
+            vec!["e1".to_owned()],
+        )
+        .is_err()
+    );
 }
 
 #[test]
 fn path_report_accepts_self_loop() {
-    assert!(PathReport::found(
-        "A".to_owned(),
-        "A".to_owned(),
-        vec!["A".to_owned()],
-        vec![],
-    )
-    .is_ok());
+    assert!(
+        PathReport::found("A".to_owned(), "A".to_owned(), vec!["A".to_owned()], vec![],).is_ok()
+    );
 }
 
 #[test]

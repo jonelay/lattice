@@ -16,7 +16,18 @@ public and what each version axis governs.
 ### Added
 - **Markdown-table adapter.** Reads `|`-delimited tables from
   profile-selected `.md` files, mapping columns to node attrs and edge
-  targets. `crates/adapter-mdtable/`, `profiles/mdtable.yaml`.
+  targets. `crates/adapter-md/`, `profiles/md.yaml`.
+- **TOML adapter.** A Rust adapter replaces the Python `tomlreg` adapter,
+  with profile-driven multi-kind array-of-tables dispatch, an optional
+  header-table reader, an optional axis reader, and `id_prefix` support.
+  `crates/adapter-toml/`, `profiles/toml.yaml`.
+- **Markdown multi-kind dispatch.** The markdown adapter can map tables under
+  different headings to distinct node kinds via `adapter.tables`.
+- **Program composition.** `tools/lattice-compose` composes multiple source
+  graphs and resolves cross-source edges from a program manifest and profile.
+- **Cross-source edge policy.** Edge kinds accept a `cross_source` flag that
+  demotes unresolved standalone `DANGLING_REF` findings to hint severity for
+  later resolution during program composition.
 - **GitHub Issues adapter.** Reads issues via `gh api`, maps labels to
   node kinds, extracts edges from body text via regex patterns, derives
   ordering axes from milestones. `crates/adapter-github/`,
@@ -26,7 +37,7 @@ public and what each version axis governs.
   links API with configurable direction reversal. Uses `iid` (not
   instance-wide number). `crates/adapter-gitlab/`,
   `profiles/gitlab.yaml`.
-- **Capability specs for mdtable, GitHub, and GitLab adapters.** Each
+- **Capability specs for adapter-md, GitHub, and GitLab adapters.** Each
   adapter now has a normative OpenSpec spec under `openspec/specs/`.
 - **`FindingCode` enum with exhaustive `default_severity` match.**
   Adding a new finding code without a severity mapping is now a compile
@@ -55,7 +66,7 @@ public and what each version axis governs.
 - GitLab adapter emits `PARSE_ERROR` when either `project_id` is
   missing on an issue link, instead of silently assuming the link is
   local (cross-project misclassification via IID collision).
-- mdtable parser iterates `chars()` instead of `bytes()` in
+- adapter-md parser iterates `chars()` instead of `bytes()` in
   `split_cells`, fixing non-ASCII cell content corruption.
 - Scratch profile file uses `create_new(true)` with a random nonce
   instead of a predictable PID-only path, preventing symlink redirect
@@ -91,19 +102,18 @@ public and what each version axis governs.
   `COVERAGE_DEEP {target_kind, via, evidence}`: deep-covered by direct
   evidence or by every deriving child being covered. Evidence-free cycles
   stay uncovered. The RM profile (1.9.0) replaces its flat `COVERAGE`
-  entry; on a consumer target the 19 flat findings become 18 deep, and
-  REQ-0708 (covered through children) correctly loses its finding.
+  entry; on a live consumer the 19 flat findings become 18 deep, and a
+  requirement covered through children correctly loses its finding.
 - **Openspec adapter and profile: lattice audits its own register.**
   `adapters/openspec` reads `openspec/specs/*/spec.md` and `Requirement:`
   citation comments in test files. `profiles/openspec.yaml` keeps
   `DANGLING_REF` at `error` and demotes `COVERAGE` to `hint`. The
   self-audit exits 0.
-- **Coverage evidence model, `orphan_ok`, and the `hint` tier.** The
-  adapter emits every statically discovered test (unmarked
-  ones with no edges). `COVERAGE` gains a `state` field (`unverified` /
-  `unknown`). `COVERAGE_UNKNOWN` reports at severity `hint`: never
-  promoted by `--strict`, never part of the exit code. `orphan_ok: true`
-  on a node kind exempts it from `ORPHAN_NODE`. Contract version 1.1.
+- **Coverage evidence model, `orphan_ok`, and the `hint` tier.**
+  `COVERAGE` gains a `state` field (`unverified` / `unknown`).
+  `COVERAGE_UNKNOWN` reports at severity `hint`: never promoted by
+  `--strict`, never part of the exit code. `orphan_ok: true` on a node
+  kind exempts it from `ORPHAN_NODE`. Contract version 1.1.
 - **Openspec register carries summary text.** `title` attr on
   `requirement` nodes, `summary_attr` bindings on both kinds.
   `profiles/openspec.yaml` 1.1.0.
@@ -117,17 +127,16 @@ public and what each version axis governs.
 
 ### Changed
 - **Trace gate baselines are synthetic.** Replaced consumer-captured
-  consumer-captured fixtures with
-  `synthetic.*`: 31 nodes, 27 edges, findings spanning every severity.
-  Finding-code coverage is a superset of the old baselines'.
+  fixtures with `synthetic.*`: 31 nodes, 27 edges, findings spanning
+  every severity. Finding-code coverage is a superset of the old
+  baselines'.
 - `requirements-rm` declares `text_attrs: [function, docstring]` on its
   `test` kind (1.10.0). Migration only — the sidecar already read both.
 - `profiles/openspec.yaml` declares body attrs and `text_attrs` (1.2.0).
 - **BREAKING (provenance strings).** Registers read as UTF-8; provenance
-  paths rendered relative to the target. On a consumer target: same
-  findings multiset (56 findings, 1128 edges), different rendered bytes.
-- Adapter file-walking deduplication: bipolaris `validate` 144 → 89 ms,
-  consumer ~178 → ~163 ms.
+  paths rendered relative to the target. Same findings multiset on live
+  consumers, different rendered bytes.
+- Adapter file-walking deduplication: bipolaris `validate` 144 → 89 ms.
 
 ### Fixed
 - Suggestion sidecar ranks duplicated node IDs once, over the union of
@@ -165,12 +174,11 @@ Whole-command wall clock (best of seven):
 
 | | 0.2.0 | 0.3.0 |
 |---|---|---|
-| consumer `validate` | 440 ms | 172 ms |
 | bipolaris `validate` | 375 ms | 138 ms |
 
 In-process core: 24.3 → 3.5 ms total, `validate` alone 11.3 → 0.39 ms.
-At 20× the consumer's size (18,360 nodes, 22,560 edges) the core is
-~95 ms and grows linearly.
+At 20× scale (18,360 nodes, 22,560 edges) the core is ~95 ms and grows
+linearly.
 
 ### Not delivered
 - `GROUP_CHILDREN_DISCHARGED` remains known-unsound and has never fired
@@ -195,10 +203,8 @@ At 20× the consumer's size (18,360 nodes, 22,560 edges) the core is
 - `CHECK_UNRESOLVED`, `OBLIGATION_UNBACKED`,
   `GROUP_CHILDREN_DISCHARGED` issue codes. `GROUP_CHILDREN_DISCHARGED`
   is **known unsound** — fix-or-drop slated for 0.3.0.
-- The adapter emits `SOURCE_MISSING` for backtick-delimited
-  paths in spec files that do not resolve. Profile-declared prefixes
-  (`adapter.cited_path_prefixes`). 22 issues over 12
-  stale paths.
+- `SOURCE_MISSING` for backtick-delimited paths in spec files that do
+  not resolve. Profile-declared prefixes (`adapter.cited_path_prefixes`).
 
 ### Changed
 - A profile may configure the same validation code more than once.
@@ -207,7 +213,7 @@ At 20× the consumer's size (18,360 nodes, 22,560 edges) the core is
   `COVERAGE` rule (req needs `fulfills` edge) and
   `adapter.cited_path_prefixes`.
 - **BREAKING (profile)** — `requirements-rm` 1.4.0 → 1.5.0. Adapter
-  paths follow the target register relocation to `docs/internal/`.
+  paths follow target register relocation to `docs/internal/`.
   A target on the old layout needs a forked profile.
 
 ### Fixed
@@ -228,9 +234,9 @@ At 20× the consumer's size (18,360 nodes, 22,560 edges) the core is
 - Tri-format output: `plain`, `json`, `rich` via `output_result`.
 - CLI commands: `validate`, `summary`, `trace`.
 - Exit codes: 0 clean, 1 findings, 2 broken setup.
-- Requirements-RM adapter: parses REQUIREMENTS.md tables, spec headings,
-  pytest `@mark.req` markers, and success criteria.
-- Requirements-RM profile with BN/UN/REQ/spec-goal/test/SC kinds.
+- Requirements-RM adapter and profile: parses REQUIREMENTS.md tables,
+  spec headings, pytest `@mark.req` markers, and success criteria.
+  BN/UN/REQ/spec-goal/test/SC kinds.
 - Profile-driven adapter paths (`adapter.paths` in profile YAML).
 - Trace report: per-node entries with kind, attrs, edges, provenance, findings.
 - Coverage query: REQ nodes missing a `verifies` edge.
