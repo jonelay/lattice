@@ -40,9 +40,10 @@ attrs a text-ranking consumer reads, in the order given. Each name SHALL be pres
 the kind's `attrs` map and SHALL be a textual type — `string`, or `enum`, whose value
 arrives as a string at runtime. The loader SHALL reject a `text_attrs` entry that is
 undeclared, whose type is not `string` or `enum`, or that repeats a name already in the
-list. An `int`, `bool` or `list` value is never ranked text: a consumer reading only
-runtime strings would skip the entry in silence, leaving a profile key that does
-nothing. `text_attrs` MAY name the same attr as `summary_attr`.
+list. An `int`, `bool` or `list` value is never ranked text. A `date` also remains
+non-textual structured data even though it arrives as a string; admitting it would turn a
+wire representation into prose by accident. `text_attrs` MAY name the same attr as
+`summary_attr`.
 
 `text_attrs` exists because a ranker needs more text than a summary column can hold, and
 because naming that text is the profile's job: without it a consumer has to pick an attr
@@ -70,7 +71,7 @@ matches every line, or that spans a line boundary, cannot name a cut point.
 The loader SHALL reject `text_chunk_line_prefix` on a node kind that offers no rankable
 text — one declaring `text_attrs: []`, or declaring neither `text_attrs` nor
 `summary_attr`. Such a declaration is a setting with nothing to act on, and the schema
-already rejects a partial axis binding on the same grounds: configuration that silently
+already rejects a partial pathway binding on the same grounds: configuration that silently
 does nothing is indistinguishable from configuration that works.
 
 `text_chunk_line_prefix` names how a register's own blocks begin, which is the profile's
@@ -171,19 +172,31 @@ produces identical output.
 Verified by: `cargo test --test profile_schema text_attrs && cargo test --test profile_schema chunk`
 
 ### Requirement: Typed attribute declarations
-Attributes SHALL support five primitive types: `string`, `int`, `bool`, `enum`, `list`.
+Attributes SHALL support six primitive types: `string`, `int`, `bool`, `date`, `enum`, `list`.
 Each attr declares `type` (required), `required` (bool, default false), `values` (list,
 enum only), and `items` (type name, list only).
 
-A list's `items` SHALL name a scalar type only — `string`, `int`, or `bool`. Lists of
+A `date` value SHALL be a JSON string containing exactly an ISO 8601 calendar date in
+ASCII `YYYY-MM-DD` form. Month/day combinations SHALL be calendar-valid, including
+Gregorian leap-year rules; datetimes and non-zero-padded dates SHALL not match.
+
+A list's `items` SHALL name a scalar type only — `string`, `int`, `bool`, or `date`. Lists of
 lists and lists of enums are rejected, keeping list validation a single flat pass.
+
+#### Scenario: Date attr
+- **WHEN** an attr declares `{type: date}` and its value is `"2030-01-15"`
+- **THEN** the attr passes type validation without any date-specific profile sub-field
+
+#### Scenario: Invalid calendar date
+- **WHEN** an attr declared as `date` has value `"2030-02-29"`
+- **THEN** validation emits `ATTR_TYPE` identifying the required `YYYY-MM-DD` date form
 
 #### Scenario: Enum attr with values
 - **WHEN** an attr declares `{type: enum, values: [done, partial, todo, blocked]}`
 - **THEN** the profile records the allowed enum values for validation
 
 #### Scenario: List attr with items type
-- **WHEN** an attr declares `{type: list, items: string}`
+- **WHEN** an attr declares `{type: list, items: date}`
 - **THEN** the profile records the list element type for validation
 
 #### Scenario: Enum without values
@@ -228,12 +241,13 @@ profile whose `profile_version` major exceeds the supported range.
 ### Requirement: Validation configuration schema
 Each entry in `validations` maps a validator code to its configuration. Core SHALL accept
 only the keys that code defines — `COVERAGE` takes `severity`, `target_kind`, `edge_kind`;
-`SUMMARY` takes `severity`, `node_kind`, `status_attr`, `group_by_attr` — and SHALL reject
-an unknown key rather than ignoring it. A code core does not know SHALL accept `severity`
-alone, so a profile can set the severity of a third-party validator.
+`SUMMARY` takes `severity`, `node_kind`, `status_attr`, `group_by_attr`;
+`CONSTRAINT` takes `severity`, `kind`, `when`, `expect`, `reject`, `message` — and SHALL
+reject an unknown key rather than ignoring it. A code core does not know SHALL accept
+`severity` alone, so a profile can set the severity of a third-party validator.
 
 In addition, any entry — for a code core implements or one it does not — SHALL accept the
-axis-binding keys `axis` and `position_attr`, subject to the axis-binding requirements
+pathway-binding keys `pathway` and `position_attr`, subject to the pathway-binding requirements
 above. The binding is orthogonal to what the code means, so it is available to adapter
 codes on the same terms as built-in ones.
 
@@ -249,45 +263,73 @@ inert setting.
 - **THEN** the profile loads and the override applies to issues carrying that code
   (see the validation spec's severity-override requirement)
 
-#### Scenario: Adapter code takes an axis binding
-- **WHEN** a profile binds an axis to `OBLIGATION_UNBACKED`, a code core does not implement
+#### Scenario: Adapter code takes a pathway binding
+- **WHEN** a profile binds a pathway to `OBLIGATION_UNBACKED`, a code core does not implement
 - **THEN** the profile loads and the binding applies to adapter issues carrying that code
 
-### Requirement: Ordering axis declaration
-A profile MAY declare an `axes` list naming the axes it binds to. Core SHALL accept a list
+#### Scenario: CONSTRAINT config with all keys loads
+- **WHEN** a profile declares `CONSTRAINT` with `kind`, `when`, `expect`, `reject`, `message`, and `severity`
+- **THEN** the profile loads and all six keys are available to the validator
+
+#### Scenario: CONSTRAINT with only expect loads
+- **WHEN** a profile declares `CONSTRAINT` with `kind: req` and `expect: { status: { present: true } }` and no `reject` or `when`
+- **THEN** the profile loads
+
+#### Scenario: CONSTRAINT with only reject loads
+- **WHEN** a profile declares `CONSTRAINT` with `kind: req` and `reject: { priority: { eq: "" } }` and no `expect`
+- **THEN** the profile loads
+
+#### Scenario: CONSTRAINT with neither expect nor reject rejected
+- **WHEN** a profile declares `CONSTRAINT` with `kind: req` and no `expect` or `reject`
+- **THEN** the loader emits a `CONFIG_ERROR`: CONSTRAINT requires at least one of `expect` or `reject`
+
+#### Scenario: CONSTRAINT with unknown condition operator rejected
+- **WHEN** a profile declares `CONSTRAINT` with `expect: { status: { between: [1, 5] } }`
+- **THEN** the loader emits a `CONFIG_ERROR` naming the unknown operator
+
+#### Scenario: CONSTRAINT missing kind rejected
+- **WHEN** a profile declares `CONSTRAINT` with `expect` but no `kind`
+- **THEN** the loader emits a `CONFIG_ERROR`: CONSTRAINT requires `kind`
+
+#### Scenario: CONSTRAINT kind names undeclared node kind
+- **WHEN** a profile declares `CONSTRAINT` with `kind: widget` and `widget` is not in `node_kinds`
+- **THEN** the loader emits a `CONFIG_ERROR` naming the undeclared kind
+
+### Requirement: Ordering pathway declaration
+A profile MAY declare an `pathways` list naming the pathways it binds to. Core SHALL accept a list
 of names and SHALL reject any other shape rather than ignoring it.
 
-The list declares that an axis exists and names it. It SHALL NOT carry the axis values —
+The list declares that a pathway exists and names it. It SHALL NOT carry the pathway values —
 neither the ordered positions nor the current position. Those are target state, supplied
 by the adapter at ingest; a copy held in the profile would advance without lattice
 noticing, which is the hand-maintained derived state the tool exists to eliminate.
 
-A list of bare names, rather than a mapping to per-axis configuration, is deliberate:
-there is exactly one thing to say about an axis here — its name — and a mapping whose only
+A list of bare names, rather than a mapping to per-pathway configuration, is deliberate:
+there is exactly one thing to say about a pathway here — its name — and a mapping whose only
 legal key had one legal value would be configurability with no consumer.
 
-Verified by: `cargo test --test profile_schema axis_list_loads`
+Verified by: `cargo test --test profile_schema pathway_list_loads`
 
-#### Scenario: Axis declared
-- **WHEN** a profile declares `axes: [phase]`
-- **THEN** the profile loads and exposes an axis named `phase`
+#### Scenario: Pathway declared
+- **WHEN** a profile declares `pathways: [phase]`
+- **THEN** the profile loads and exposes a pathway named `phase`
 
-#### Scenario: Axis carrying values rejected
-- **WHEN** a profile declares `axes` as a mapping carrying `order` or `current`
+#### Scenario: Pathway carrying values rejected
+- **WHEN** a profile declares `pathways` as a mapping carrying `order` or `current`
 - **THEN** the loader raises an error naming the offending shape
 
-#### Scenario: No axes list
-- **WHEN** a profile declares no `axes` list
-- **THEN** the profile loads with no axes, and no severity resolution is bound
+#### Scenario: No pathways list
+- **WHEN** a profile declares no `pathways` list
+- **THEN** the profile loads with no pathways, and no severity resolution is bound
 
-### Requirement: Validation entry axis binding
-A `validations` entry MAY carry `axis` and `position_attr`, binding that finding code's
-severity to a node attribute's position on a declared axis. Both SHALL be present
+### Requirement: Validation entry pathway binding
+A `validations` entry MAY carry `pathway` and `position_attr`, binding that finding code's
+severity to a node attribute's position on a declared pathway. Both SHALL be present
 together: core SHALL reject an entry carrying one without the other, because a partial
 binding is a setting that silently does nothing.
 
-`axis` SHALL name an axis declared in the same profile's `axes` list. Core SHALL reject a
-binding naming an undeclared axis at load time.
+`pathway` SHALL name a pathway declared in the same profile's `pathways` list. Core SHALL reject a
+binding naming an undeclared pathway at load time.
 
 There is no configurable demotion target. A demoted finding becomes `info`, always. The
 only useful target is the quietest severity, and a configurable one would permit both
@@ -297,24 +339,24 @@ immediately promote back to error, defeating the purpose. Widening this later is
 Verified by: `cargo test --test profile_schema binding`
 
 #### Scenario: Complete binding loads
-- **WHEN** a profile declares `axes: [phase]` and binds `OBLIGATION_UNBACKED` with
-  `axis: phase`, `position_attr: trigger`
+- **WHEN** a profile declares `pathways: [phase]` and binds `OBLIGATION_UNBACKED` with
+  `pathway: phase`, `position_attr: trigger`
 - **THEN** the profile loads and the binding is exposed for that code
 
 #### Scenario: Partial binding rejected
-- **WHEN** a validation entry carries `axis` but no `position_attr`
+- **WHEN** a validation entry carries `pathway` but no `position_attr`
 - **THEN** the loader raises an error naming the missing key
 
-#### Scenario: Binding names an undeclared axis
-- **WHEN** a validation entry binds to axis `phase` and no `axes` list declares `phase`
-- **THEN** the loader raises an error naming the undeclared axis
+#### Scenario: Binding names an undeclared pathway
+- **WHEN** a validation entry binds to pathway `phase` and no `pathways` list declares `phase`
+- **THEN** the loader raises an error naming the undeclared pathway
 
-### Requirement: One axis binding per finding code
-Core SHALL reject a profile that binds an axis to a code already bound, naming the
+### Requirement: One pathway binding per finding code
+Core SHALL reject a profile that binds a pathway to a code already bound, naming the
 duplicated code. This is a load error, not a silent discard of either binding.
 
 A profile may legitimately configure the same validation code more than once, and the
-validation spec requires every such entry to be honoured independently. An axis binding is
+validation spec requires every such entry to be honoured independently. A pathway binding is
 the exception: two bindings for one code would give the resolution pass two answers for
 the same finding with no rule to choose between them. Rejecting at load is the only
 outcome that neither drops a declared setting nor resolves arbitrarily.
@@ -322,16 +364,16 @@ outcome that neither drops a declared setting nor resolves arbitrarily.
 Verified by: `cargo test --test profile_schema second_binding_for_one_code_is_rejected`
 
 #### Scenario: Second binding for the same code rejected
-- **WHEN** a profile carries two `OBLIGATION_UNBACKED` entries, each with an `axis` and
+- **WHEN** a profile carries two `OBLIGATION_UNBACKED` entries, each with an `pathway` and
   `position_attr`
 - **THEN** the loader raises an error naming the duplicated code
 
 #### Scenario: Repeated non-binding configuration still honoured
-- **WHEN** a profile carries two `COVERAGE` entries, neither carrying an `axis`
+- **WHEN** a profile carries two `COVERAGE` entries, neither carrying an `pathway`
 - **THEN** the profile loads and both configurations are honoured, unchanged from today
 
 #### Scenario: One binding alongside a repeated plain configuration
-- **WHEN** a profile carries two `COVERAGE` entries and exactly one of them binds an axis
+- **WHEN** a profile carries two `COVERAGE` entries and exactly one of them binds a pathway
 - **THEN** the profile loads, both configurations are honoured, and the single binding
   applies
 
@@ -452,16 +494,18 @@ Verified by: `cargo test --test profile_schema parent_first_declared_index`
 - **THEN** `declared_index` order is alpha=0, beta=1, delta=2, gamma=3
 
 ### Requirement: Profile errors use the native type vocabulary
-Profile loading error messages that name a YAML value's type SHALL use the
+Profile loading error messages that name a YAML value's runtime type SHALL use the
 native vocabulary (`string`, `int`, `float`, `bool`, `list`, `object`, `null`),
-not Python's (`str`, `dict`, `NoneType`).
+not Python's (`str`, `dict`, `NoneType`). The declared attr-type vocabulary additionally
+includes `date`; because a date's runtime representation is a string, `date` SHALL be used
+only where an expected schema type is known.
 
 Verified by: `cargo test --test native_messages`
 
-#### Scenario: Null axes reported with a native type name
-- **WHEN** a profile declares `axes: null`
-- **THEN** the loading error reads `'axes' must be a list of axis names, got
-  null`, followed by the standing guidance that axis values are target state
+#### Scenario: Null pathways reported with a native type name
+- **WHEN** a profile declares `pathways: null`
+- **THEN** the loading error reads `'pathways' must be a list of pathway names, got
+  null`, followed by the standing guidance that pathway values are target state
 
 ### Requirement: Node kind orphan policy flag
 A node kind MAY declare `orphan_ok: true`, exempting nodes of that kind from the
@@ -490,13 +534,13 @@ Verified by: `cargo test --test profile_schema orphan_ok`
 
 ### Requirement: Edge kinds support cross_source flag
 An edge kind declaration in a profile SHALL accept an optional `cross_source: true`
-field. When present, the validation layer SHALL demote DANGLING_REF findings for
+field. When present, the validation layer SHALL demote VACANCY findings for
 edges of that kind whose target does not resolve to hint severity instead of the
 default error severity. This applies in standalone (single-source) runs only — in a
 program composition context, cross-source edges resolve normally after merge.
 
 The flag is profile data, not core vocabulary. The core reads it as a severity
-modifier during DANGLING_REF collection, not as a behavioral switch.
+modifier during VACANCY collection, not as a behavioral switch.
 
 A profile that does not declare `cross_source` on any edge kind has no change in
 behavior.
@@ -507,14 +551,13 @@ Verified by: `cargo test` (validation severity test), and
 #### Scenario: Cross-source edge kind demotes dangling ref
 - **WHEN** a profile declares edge kind `derives` with `cross_source: true` and an
   edge of that kind targets an ID that does not exist in the graph
-- **THEN** the DANGLING_REF finding for that edge has hint severity, not error
+- **THEN** the VACANCY finding for that edge has hint severity, not error
 
 #### Scenario: Non-cross-source edge kind unchanged
 - **WHEN** a profile declares edge kind `contains` without `cross_source` and an edge
   of that kind targets a missing ID
-- **THEN** the DANGLING_REF finding has its default severity (error)
+- **THEN** the VACANCY finding has its default severity (error)
 
 #### Scenario: Flag absent means no change
 - **WHEN** no edge kind in the profile declares `cross_source`
-- **THEN** all DANGLING_REF findings use their default or profile-overridden severity
-
+- **THEN** all VACANCY findings use their default or profile-overridden severity

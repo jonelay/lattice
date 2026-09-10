@@ -1,4 +1,4 @@
-//! Paths the synthetic fixture never exercises, pinned as the tool's own contract.
+//! Paths the phase-sweep fixture never exercises, pinned as the tool's own contract.
 //!
 //! The baselines cover one register through one profile. Everything they do not
 //! contain — a malformed document, a duplicate ID, a dangling edge, a config
@@ -28,8 +28,8 @@ use serde_json::{Value, json};
 
 #[test]
 fn explicit_null_document_arrays_are_reported() {
-    for key in ["nodes", "edges", "axes", "issues"] {
-        let mut document = json!({"contract_version": "1.0"});
+    for key in ["nodes", "edges", "pathways", "issues"] {
+        let mut document = json!({"interface_version": "1.0"});
         document[key] = Value::Null;
         ingest_document(document).expect_err(&format!(
             "'{key}': null must be reported, not read as empty"
@@ -39,7 +39,7 @@ fn explicit_null_document_arrays_are_reported() {
 
 #[test]
 fn absent_document_arrays_default_to_empty() {
-    let graph = ingest(json!({"contract_version": "1.0"}));
+    let graph = ingest(json!({"interface_version": "1.0"}));
     assert_eq!(graph.iter_nodes().count(), 0);
     assert_eq!(graph.iter_edges().count(), 0);
 }
@@ -47,13 +47,13 @@ fn absent_document_arrays_default_to_empty() {
 #[test]
 fn explicit_null_axes_in_a_profile_is_reported() {
     // Message text pinned in `native_messages.rs`; the rejection is the pin.
-    profile_from(&format!("{MINIMAL_PROFILE}axes: null\n"))
-        .expect_err("'axes: null' must be reported");
+    profile_from(&format!("{MINIMAL_PROFILE}pathways: null\n"))
+        .expect_err("'pathways: null' must be reported");
 }
 
 #[test]
 fn explicit_null_validations_in_a_profile_is_accepted() {
-    // Unlike `axes`, this one defaults. The asymmetry is deliberate and pinned
+    // Unlike `pathways`, this one defaults. The asymmetry is deliberate and pinned
     // rather than tidied away.
     let profile = profile_from(&format!("{MINIMAL_PROFILE}validations: null\n"))
         .expect("'validations: null' is accepted");
@@ -95,7 +95,7 @@ fn the_shipped_profiles_load_under_the_rust_regex_engine() {
         .parent()
         .and_then(|p| p.parent())
         .expect("crate sits two levels below the repo root");
-    for name in ["requirements-rm.yaml", "toml.yaml"] {
+    for name in ["openspec.yaml", "toml.yaml"] {
         let path = root.join("profiles").join(name);
         let profile = load_profile(&path).unwrap_or_else(|e| panic!("{name} must load: {e}"));
         assert!(
@@ -119,7 +119,7 @@ edge_kinds: {}
 "#;
     let profile = profile_from(yaml).unwrap();
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [{"id": "xxREQ-1yy", "kind": "req", "attrs": {},
                    "provenance": {"file": "r.md", "line": 1}}],
     }));
@@ -137,7 +137,7 @@ edge_kinds: {}
 #[test]
 fn a_dangling_edge_target_is_reported_and_the_node_is_not_invented() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {},
                    "provenance": {"file": "r.md", "line": 1}}],
         "edges": [{"src": "REQ-1", "tgt": "REQ-9", "kind": "derives",
@@ -146,7 +146,7 @@ fn a_dangling_edge_target_is_reported_and_the_node_is_not_invented() {
     let profile = profile_from(MINIMAL_PROFILE).unwrap();
     let issues = validate(&graph, &profile, false);
 
-    let dangling: Vec<&Issue> = issues.iter().filter(|i| i.code == "DANGLING_REF").collect();
+    let dangling: Vec<&Issue> = issues.iter().filter(|i| i.code == "VACANCY").collect();
     assert_eq!(dangling.len(), 1);
     assert_eq!(
         dangling[0].message,
@@ -163,7 +163,7 @@ fn a_dangling_edge_target_is_reported_and_the_node_is_not_invented() {
 #[test]
 fn an_orphan_finding_carries_the_node_provenance() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {},
                    "provenance": {"file": "REQUIREMENTS.md", "line": 102}}],
     }));
@@ -185,7 +185,7 @@ fn a_config_error_names_the_profile_rather_than_a_source_line() {
          \x20     edge_kind: derives\n"
     );
     let profile = profile_from(&yaml).unwrap();
-    let graph = ingest(json!({"contract_version": "1.0"}));
+    let graph = ingest(json!({"interface_version": "1.0"}));
     let issues = validate(&graph, &profile, false);
 
     assert_eq!(issues.len(), 1);
@@ -204,7 +204,7 @@ fn a_config_error_names_the_profile_rather_than_a_source_line() {
 #[test]
 fn strict_promotes_warnings_and_leaves_errors_alone() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {},
                    "provenance": {"file": "r.md", "line": 1}}],
         "issues": [{"severity": "info", "code": "NOTE", "message": "m",

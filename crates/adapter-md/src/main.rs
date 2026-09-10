@@ -1,20 +1,18 @@
 mod config;
-mod document;
 mod parse;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+use adapter_core::{Document, Edge, Node, Provenance};
 use clap::Parser;
 use regex::Regex;
 use serde_json::Value;
 
 use config::{Config, IdColumn, TableConfig};
-use document::{Document, Edge, Node, Provenance};
-
 #[derive(Debug, Parser)]
-#[command(about = "Read markdown tables into a lattice contract document")]
+#[command(about = "Read markdown tables into a lattice interface document")]
 struct Args {
     #[arg(long)]
     profile: PathBuf,
@@ -215,7 +213,7 @@ fn read_table<'a>(
             document.parse_error(
                 format!("configured column '{column}' was not found in table headers"),
                 file,
-                table_line,
+                table_line as u32,
             );
         }
     }
@@ -228,7 +226,7 @@ fn read_table<'a>(
         document.parse_error(
             format!("configured ID column {column} was not found in table headers"),
             file,
-            table_line,
+            table_line as u32,
         );
         return;
     };
@@ -242,7 +240,7 @@ fn read_table<'a>(
                     table.headers.len()
                 ),
                 file,
-                row.line,
+                row.line as u32,
             );
             continue;
         }
@@ -254,14 +252,14 @@ fn read_table<'a>(
                     table.headers.len()
                 ),
                 file,
-                row.line,
+                row.line as u32,
             );
             continue;
         }
 
         let id = row.cells[id_index].trim();
         if id.is_empty() {
-            document.parse_error("table row has an empty ID column", file, row.line);
+            document.parse_error("table row has an empty ID column", file, row.line as u32);
             continue;
         }
 
@@ -269,7 +267,7 @@ fn read_table<'a>(
             .iter()
             .map(|(index, name)| ((*name).to_owned(), Value::String(row.cells[*index].clone())))
             .collect();
-        let provenance = Provenance::new(file, row.line);
+        let provenance = Provenance::new(file, row.line as u32);
         document.nodes.push(Node {
             id: id.to_owned(),
             kind: &config.kind,
@@ -287,6 +285,7 @@ fn read_table<'a>(
                     src: id.to_owned(),
                     tgt: target.to_owned(),
                     kind,
+                    attrs: BTreeMap::new(),
                     provenance: provenance.clone(),
                 });
             }
@@ -294,7 +293,7 @@ fn read_table<'a>(
     }
 }
 
-/// Read every configured markdown file into an append-only contract document.
+/// Read every configured markdown file into an append-only interface document.
 fn build_document<'a>(config: &'a Config, target: &Path) -> Result<Document<'a>, String> {
     let matcher = FileMatcher::new(&config.files)?;
     let mut document = Document::default();
@@ -326,7 +325,7 @@ fn build_document<'a>(config: &'a Config, target: &Path) -> Result<Document<'a>,
                 document.parse_error(
                     format!("table under heading '{heading}' matches no table configuration"),
                     &file,
-                    table.line,
+                    table.line as u32,
                 );
             }
         }
@@ -351,8 +350,8 @@ fn run(args: Args) -> Result<(), String> {
     let stdout = io::stdout();
     let mut writer = stdout.lock();
     serde_json::to_writer(&mut writer, &document)
-        .map_err(|error| format!("could not serialize contract document: {error}"))?;
-    writeln!(writer).map_err(|error| format!("could not write contract document: {error}"))?;
+        .map_err(|error| format!("could not serialize interface document: {error}"))?;
+    writeln!(writer).map_err(|error| format!("could not write interface document: {error}"))?;
     Ok(())
 }
 

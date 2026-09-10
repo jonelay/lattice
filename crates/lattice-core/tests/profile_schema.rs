@@ -1,7 +1,7 @@
 //! The `profile-schema` capability's scenarios, against the Rust loader.
 //!
 //! Written from `openspec/specs/profile-schema/spec.md` rather than from
-//! `profile.rs`: the spike's only gate was consumer baselines, which reach
+//! `profile.rs`: the spike's only gate was the phase-sweep baselines, which reach
 //! one profile down one path. Everything a profile can get wrong is unexercised
 //! there, and a test derived from the implementation would agree with it by
 //! construction.
@@ -40,7 +40,7 @@ fn unrecognised_top_level_key_does_not_reject() {
     // The Rust core drops `extra` rather than carrying it: an adapter is a
     // separate program now and opens the profile itself. What the spec requires
     // here — that core not reject the key — still holds.
-    let profile = profile_from(&format!("{MINIMAL_PROFILE}adapter: example\n"))
+    let profile = profile_from(&format!("{MINIMAL_PROFILE}adapter: openspec\n"))
         .expect("an uninterpreted top-level key is not an error");
     assert_eq!(profile.name(), "t");
 }
@@ -391,7 +391,7 @@ fn chunk_line_prefix_spanning_a_line_boundary_is_rejected() {
 #[test]
 fn chunk_line_prefix_on_a_kind_declaring_no_text_is_rejected() {
     // Configuration that silently does nothing is indistinguishable from
-    // configuration that works, which is why a partial axis binding is rejected
+    // configuration that works, which is why a partial pathway binding is rejected
     // on the same grounds.
     let yaml = r#"
 name: t
@@ -460,10 +460,19 @@ fn enum_attr_records_its_values() {
 
 #[test]
 fn list_attr_records_its_item_type() {
-    let profile = profile_from(&attr_profile("{type: list, items: string}")).unwrap();
+    let profile = profile_from(&attr_profile("{type: list, items: date}")).unwrap();
     let attr = &profile.node_kinds()["req"].attrs["status"];
     assert_eq!(attr.kind, "list");
-    assert_eq!(attr.items.as_deref(), Some("string"));
+    assert_eq!(attr.items.as_deref(), Some("date"));
+}
+
+#[test]
+fn date_attr_is_accepted_without_subfields() {
+    let profile = profile_from(&attr_profile("{type: date}")).unwrap();
+    let attr = &profile.node_kinds()["req"].attrs["status"];
+    assert_eq!(attr.kind, "date");
+    assert_eq!(attr.values, None);
+    assert_eq!(attr.items, None);
 }
 
 #[test]
@@ -481,7 +490,7 @@ fn list_without_items_is_rejected() {
 #[test]
 fn list_of_a_non_scalar_type_names_the_valid_items() {
     let error = load_error(&attr_profile("{type: list, items: enum}"));
-    assert!(error.contains("bool, int, string"), "{error}");
+    assert!(error.contains("bool, date, int, string"), "{error}");
 }
 
 /// A profile whose `req` kind carries one attr named `status`, declared as given.
@@ -566,31 +575,31 @@ fn unknown_validator_code_takes_no_other_key() {
 }
 
 #[test]
-fn adapter_code_takes_an_axis_binding() {
+fn adapter_code_takes_a_pathway_binding() {
     let yaml = format!(
-        "{MINIMAL_PROFILE}axes: [phase]\nvalidations:\n  - OBLIGATION_UNBACKED:\n\
-         \x20     axis: phase\n      position_attr: trigger\n"
+        "{MINIMAL_PROFILE}pathways: [phase]\nvalidations:\n  - OBLIGATION_UNBACKED:\n\
+         \x20     pathway: phase\n      position_attr: trigger\n"
     );
     let profile = profile_from(&yaml).unwrap();
-    let binding = &profile.axis_bindings()["OBLIGATION_UNBACKED"];
-    assert_eq!(binding.axis, "phase");
+    let binding = &profile.pathway_bindings()["OBLIGATION_UNBACKED"];
+    assert_eq!(binding.pathway, "phase");
     assert_eq!(binding.position_attr, "trigger");
 }
 
-// Requirement: Ordering axis declaration
+// Requirement: Ordering pathway declaration
 
 #[test]
-fn axis_list_loads() {
-    let profile = profile_from(&format!("{MINIMAL_PROFILE}axes: [phase]\n")).unwrap();
-    assert_eq!(profile.axes(), ["phase"]);
+fn pathway_list_loads() {
+    let profile = profile_from(&format!("{MINIMAL_PROFILE}pathways: [phase]\n")).unwrap();
+    assert_eq!(profile.pathways(), ["phase"]);
 }
 
 #[test]
 fn axes_carrying_values_is_rejected() {
-    let yaml = format!("{MINIMAL_PROFILE}axes:\n  phase:\n    order: [a, b]\n    current: a\n");
+    let yaml = format!("{MINIMAL_PROFILE}pathways:\n  phase:\n    order: [a, b]\n    current: a\n");
     let error = load_error(&yaml);
     assert!(
-        error.contains("'axes' must be a list of axis names"),
+        error.contains("'pathways' must be a list of pathway names"),
         "{error}"
     );
     assert!(error.contains("read from the register"), "{error}");
@@ -599,42 +608,43 @@ fn axes_carrying_values_is_rejected() {
 #[test]
 fn no_axes_list_loads_with_no_axes() {
     let profile = profile_from(MINIMAL_PROFILE).unwrap();
-    assert!(profile.axes().is_empty());
-    assert!(profile.axis_bindings().is_empty());
+    assert!(profile.pathways().is_empty());
+    assert!(profile.pathway_bindings().is_empty());
 }
 
-// Requirement: Validation entry axis binding
+// Requirement: Validation entry pathway binding
 
 #[test]
 fn partial_binding_names_the_missing_key() {
-    let yaml =
-        format!("{MINIMAL_PROFILE}axes: [phase]\nvalidations:\n  - COVERAGE:\n      axis: phase\n");
+    let yaml = format!(
+        "{MINIMAL_PROFILE}pathways: [phase]\nvalidations:\n  - COVERAGE:\n      pathway: phase\n"
+    );
     let error = load_error(&yaml);
     assert!(error.contains("position_attr"), "{error}");
 }
 
 #[test]
-fn binding_to_an_undeclared_axis_names_it() {
+fn binding_to_an_undeclared_pathway_names_it() {
     let yaml = format!(
-        "{MINIMAL_PROFILE}validations:\n  - COVERAGE:\n      axis: phase\n\
+        "{MINIMAL_PROFILE}validations:\n  - COVERAGE:\n      pathway: phase\n\
          \x20     position_attr: trigger\n"
     );
     let error = load_error(&yaml);
-    assert!(error.contains("undeclared axis 'phase'"), "{error}");
+    assert!(error.contains("undeclared pathway 'phase'"), "{error}");
 }
 
-// Requirement: One axis binding per finding code
+// Requirement: One pathway binding per finding code
 
 #[test]
 fn second_binding_for_one_code_is_rejected() {
     let yaml = format!(
-        "{MINIMAL_PROFILE}axes: [phase]\nvalidations:\n\
-         \x20 - OBLIGATION_UNBACKED:\n      axis: phase\n      position_attr: trigger\n\
-         \x20 - OBLIGATION_UNBACKED:\n      axis: phase\n      position_attr: trigger\n"
+        "{MINIMAL_PROFILE}pathways: [phase]\nvalidations:\n\
+         \x20 - OBLIGATION_UNBACKED:\n      pathway: phase\n      position_attr: trigger\n\
+         \x20 - OBLIGATION_UNBACKED:\n      pathway: phase\n      position_attr: trigger\n"
     );
     let error = load_error(&yaml);
     assert!(error.contains("OBLIGATION_UNBACKED"), "{error}");
-    assert!(error.contains("second axis binding"), "{error}");
+    assert!(error.contains("second pathway binding"), "{error}");
 }
 
 #[test]
@@ -651,14 +661,14 @@ fn repeated_plain_configuration_is_honoured_twice() {
 #[test]
 fn one_binding_alongside_a_repeated_configuration() {
     let yaml = format!(
-        "{MINIMAL_PROFILE}axes: [phase]\nvalidations:\n\
+        "{MINIMAL_PROFILE}pathways: [phase]\nvalidations:\n\
          \x20 - COVERAGE:\n      target_kind: req\n      edge_kind: derives\n\
          \x20 - COVERAGE:\n      target_kind: req\n      edge_kind: verifies\n\
-         \x20     axis: phase\n      position_attr: trigger\n"
+         \x20     pathway: phase\n      position_attr: trigger\n"
     );
     let profile = profile_from(&yaml).unwrap();
     assert_eq!(profile.validation_configs()["COVERAGE"].len(), 2);
-    assert_eq!(profile.axis_bindings()["COVERAGE"].axis, "phase");
+    assert_eq!(profile.pathway_bindings()["COVERAGE"].pathway, "phase");
 }
 
 // Shapes the loader must reject rather than read past. Each is a `test_profile.py`
@@ -748,9 +758,12 @@ fn a_non_string_attr_type_is_rejected() {
 
 #[test]
 fn an_unknown_attr_type_names_the_valid_ones() {
-    let error = load_error(&attr_profile("{type: date}"));
-    assert!(error.contains("unknown type 'date'"), "{error}");
-    assert!(error.contains("bool, enum, int, list, string"), "{error}");
+    let error = load_error(&attr_profile("{type: float}"));
+    assert!(error.contains("unknown type 'float'"), "{error}");
+    assert!(
+        error.contains("bool, date, enum, int, list, string"),
+        "{error}"
+    );
 }
 
 #[test]
@@ -778,16 +791,47 @@ fn a_complete_coverage_config_is_accepted_and_kept() {
     assert_eq!(config["edge_kind"].as_str(), Some("derives"));
 }
 
-// Requirement: Validation entry axis binding
+#[test]
+fn coverage_where_is_parsed_and_kept() {
+    let yaml = format!(
+        "{MINIMAL_PROFILE}validations:\n  - COVERAGE:\n      target_kind: req\n\
+         \x20     edge_kind: derives\n      where:\n        status: {{not: deferred}}\n"
+    );
+    let profile = profile_from(&yaml).unwrap();
+    let where_ = &profile.validation_configs()["COVERAGE"][0]["where"];
+    assert!(where_.is_mapping());
+}
+
+#[test]
+fn coverage_where_may_be_absent() {
+    let yaml = format!(
+        "{MINIMAL_PROFILE}validations:\n  - COVERAGE_DEEP:\n      target_kind: req\n\
+         \x20     via: derives\n      evidence: derives\n"
+    );
+    let profile = profile_from(&yaml).unwrap();
+    assert!(!profile.validation_configs()["COVERAGE_DEEP"][0].contains_key("where"));
+}
+
+#[test]
+fn malformed_coverage_where_is_rejected() {
+    let yaml = format!(
+        "{MINIMAL_PROFILE}validations:\n  - COVERAGE:\n      target_kind: req\n\
+         \x20     edge_kind: derives\n      where:\n        status: deferred\n"
+    );
+    let error = load_error(&yaml);
+    assert!(error.contains("COVERAGE config: 'where.status'"), "{error}");
+}
+
+// Requirement: Validation entry pathway binding
 
 #[test]
 fn a_binding_carrying_position_attr_alone_is_rejected() {
     let yaml = format!(
-        "{MINIMAL_PROFILE}axes: [phase]\nvalidations:\n  - COVERAGE:\n\
+        "{MINIMAL_PROFILE}pathways: [phase]\nvalidations:\n  - COVERAGE:\n\
          \x20     position_attr: trigger\n"
     );
     assert!(
-        load_error(&yaml).contains("axis"),
+        load_error(&yaml).contains("pathway"),
         "the missing key is named"
     );
 }
@@ -844,7 +888,7 @@ fn scalar_child_wins() {
 fn list_replaces_whole() {
     let parent = format!(
         "{PARENT_PROFILE}validations:\n  - ORPHAN_NODE:\n      severity: info\n\
-         \x20 - DANGLING_REF:\n      severity: warning\n"
+         \x20 - VACANCY:\n      severity: warning\n"
     );
     let child = "extends: parent.yaml\nname: child\nprofile_version: \"1.0.0\"\n\
                  node_kinds: {}\nedge_kinds: {}\n\

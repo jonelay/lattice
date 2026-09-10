@@ -25,10 +25,10 @@
 //! # std::fs::write(&profile_path, profile_yaml).unwrap();
 //! # let profile = load_profile(&profile_path).unwrap();
 //! let text = r#"{
-//!   "contract_version": "1.0",
+//!   "interface_version": "1.2",
 //!   "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {},
 //!              "provenance": {"file": "reqs.md", "line": 3}}],
-//!   "edges": [], "axes": [], "issues": []
+//!   "edges": [], "pathways": [], "findings": []
 //! }"#;
 //!
 //! let graph = ingest_document(parse_document(text)?)?;
@@ -41,6 +41,7 @@
 //! ```
 
 pub mod document;
+pub mod fuse;
 pub mod graph;
 pub mod output;
 pub mod profile;

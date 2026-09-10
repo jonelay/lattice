@@ -71,7 +71,7 @@ def test_edge_columns_emit_comma_separated_references(document: dict) -> None:
 
 def test_short_rows_are_reported(document: dict) -> None:
     errors = [
-        issue for issue in document["issues"]
+        issue for issue in document["findings"]
         if issue["code"] == "PARSE_ERROR" and issue["provenance"]["line"] == 5
     ]
     assert len(errors) == 1
@@ -80,7 +80,7 @@ def test_short_rows_are_reported(document: dict) -> None:
 
 def test_empty_ids_are_reported(document: dict) -> None:
     errors = [
-        issue for issue in document["issues"]
+        issue for issue in document["findings"]
         if issue["code"] == "PARSE_ERROR" and issue["provenance"]["line"] == 6
     ]
     assert len(errors) == 1
@@ -97,8 +97,8 @@ def test_provenance_has_source_line_numbers(document: dict) -> None:
     assert {edge["provenance"]["line"] for edge in req3_edges} == {7}
 
 
-def test_contract_version_is_1_1(document: dict) -> None:
-    assert document["contract_version"] == "1.1"
+def test_interface_version_is_1_2(document: dict) -> None:
+    assert document["interface_version"] == "1.2"
 
 
 def test_non_utf8_file_is_reported_and_other_files_survive(tmp_path: Path) -> None:
@@ -107,7 +107,7 @@ def test_non_utf8_file_is_reported_and_other_files_survive(tmp_path: Path) -> No
     (target / "invalid.md").write_bytes(b"\xff\xfe not UTF-8")
     document = _run_adapter(target, tmp_path)
     errors = [
-        issue for issue in document["issues"]
+        issue for issue in document["findings"]
         if issue["code"] == "PARSE_ERROR"
         and issue["provenance"]["file"] == "invalid.md"
     ]
@@ -121,14 +121,14 @@ def test_non_utf8_file_is_reported_and_other_files_survive(tmp_path: Path) -> No
 def test_file_without_tables_emits_no_nodes_or_issues(tmp_path: Path) -> None:
     document = _run_adapter(FIXTURE_PATH / "notes.md", tmp_path)
     assert document["nodes"] == []
-    assert document["issues"] == []
+    assert document["findings"] == []
 
 
 def test_missing_target_is_reported_with_exit_zero(tmp_path: Path) -> None:
     document = _run_adapter(tmp_path / "missing", tmp_path)
     assert document["nodes"] == []
-    assert len(document["issues"]) == 1
-    assert document["issues"][0]["code"] == "PARSE_ERROR"
+    assert len(document["findings"]) == 1
+    assert document["findings"][0]["code"] == "PARSE_ERROR"
 
 
 def test_missing_id_column_is_reported(tmp_path: Path) -> None:
@@ -143,7 +143,7 @@ def test_missing_id_column_is_reported(tmp_path: Path) -> None:
 
     assert document["nodes"] == []
     errors = [
-        issue for issue in document["issues"]
+        issue for issue in document["findings"]
         if issue["code"] == "PARSE_ERROR" and "Missing ID" in issue["message"]
     ]
     assert len(errors) == 1
@@ -163,7 +163,7 @@ def test_missing_mapped_column_is_reported_without_dropping_valid_mappings(
     )
 
     errors = [
-        issue for issue in document["issues"]
+        issue for issue in document["findings"]
         if issue["code"] == "PARSE_ERROR"
         and "Missing Attribute" in issue["message"]
     ]
@@ -233,7 +233,7 @@ def test_multikind_unmatched_heading_emits_an_issue_and_no_nodes(
         node["id"] for node in multikind_document["nodes"]
     }
     issues = [
-        issue for issue in multikind_document["issues"]
+        issue for issue in multikind_document["findings"]
         if issue["code"] == "PARSE_ERROR" and "Appendix" in issue["message"]
     ]
     assert len(issues) == 1

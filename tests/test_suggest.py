@@ -50,8 +50,8 @@ def node(node_id, kind, attrs):
     }
 
 
-CONTRACT = {
-    "contract_version": "1.1",
+INTERFACE = {
+    "interface_version": "1.2",
     "nodes": [
         node("REQ-1", "req", {"text": "the motor shall report rotor temperature"}),
         node("REQ-2", "req", {"text": "the dashboard shall render a torque curve"}),
@@ -74,7 +74,7 @@ CONTRACT = {
             "provenance": {"file": "f.py", "line": 1},
         }
     ],
-    "issues": [],
+    "findings": [],
 }
 
 
@@ -86,9 +86,9 @@ def profile(tmp_path):
 
 
 @pytest.fixture
-def contract(tmp_path):
-    path = tmp_path / "contract.json"
-    path.write_text(json.dumps(CONTRACT))
+def interface(tmp_path):
+    path = tmp_path / "interface.json"
+    path.write_text(json.dumps(INTERFACE))
     return path
 
 
@@ -105,13 +105,13 @@ def run(args, stdin=None):
 # Requirement: The sidecar is a program emitting a suggestion document
 
 
-def test_program_emits_a_document_on_stdout(tmp_path, contract):
+def test_program_emits_a_document_on_stdout(tmp_path, interface):
     path = tmp_path / "p.yaml"
     path.write_text(PROFILE_YAML)
     resolved = resolve_profile(path, tmp_path)
 
     result = run(
-        ["--profile", str(resolved), "--contract", str(contract), "--edge-kind", "verifies"]
+        ["--profile", str(resolved), "--interface", str(interface), "--edge-kind", "verifies"]
     )
 
     assert result.returncode == 0, result.stderr
@@ -128,7 +128,7 @@ def test_program_reads_a_contract_document_from_stdin(tmp_path):
 
     result = run(
         ["--profile", str(resolved), "--edge-kind", "verifies"],
-        stdin=json.dumps(CONTRACT),
+        stdin=json.dumps(INTERFACE),
     )
 
     assert result.returncode == 0, result.stderr
@@ -143,16 +143,16 @@ def test_program_reports_an_unreadable_contract_rather_than_crashing(tmp_path):
     result = run(["--profile", str(resolved), "--edge-kind", "verifies"], stdin="{not json")
 
     assert result.returncode == 2
-    assert "contract document" in result.stderr
+    assert "interface document" in result.stderr
 
 
-def test_program_reports_an_undeclared_edge_kind(tmp_path, contract):
+def test_program_reports_an_undeclared_edge_kind(tmp_path, interface):
     path = tmp_path / "p.yaml"
     path.write_text(PROFILE_YAML)
     resolved = resolve_profile(path, tmp_path)
 
     result = run(
-        ["--profile", str(resolved), "--contract", str(contract), "--edge-kind", "mitigates"]
+        ["--profile", str(resolved), "--interface", str(interface), "--edge-kind", "mitigates"]
     )
 
     assert result.returncode == 2
@@ -164,14 +164,14 @@ def test_program_reports_an_undeclared_edge_kind(tmp_path, contract):
 
 
 def test_constrained_to_the_unattributed_population(profile):
-    sources, _ = lattice_suggest.candidates(CONTRACT, profile, "verifies")
+    sources, _ = lattice_suggest.candidates(INTERFACE, profile, "verifies")
 
     # T-marked already carries a verifies edge, so it is not a candidate source.
     assert [n["id"] for n in sources] == ["T-temp"]
 
 
 def test_constrained_targets_exclude_forbidden_kinds(profile):
-    _, targets = lattice_suggest.candidates(CONTRACT, profile, "verifies")
+    _, targets = lattice_suggest.candidates(INTERFACE, profile, "verifies")
 
     assert {n["id"] for n in targets} == {"REQ-1", "REQ-2"}
     assert all(n["kind"] == "req" for n in targets), "spec is not a legal verifies target"
@@ -181,7 +181,7 @@ def test_a_forbidden_pairing_is_never_proposed(profile):
     # The spec node's title is the closest text to the test's docstring, but
     # (test, spec) is not an allowed verifies pairing.
     suggestions = lattice_suggest.rank(
-        *lattice_suggest.candidates(CONTRACT, profile, "verifies"),
+        *lattice_suggest.candidates(INTERFACE, profile, "verifies"),
         profile,
         "verifies",
         _fake_embed,
@@ -208,7 +208,7 @@ def test_the_sidecar_carries_no_vocabulary_of_its_own(tmp_path):
     profile = load_profile(resolve_profile(path, tmp_path))
 
     document = json.loads(
-        json.dumps(CONTRACT).replace('"kind": "req"', '"kind": "obligation"').replace(
+        json.dumps(INTERFACE).replace('"kind": "req"', '"kind": "obligation"').replace(
             '"kind": "test"', '"kind": "check"'
         )
     )
@@ -238,7 +238,7 @@ def _words(text: str) -> set[str]:
 
 
 def test_rank_puts_the_more_similar_requirement_first(profile):
-    sources, targets = lattice_suggest.candidates(CONTRACT, profile, "verifies")
+    sources, targets = lattice_suggest.candidates(INTERFACE, profile, "verifies")
     suggestions = lattice_suggest.rank(
         sources, targets, profile, "verifies", _fake_embed, "fake", top_k=5
     )
@@ -248,7 +248,7 @@ def test_rank_puts_the_more_similar_requirement_first(profile):
 
 
 def test_rank_records_the_model_in_every_basis(profile):
-    sources, targets = lattice_suggest.candidates(CONTRACT, profile, "verifies")
+    sources, targets = lattice_suggest.candidates(INTERFACE, profile, "verifies")
     suggestions = lattice_suggest.rank(
         sources, targets, profile, "verifies", _fake_embed, "fake-model-1", top_k=5
     )
@@ -259,7 +259,7 @@ def test_rank_records_the_model_in_every_basis(profile):
 
 
 def test_rank_orders_by_descending_score_with_a_stable_tie_break(profile):
-    sources, targets = lattice_suggest.candidates(CONTRACT, profile, "verifies")
+    sources, targets = lattice_suggest.candidates(INTERFACE, profile, "verifies")
     suggestions = lattice_suggest.rank(
         sources, targets, profile, "verifies", _fake_embed, "fake", top_k=5
     )
@@ -334,7 +334,7 @@ def test_rank_treats_declared_empty_text_attrs_as_textless(text_attrs_profile):
 
 
 def test_rank_is_deterministic_for_a_fixed_backend(profile):
-    sources, targets = lattice_suggest.candidates(CONTRACT, profile, "verifies")
+    sources, targets = lattice_suggest.candidates(INTERFACE, profile, "verifies")
     args = (sources, targets, profile, "verifies", _fake_embed, "fake")
 
     assert lattice_suggest.rank(*args, top_k=5) == lattice_suggest.rank(*args, top_k=5)
@@ -343,13 +343,13 @@ def test_rank_is_deterministic_for_a_fixed_backend(profile):
 # Requirement: The sidecar runs offline by default
 
 
-def test_offline_default_emits_an_empty_document_and_says_so(tmp_path, contract):
+def test_offline_default_emits_an_empty_document_and_says_so(tmp_path, interface):
     path = tmp_path / "p.yaml"
     path.write_text(PROFILE_YAML)
     resolved = resolve_profile(path, tmp_path)
 
     result = run(
-        ["--profile", str(resolved), "--contract", str(contract), "--edge-kind", "verifies"]
+        ["--profile", str(resolved), "--interface", str(interface), "--edge-kind", "verifies"]
     )
 
     assert result.returncode == 0
@@ -367,7 +367,7 @@ def test_offline_default_touches_no_network(monkeypatch, profile):
         raise AssertionError("the offline path opened a connection")
 
     monkeypatch.setattr(urllib.request, "urlopen", forbidden)
-    sources, _ = lattice_suggest.candidates(CONTRACT, profile, "verifies")
+    sources, _ = lattice_suggest.candidates(INTERFACE, profile, "verifies")
 
     assert sources  # candidates are computed without a backend
 
@@ -388,7 +388,7 @@ def test_an_unreachable_ollama_host_is_an_error_not_a_silent_empty_document():
 
 
 def test_a_textless_source_is_excluded_and_reported(profile, capsys):
-    document = json.loads(json.dumps(CONTRACT))
+    document = json.loads(json.dumps(INTERFACE))
     document["nodes"].append(node("T-notext", "test", {}))
     sources, targets = lattice_suggest.candidates(document, profile, "verifies")
     received: list[str] = []
@@ -410,7 +410,7 @@ def test_a_textless_source_is_excluded_and_reported(profile, capsys):
 
 
 def test_an_all_textless_population_makes_no_backend_call(profile, capsys):
-    document = json.loads(json.dumps(CONTRACT))
+    document = json.loads(json.dumps(INTERFACE))
     document["nodes"] = [
         node("REQ-1", "req", {"text": "the motor shall report rotor temperature"}),
         node("T-a", "test", {}),
@@ -440,7 +440,7 @@ def test_program_with_an_all_textless_population_never_needs_the_network(tmp_pat
     path = tmp_path / "p.yaml"
     path.write_text(PROFILE_YAML)
     resolved = resolve_profile(path, tmp_path)
-    document = json.loads(json.dumps(CONTRACT))
+    document = json.loads(json.dumps(INTERFACE))
     document["nodes"] = [node("REQ-1", "req", {"text": "t"}), node("T-a", "test", {})]
     document["edges"] = []
 
@@ -559,7 +559,7 @@ def test_chunks_marker_must_start_the_line():
 def test_rank_sends_one_text_per_target_chunk(chunk_profile):
     seen = []
     document = {
-        "contract_version": "1.1",
+        "interface_version": "1.2",
         "nodes": [
             node("REQ-1", "req", {"text": "title", "body": "pre\n#### Scenario: a\nx"}),
             node("T-a", "test", {"function": "test_a"}),
@@ -583,7 +583,7 @@ def test_rank_never_chunks_a_source(chunk_profile):
     """
     seen = []
     document = {
-        "contract_version": "1.1",
+        "interface_version": "1.2",
         "nodes": [
             node("REQ-1", "req", {"text": "title"}),
             node("T-a", "test", {"function": "one\n#### Scenario: b\ntwo"}),
@@ -606,7 +606,7 @@ def test_rank_scores_a_pairing_as_the_targets_best_chunk(chunk_profile):
     match and the shorter REQ-2 wins.
     """
     document = {
-        "contract_version": "1.1",
+        "interface_version": "1.2",
         "nodes": [
             node(
                 "REQ-1",
@@ -639,7 +639,7 @@ def test_rank_without_a_declared_prefix_is_unchanged(text_attrs_profile):
     it hands the backend is the one undivided text per node it always was."""
     seen = []
     document = {
-        "contract_version": "1.1",
+        "interface_version": "1.2",
         "nodes": [
             node("REQ-1", "req", {"text": "title", "body": "pre\n#### Scenario: a\nx"}),
             node("T-a", "test", {"function": "test_a"}),
@@ -661,7 +661,7 @@ def test_rank_reports_a_declared_prefix_that_never_splits(chunk_profile, capsys)
     """A marker absent from every node is a profile typo or an adapter that
     stopped emitting the body — a silent no-op reads as 'nothing to see here'."""
     document = {
-        "contract_version": "1.1",
+        "interface_version": "1.2",
         "nodes": [
             node("REQ-1", "req", {"text": "title", "body": "no marker here"}),
             node("T-a", "test", {"function": "test_a"}),
@@ -733,7 +733,7 @@ def test_the_embed_batch_matches_the_harness_batch(chunk_profile):
     spec.loader.exec_module(harness)
 
     document = {
-        "contract_version": "1.1",
+        "interface_version": "1.2",
         "nodes": [
             node("T-a", "test", {"function": "test_alpha"}),
             node("T-b", "test", {"function": "test_beta"}),
@@ -774,7 +774,7 @@ def test_chunks_cuts_on_newline_only_not_on_every_unicode_line_break():
 
 
 def test_a_duplicated_target_scores_its_first_occurrence_and_appears_once(profile):
-    document = json.loads(json.dumps(CONTRACT))
+    document = json.loads(json.dumps(INTERFACE))
     # First occurrence carries the text that matches the unattributed test;
     # the later occurrence is unrelated. Keying occurrences by ID kept only
     # the last one, so a matching first occurrence was never scored.
@@ -795,7 +795,7 @@ def test_a_duplicated_target_scores_its_first_occurrence_and_appears_once(profil
 
 
 def test_a_duplicated_source_is_ranked_once_over_its_union_of_text(profile, capsys):
-    document = json.loads(json.dumps(CONTRACT))
+    document = json.loads(json.dumps(INTERFACE))
     # One occurrence carries text, the other none: the union ranks, and the
     # textless occurrence neither excludes the ID nor doubles its output.
     document["nodes"].append(
@@ -817,7 +817,7 @@ def test_a_duplicated_source_is_ranked_once_over_its_union_of_text(profile, caps
 
 
 def test_merged_duplicates_are_reported_on_stderr(profile, capsys):
-    document = json.loads(json.dumps(CONTRACT))
+    document = json.loads(json.dumps(INTERFACE))
     document["nodes"].append(
         node("REQ-2", "req", {"text": "a second torque curve row"})
     )

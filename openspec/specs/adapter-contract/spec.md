@@ -7,7 +7,7 @@ the host repo's own language while the core is free to be written in another.
 ## Requirements
 ### Requirement: Adapter is a program emitting a serialized graph
 An adapter SHALL be an executable program. Given the profile and the target path, it
-SHALL write to stdout a single document containing the nodes, edges, any ordering axis,
+SHALL write to stdout a single document containing the nodes, edges, any ordering pathway,
 and the issues it collected while reading the register. The core SHALL ingest that
 document and SHALL NOT import, link, or otherwise execute adapter code in its own
 process.
@@ -20,8 +20,7 @@ file was expected) is register input failing, not the adapter failing, and SHALL
 become a non-zero exit. When the candidate's identity remains readable, the adapter
 SHOULD preserve the node and omit only the unreadable contribution.
 
-Verified by: `cargo test --test contract` and
-`.venv/bin/python -m pytest -q tests/test_adapter_openspec.py -k undecodable`
+Verified by: `cargo test --test contract`
 
 #### Scenario: Adapter emits a graph the core ingests
 - **WHEN** an adapter program emits a document with two nodes and one edge between them
@@ -44,9 +43,9 @@ Verified by: `cargo test --test contract` and
   interface
 
 ### Requirement: Document schema
-The document SHALL be a JSON object carrying `contract_version`, `nodes`, `edges`, `axes`
-and `issues`. A node SHALL carry `id`, `kind`, `attrs` and `provenance`; an edge `src`,
-`tgt`, `kind` and `provenance`; an axis `name`, `order` and `current`; an issue
+The document SHALL be a JSON object carrying `interface_version`, `nodes`, `edges`, `pathways`
+and `findings`. A node SHALL carry `id`, `kind`, `attrs` and `provenance`; an edge `src`,
+`tgt`, `kind`, optional `attrs`, and `provenance`; a pathway `name`, `order` and `current`; a finding
 `severity`, `code`, `message`, `provenance` and `node_id`. A provenance SHALL carry
 `file` and `line`.
 
@@ -60,6 +59,8 @@ of two runs, the trace baselines included.
 A node's `attrs` SHALL be an arbitrary JSON object, nesting objects and arrays to any
 depth. An adapter whose source format has types JSON does not carry SHALL encode them
 before emitting; a value that is not JSON is a schema failure, not a finding.
+An edge's optional `attrs` SHALL obey the same rule and default to an empty object when
+absent; an explicit non-object value is a schema failure.
 
 Each issue SHALL carry the severity its adapter chose. The core SHALL NOT recompute an
 adapter issue's severity from its own defaults, because an adapter may emit a code the
@@ -138,7 +139,7 @@ Verified by: `cargo test --test cli adapter` and `.venv/bin/python -m pytest tes
 The resolved profile document SHALL be a canonical JSON object carrying a
 `resolved_schema` version field and the entire profile as loaded and validated: every
 node kind with its raw `id_pattern` source, `summary_attr`, and attribute schemas;
-every edge kind with its allowed endpoint pairs; validations; axes; `name`;
+every edge kind with its allowed endpoint pairs; validations; pathways; `name`;
 `profile_version`; and every section the profile declared that the core does not
 itself consume, including the `adapter:` namespace, reproduced unchanged. The core
 SHALL refuse to run the adapter if the resolved document cannot be produced, exiting 2.
@@ -160,7 +161,7 @@ Verified by: `cargo test --test contract resolved` and
 #### Scenario: Resolved document declares its schema version
 - **WHEN** the core produces a resolved profile document
 - **THEN** the document carries a `resolved_schema` field identifying the schema
-  version, distinct from `profile_version` and from the contract version
+  version, distinct from `profile_version` and from the interface version
 
 #### Scenario: Unresolvable profile is a broken setup
 - **WHEN** the profile fails validation at load
@@ -170,39 +171,39 @@ Verified by: `cargo test --test contract resolved` and
 - **WHEN** an adapter's profile reader is handed a resolved document that is not valid JSON
 - **THEN** the reader raises a profile error naming the read failure rather than guessing at the profile
 
-### Requirement: Axis validity is the adapter's responsibility
-An adapter SHALL validate an ordering axis before emitting it: positions unique, and
-`current` among them. An adapter that reads an invalid axis SHALL emit an `AXIS_INVALID`
-issue and omit the axis, rather than emitting the axis as read. An axis in the document
+### Requirement: Pathway validity is the adapter's responsibility
+An adapter SHALL validate an ordering pathway before emitting it: positions unique, and
+`current` among them. An adapter that reads an invalid pathway SHALL emit an `PATHWAY_INVALID`
+issue and omit the pathway, rather than emitting the pathway as read. A pathway in the document
 that is structurally invalid SHALL be a schema failure.
 
-Axis validity stays with the adapter, where duplicate detection moved to the core,
+Pathway validity stays with the adapter, where duplicate detection moved to the core,
 because the adapter is what read the target's declaration and can name the file it came
-from. An invalid axis places every position both before and after `current`, so ingesting
+from. An invalid pathway places every position both before and after `current`, so ingesting
 one would silently corrupt every finding bound to it.
 
-Verified by: `cargo test --test contract axis`
+Verified by: `cargo test --test contract pathway`
 
-#### Scenario: Invalid axis becomes a finding, not an axis
+#### Scenario: Invalid pathway becomes a finding, not a pathway
 - **WHEN** the target declares a `current` position that is not in the declared order
-- **THEN** the adapter emits `AXIS_INVALID` naming the file and emits no axis
+- **THEN** the adapter emits `PATHWAY_INVALID` naming the file and emits no pathway
 
-#### Scenario: Invalid axis in the document is refused
-- **WHEN** a document carries an axis whose `current` is not in its `order`
+#### Scenario: Invalid pathway in the document is refused
+- **WHEN** a document carries a pathway whose `current` is not in its `order`
 - **THEN** the core exits 2 rather than ingesting it
 
-### Requirement: Contract document declares its version
-The document SHALL carry a contract version identifying the interchange format. The core
-SHALL refuse a document whose contract version it does not support, rather than ingesting
+### Requirement: Interface document declares its version
+The document SHALL carry an interface version identifying the interchange format. The core
+SHALL refuse a document whose interface version it does not support, rather than ingesting
 it partially.
 
-The contract version is distinct from `profile_version`, which governs the register
+The interface version is distinct from `profile_version`, which governs the register
 schema, and from the lattice version, which governs the trace payload envelope.
 
-Verified by: `cargo test --test contract version`
+Verified by: `cargo test --test interface version`
 
-#### Scenario: Unsupported contract version is refused
-- **WHEN** an adapter emits a document declaring a contract version the core does not
+#### Scenario: Unsupported interface version is refused
+- **WHEN** an adapter emits a document declaring an interface version the core does not
   support
 - **THEN** the core exits 2 naming the version it received and the versions it supports
 
@@ -229,7 +230,7 @@ Verified by: `cargo test --test contract duplicate` and `cargo test --test contr
 
 ### Requirement: Adapter failure is a broken setup, not a finding
 The core SHALL exit 2 when the adapter program cannot be run, exits non-zero, emits
-output that cannot be parsed, or emits output that does not satisfy the contract schema.
+output that cannot be parsed, or emits output that does not satisfy the interface schema.
 It SHALL NOT ingest a partial document, and SHALL NOT report such a failure as a
 register finding.
 
@@ -266,23 +267,27 @@ Verified by: `cargo test --test native_messages`
 - **WHEN** an adapter document carries `"nodes": null`
 - **THEN** the schema failure message reads `'nodes' must be a list, got null`
 
-### Requirement: Contract 1.1 extends the severity vocabulary with hint
+### Requirement: Interface versions remain ingest-compatible
 The issue severity vocabulary SHALL be `error`, `warning`, `info`, `hint`. The
-vocabulary extension is contract version `1.1`: the emit helper SHALL declare `1.1`,
-and the core SHALL accept documents declaring `1.0` or `1.1`. A `1.0` document by
-construction never carries `hint`; the core applies one parser to both versions, since
-`1.1` is a strict superset. An unknown severity string remains a schema failure (exit
-2), never a fallback.
+vocabulary extension is interface version `1.1`. Interface version `1.2` renames the
+top-level `issues` array to `findings` and adds optional edge attrs: emit helpers SHALL
+declare `1.2`, while the core SHALL accept documents declaring `1.0`, `1.1`, or `1.2`.
+For compatibility, the core SHALL read `issues` only when `findings` is absent. An
+unknown severity string remains a schema failure (exit 2), never a fallback.
 
-Verified by: `cargo test --test contract hint` and `.venv/bin/python -m pytest tests -k contract_version`
+Verified by: `cargo test --test contract hint` and `.venv/bin/python -m pytest tests -k interface_version`
 
 #### Scenario: Hint severity survives ingest
-- **WHEN** a document declaring contract version `1.1` carries an issue at severity `hint`
+- **WHEN** a document declaring interface version `1.1` carries an issue at severity `hint`
 - **THEN** the core ingests it and reports the issue at `hint`
 
 #### Scenario: 1.0 documents still ingest
-- **WHEN** a document declares contract version `1.0`
+- **WHEN** a document declares interface version `1.0`
 - **THEN** the core ingests it unchanged
+
+#### Scenario: 1.2 findings and edge attrs ingest
+- **WHEN** a document declares interface version `1.2` with `findings` and edge `attrs`
+- **THEN** the core ingests both shapes without discarding their content
 
 #### Scenario: Unknown severity is still a schema failure
 - **WHEN** a document carries an issue at severity `suggestion`

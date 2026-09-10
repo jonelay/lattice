@@ -1,4 +1,4 @@
-# Fixture register that declares the ordering axis. The register owns both
+# Fixture register that declares the ordering pathway. The register owns both
 # values; the adapter reads them and carries no copy of its own.
 
 [register]

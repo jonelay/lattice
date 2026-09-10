@@ -1,0 +1,27 @@
+name: toml-directory
+profile_version: "1.0.0"
+
+adapter:
+  mode: directory
+  paths:
+    files:
+      - "records/*.toml"
+  tables:
+    record:
+      kind: device
+      id_key: id
+      key_map:
+        name: name
+      edge_keys:
+        refs: references
+
+node_kinds:
+  device:
+    id_pattern: "^DEV-[0-9]{3}$"
+    attrs:
+      name: { type: string, required: true }
+
+edge_kinds:
+  references:
+    allowed:
+      - [device, device]

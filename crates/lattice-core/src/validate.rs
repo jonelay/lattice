@@ -1,12 +1,13 @@
 //! Checking a graph against its profile: ID syntax, kinds, attrs, edges, coverage.
 
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 
 use serde_json::Value;
 
 use crate::document::type_name;
 use crate::graph::LatticeGraph;
-use crate::profile::{Profile, ValidationConfig};
+use crate::profile::{ConditionOp, Profile, ValidationConfig};
 use crate::types::{Issue, Provenance, Severity};
 
 #[derive(Clone, Copy)]
@@ -15,12 +16,13 @@ pub(crate) enum FindingCode {
     AttrListItems,
     AttrRequired,
     AttrType,
-    AxisUnresolved,
+    Constraint,
+    PathwayUnresolved,
     ConfigError,
     Coverage,
     CoverageDeep,
     CoverageUnknown,
-    DanglingRef,
+    Vacancy,
     EdgeConstraint,
     IdFormat,
     OrphanNode,
@@ -36,12 +38,13 @@ impl FindingCode {
             Self::AttrListItems => "ATTR_LIST_ITEMS",
             Self::AttrRequired => "ATTR_REQUIRED",
             Self::AttrType => "ATTR_TYPE",
-            Self::AxisUnresolved => "AXIS_UNRESOLVED",
+            Self::Constraint => "CONSTRAINT",
+            Self::PathwayUnresolved => "PATHWAY_UNRESOLVED",
             Self::ConfigError => "CONFIG_ERROR",
             Self::Coverage => "COVERAGE",
             Self::CoverageDeep => "COVERAGE_DEEP",
             Self::CoverageUnknown => "COVERAGE_UNKNOWN",
-            Self::DanglingRef => "DANGLING_REF",
+            Self::Vacancy => "VACANCY",
             Self::EdgeConstraint => "EDGE_CONSTRAINT",
             Self::IdFormat => "ID_FORMAT",
             Self::OrphanNode => "ORPHAN_NODE",
@@ -57,12 +60,13 @@ impl FindingCode {
             "ATTR_LIST_ITEMS" => Some(Self::AttrListItems),
             "ATTR_REQUIRED" => Some(Self::AttrRequired),
             "ATTR_TYPE" => Some(Self::AttrType),
-            "AXIS_UNRESOLVED" => Some(Self::AxisUnresolved),
+            "CONSTRAINT" => Some(Self::Constraint),
+            "PATHWAY_UNRESOLVED" => Some(Self::PathwayUnresolved),
             "CONFIG_ERROR" => Some(Self::ConfigError),
             "COVERAGE" => Some(Self::Coverage),
             "COVERAGE_DEEP" => Some(Self::CoverageDeep),
             "COVERAGE_UNKNOWN" => Some(Self::CoverageUnknown),
-            "DANGLING_REF" => Some(Self::DanglingRef),
+            "VACANCY" => Some(Self::Vacancy),
             "EDGE_CONSTRAINT" => Some(Self::EdgeConstraint),
             "ID_FORMAT" => Some(Self::IdFormat),
             "ORPHAN_NODE" => Some(Self::OrphanNode),
@@ -80,7 +84,7 @@ pub(crate) fn default_severity(code: FindingCode) -> Severity {
         FindingCode::IdFormat
         | FindingCode::UnknownKind
         | FindingCode::EdgeConstraint
-        | FindingCode::DanglingRef
+        | FindingCode::Vacancy
         | FindingCode::AttrRequired
         | FindingCode::AttrType
         | FindingCode::AttrEnum
@@ -95,7 +99,8 @@ pub(crate) fn default_severity(code: FindingCode) -> Severity {
         // Explicitly warning, not via the fallthrough: hint is never promotable,
         // so a hint default here would foreclose gating on deep coverage for
         // every profile permanently (coverage-query spec).
-        FindingCode::AxisUnresolved
+        FindingCode::Constraint
+        | FindingCode::PathwayUnresolved
         | FindingCode::Coverage
         | FindingCode::CoverageDeep
         | FindingCode::OrphanNode => Severity::Warning,
@@ -129,13 +134,55 @@ fn issue(
     )
 }
 
+fn is_iso_date(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.len() != 10
+        || bytes[4] != b'-'
+        || bytes[7] != b'-'
+        || bytes
+            .iter()
+            .enumerate()
+            .any(|(i, b)| i != 4 && i != 7 && !b.is_ascii_digit())
+    {
+        return false;
+    }
+
+    let number = |start: usize, end: usize| {
+        bytes[start..end]
+            .iter()
+            .fold(0_u32, |value, digit| value * 10 + u32::from(digit - b'0'))
+    };
+    let year = number(0, 4);
+    let month = number(5, 7);
+    let day = number(8, 10);
+    let leap_year =
+        year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400));
+    let days_in_month = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap_year => 29,
+        2 => 28,
+        _ => return false,
+    };
+    (1..=days_in_month).contains(&day)
+}
+
 fn check_type(value: &Value, expected: &str) -> bool {
     match expected {
         "string" | "enum" => value.is_string(),
+        "date" => value.as_str().is_some_and(is_iso_date),
         "int" => value.is_i64() || value.is_u64(),
         "bool" => value.is_boolean(),
         "list" => value.is_array(),
         _ => true,
+    }
+}
+
+fn expected_type_name(expected: &str) -> &str {
+    if expected == "date" {
+        "date (YYYY-MM-DD)"
+    } else {
+        expected
     }
 }
 
@@ -186,40 +233,40 @@ fn apply_overrides(issues: &[Issue], profile: &Profile) -> Vec<Issue> {
     out
 }
 
-/// Demote findings whose node is not yet due on its bound ordering axis.
+/// Demote findings whose node is not yet due on its bound ordering pathway.
 ///
 /// Runs after collection and before `--strict`, so a demoted finding is already
 /// `info` when promotion looks at it and survives. Starts from each issue's
 /// effective severity rather than recomputing it, or an adapter code with no
 /// shipped default would silently drop to the warning fallback.
 fn resolve_axes(issues: Vec<Issue>, graph: &LatticeGraph, profile: &Profile) -> Vec<Issue> {
-    if profile.axis_bindings().is_empty() {
+    if profile.pathway_bindings().is_empty() {
         return issues;
     }
 
     // One finding per binding, not per issue: the mismatch is a property of the
     // pairing, and repeating it per finding would bury the findings it reports
-    // about. Keyed on the code too, so two codes bound to one missing axis each
+    // about. Keyed on the code too, so two codes bound to one missing pathway each
     // say so — a single finding could name only one of them.
     let mut unresolved: BTreeMap<(String, String), Issue> = BTreeMap::new();
     let mut resolved: Vec<Issue> = Vec::with_capacity(issues.len());
 
     for issue in issues {
-        let Some(binding) = profile.axis_bindings().get(&issue.code) else {
+        let Some(binding) = profile.pathway_bindings().get(&issue.code) else {
             resolved.push(issue);
             continue;
         };
 
-        let Some(axis) = graph.axis(&binding.axis) else {
+        let Some(pathway) = graph.pathway(&binding.pathway) else {
             unresolved
-                .entry((issue.code.clone(), binding.axis.clone()))
+                .entry((issue.code.clone(), binding.pathway.clone()))
                 .or_insert_with(|| {
                     Issue::new(
-                        severity_for(FindingCode::AxisUnresolved, profile),
-                        FindingCode::AxisUnresolved.as_str(),
+                        severity_for(FindingCode::PathwayUnresolved, profile),
+                        FindingCode::PathwayUnresolved.as_str(),
                         format!(
-                            "profile binds '{}' to axis '{}', which the target does not declare",
-                            issue.code, binding.axis
+                            "profile binds '{}' to pathway '{}', which the target does not declare",
+                            issue.code, binding.pathway
                         ),
                         Provenance::new("<profile>", 0),
                         None,
@@ -242,7 +289,7 @@ fn resolve_axes(issues: Vec<Issue>, graph: &LatticeGraph, profile: &Profile) -> 
             continue;
         };
 
-        if axis.is_member(position) && !axis.is_after(position) {
+        if pathway.is_member(position) && !pathway.is_after(position) {
             resolved.push(issue);
             continue;
         }
@@ -256,7 +303,7 @@ fn resolve_axes(issues: Vec<Issue>, graph: &LatticeGraph, profile: &Profile) -> 
     resolved
 }
 
-/// Adapter issues at the severities the profile and its axes decide.
+/// Adapter issues at the severities the profile and its pathways decide.
 #[must_use]
 pub fn resolve_adapter_issues(graph: &LatticeGraph, profile: &Profile) -> Vec<Issue> {
     resolve_axes(
@@ -354,6 +401,99 @@ fn read_kind_keys(
     out
 }
 
+fn compare_ints(left: &serde_json::Number, right: &serde_json::Number) -> Option<Ordering> {
+    let integer = |number: &serde_json::Number| {
+        number
+            .as_i64()
+            .map(i128::from)
+            .or_else(|| number.as_u64().map(i128::from))
+    };
+    Some(integer(left)?.cmp(&integer(right)?))
+}
+
+fn compare_values(left: &Value, right: &Value) -> Option<Ordering> {
+    match (left, right) {
+        (Value::String(left), Value::String(right)) => Some(left.cmp(right)),
+        (Value::Number(left), Value::Number(right)) => compare_ints(left, right),
+        _ => None,
+    }
+}
+
+pub(crate) fn eval_condition(
+    cond: &crate::profile::Condition,
+    attrs: &serde_json::Map<String, Value>,
+) -> bool {
+    match &cond.op {
+        ConditionOp::Present(expected) => attrs.contains_key(&cond.attr) == *expected,
+        ConditionOp::Eq(expected) => attrs.get(&cond.attr) == Some(expected),
+        ConditionOp::Not(expected) => attrs.get(&cond.attr) != Some(expected),
+        ConditionOp::In(values) => attrs.get(&cond.attr).is_some_and(|v| values.contains(v)),
+        ConditionOp::Lt(expected) => attrs
+            .get(&cond.attr)
+            .and_then(|value| compare_values(value, expected))
+            .is_some_and(Ordering::is_lt),
+        ConditionOp::Gt(expected) => attrs
+            .get(&cond.attr)
+            .and_then(|value| compare_values(value, expected))
+            .is_some_and(Ordering::is_gt),
+        ConditionOp::Lte(expected) => attrs
+            .get(&cond.attr)
+            .and_then(|value| compare_values(value, expected))
+            .is_some_and(Ordering::is_le),
+        ConditionOp::Gte(expected) => attrs
+            .get(&cond.attr)
+            .and_then(|value| compare_values(value, expected))
+            .is_some_and(Ordering::is_ge),
+        ConditionOp::Matches(regex) => attrs
+            .get(&cond.attr)
+            .and_then(|v| v.as_str())
+            .is_some_and(|s| regex.is_match(s)),
+    }
+}
+
+pub(crate) fn eval_conditions(
+    conditions: &[crate::profile::Condition],
+    attrs: &serde_json::Map<String, Value>,
+    expect_all: bool,
+) -> bool {
+    if expect_all {
+        conditions.iter().all(|c| eval_condition(c, attrs))
+    } else {
+        conditions.iter().all(|c| !eval_condition(c, attrs))
+    }
+}
+
+fn condition_op_desc(cond: &crate::profile::Condition) -> String {
+    match &cond.op {
+        ConditionOp::Eq(v) => format!("expected eq {v}"),
+        ConditionOp::Not(v) => format!("expected not {v}"),
+        ConditionOp::In(_) => "expected in [...]".to_string(),
+        ConditionOp::Lt(v) => format!("expected lt {v}"),
+        ConditionOp::Gt(v) => format!("expected gt {v}"),
+        ConditionOp::Lte(v) => format!("expected lte {v}"),
+        ConditionOp::Gte(v) => format!("expected gte {v}"),
+        ConditionOp::Matches(_) => "expected matches pattern".to_string(),
+        ConditionOp::Present(b) => format!("expected present={b}"),
+    }
+}
+
+fn first_failing_condition(
+    conditions: &[crate::profile::Condition],
+    attrs: &serde_json::Map<String, Value>,
+    expect_all: bool,
+) -> Option<(String, String)> {
+    for cond in conditions {
+        let passed = eval_condition(cond, attrs);
+        if expect_all && !passed {
+            return Some((cond.attr.clone(), condition_op_desc(cond)));
+        }
+        if !expect_all && passed {
+            return Some((cond.attr.clone(), condition_op_desc(cond)));
+        }
+    }
+    None
+}
+
 /// Check a graph against its profile and return every issue found.
 ///
 /// Covers ID syntax, unknown kinds, attribute schemas, edge endpoint pairs,
@@ -384,7 +524,7 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
     // Both endpoints of every edge count as connected, whether or not the
     // register declared them. An edge is evidence the node is referred to, which
     // is the question ORPHAN_NODE asks; whether the endpoint resolves is
-    // DANGLING_REF's question, and answering it here would report one fault twice.
+    // VACANCY's question, and answering it here would report one fault twice.
     let mut connected: HashSet<&str> = HashSet::new();
     for edge in graph.iter_edges() {
         connected.insert(&edge.src);
@@ -439,7 +579,7 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
                     format!(
                         "node '{}': attr '{attr_name}' expected type '{}', got {}",
                         node.id,
-                        schema.kind,
+                        expected_type_name(&schema.kind),
                         type_name(value)
                     ),
                     node.provenance.clone(),
@@ -477,8 +617,9 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
                             FindingCode::AttrListItems,
                             format!(
                                 "node '{}': attr '{attr_name}' element {index} \
-                                     expected type '{items_type}', got {}",
+                                     expected type '{}', got {}",
                                 node.id,
+                                expected_type_name(items_type),
                                 type_name(item)
                             ),
                             node.provenance.clone(),
@@ -526,11 +667,11 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
             let severity = if edge_kind.is_some_and(|kind| kind.cross_source) {
                 Severity::Hint
             } else {
-                severity_for(FindingCode::DanglingRef, profile)
+                severity_for(FindingCode::Vacancy, profile)
             };
             issues.push(Issue::new(
                 severity,
-                FindingCode::DanglingRef.as_str(),
+                FindingCode::Vacancy.as_str(),
                 format!(
                     "edge '{}'->'{}' (kind '{}'): target '{}' does not exist",
                     edge.src, edge.tgt, edge.kind, edge.tgt
@@ -542,7 +683,7 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
 
         if src_node.is_none() {
             issues.push(issue(
-                FindingCode::DanglingRef,
+                FindingCode::Vacancy,
                 format!(
                     "edge '{}'->'{}' (kind '{}'): source '{}' does not exist",
                     edge.src, edge.tgt, edge.kind, edge.src
@@ -584,6 +725,9 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
         .get("COVERAGE")
         .unwrap_or(&no_configs);
     for config in coverage_configs {
+        let where_conditions =
+            crate::profile::parse_condition_block(config.get("where"), "COVERAGE", "where")
+                .expect("profile loading validated COVERAGE where conditions");
         let mut keys = read_kind_keys(
             "COVERAGE",
             config,
@@ -646,7 +790,10 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
         };
 
         for node in graph.iter_nodes() {
-            if node.kind == target && !covered.contains(node.id.as_str()) {
+            if node.kind == target
+                && eval_conditions(&where_conditions, &node.attrs, true)
+                && !covered.contains(node.id.as_str())
+            {
                 let mut finding = issue(
                     FindingCode::Coverage,
                     format!(
@@ -695,6 +842,9 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
         .get("COVERAGE_DEEP")
         .unwrap_or(&no_configs);
     for config in deep_configs {
+        let where_conditions =
+            crate::profile::parse_condition_block(config.get("where"), "COVERAGE_DEEP", "where")
+                .expect("profile loading validated COVERAGE_DEEP where conditions");
         let mut keys = read_kind_keys(
             "COVERAGE_DEEP",
             config,
@@ -859,7 +1009,10 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
         };
 
         for node in graph.iter_nodes() {
-            if node.kind != target || covered.contains(node.id.as_str()) {
+            if node.kind != target
+                || !eval_conditions(&where_conditions, &node.attrs, true)
+                || covered.contains(node.id.as_str())
+            {
                 continue;
             }
             let id = node.id.as_str();
@@ -922,6 +1075,36 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
         }
     }
 
+    for constraint in profile.constraint_configs() {
+        let severity = constraint
+            .severity
+            .unwrap_or_else(|| severity_for(FindingCode::Constraint, profile));
+        for node in graph.iter_nodes() {
+            if node.kind != constraint.kind {
+                continue;
+            }
+            if !eval_conditions(&constraint.when, &node.attrs, true) {
+                continue;
+            }
+            let expect_fail = first_failing_condition(&constraint.expect, &node.attrs, true);
+            let reject_fail = first_failing_condition(&constraint.reject, &node.attrs, false);
+            let failure = expect_fail.or(reject_fail);
+            if let Some((attr, op_desc)) = failure {
+                let message = constraint
+                    .message
+                    .clone()
+                    .unwrap_or_else(|| format!("constraint failed: '{attr}' {op_desc}"));
+                issues.push(Issue::new(
+                    severity,
+                    FindingCode::Constraint.as_str(),
+                    message,
+                    node.provenance.clone(),
+                    Some(node.id.clone()),
+                ));
+            }
+        }
+    }
+
     issues.extend(apply_overrides(graph.adapter_issues(), profile));
 
     let mut issues = resolve_axes(issues, graph, profile);
@@ -958,7 +1141,7 @@ mod default_severity_tests {
         assert_eq!(default_severity(FindingCode::OrphanNode), Severity::Warning);
         assert_eq!(default_severity(FindingCode::Coverage), Severity::Warning);
         assert_eq!(
-            default_severity(FindingCode::AxisUnresolved),
+            default_severity(FindingCode::PathwayUnresolved),
             Severity::Warning
         );
     }
@@ -1000,13 +1183,14 @@ mod default_severity_tests {
                 src: "REQ-1".into(),
                 tgt: "REQ-2".into(),
                 kind: "derives".into(),
+                attrs: Default::default(),
             },
             Provenance::new("requirements.md", 1),
         );
 
         validate(&graph, &profile, false)
             .into_iter()
-            .find(|finding| finding.code == "DANGLING_REF")
+            .find(|finding| finding.code == "VACANCY")
             .expect("dangling edge produces a finding")
             .severity
     }

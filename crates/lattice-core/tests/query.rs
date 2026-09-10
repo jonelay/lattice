@@ -34,12 +34,12 @@ edge_kinds:
 "#;
 
 /// A small chain (T-1 verifies REQ-1 derives N-1) plus an orphan (N-2).
-const GRAPH_DOCUMENT: &str = r#"{"contract_version": "1.0",
+const GRAPH_DOCUMENT: &str = r#"{"interface_version": "1.0",
   "nodes": [
-    {"id": "T-1", "kind": "test", "attrs": {}, "provenance": {"file": "t.py", "line": 1}},
-    {"id": "REQ-1", "kind": "req", "attrs": {}, "provenance": {"file": "r.md", "line": 2}},
-    {"id": "N-1", "kind": "need", "attrs": {}, "provenance": {"file": "n.md", "line": 3}},
-    {"id": "N-2", "kind": "need", "attrs": {}, "provenance": {"file": "n.md", "line": 4}}],
+    {"id": "T-1", "kind": "test", "attrs": {"status": "active"}, "provenance": {"file": "t.py", "line": 1}},
+    {"id": "REQ-1", "kind": "req", "attrs": {"status": "deferred"}, "provenance": {"file": "r.md", "line": 2}},
+    {"id": "N-1", "kind": "need", "attrs": {"status": "active"}, "provenance": {"file": "n.md", "line": 3}},
+    {"id": "N-2", "kind": "need", "attrs": {"status": "deferred"}, "provenance": {"file": "n.md", "line": 4}}],
   "edges": [
     {"src": "T-1", "tgt": "REQ-1", "kind": "verifies", "provenance": {"file": "t.py", "line": 1}},
     {"src": "REQ-1", "tgt": "N-1", "kind": "derives", "provenance": {"file": "r.md", "line": 2}}]}"#;
@@ -92,7 +92,7 @@ fn counts_json_carries_tallies_as_numbers() {
 #[test]
 fn counts_includes_a_kind_the_profile_does_not_declare() {
     // MINIMAL_PROFILE declares only `req`/`derives`; the register carries more.
-    let document = r#"{"contract_version": "1.0",
+    let document = r#"{"interface_version": "1.0",
       "nodes": [{"id": "W-1", "kind": "widget", "attrs": {},
                  "provenance": {"file": "w.md", "line": 1}}]}"#;
     let case = Case::emitting(document);
@@ -127,6 +127,25 @@ fn orphans_kind_filter_restricts_the_answer() {
 }
 
 #[test]
+fn orphans_attribute_filter_restricts_the_answer() {
+    let case = graph_case();
+    let output = case.run(&[
+        "query",
+        "orphans",
+        "--filter",
+        "status=active",
+        "--format",
+        "plain",
+    ]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert!(
+        stdout(&output).contains("No orphans."),
+        "{}",
+        stdout(&output)
+    );
+}
+
+#[test]
 fn orphans_unknown_kind_exits_two() {
     let case = graph_case();
     let output = case.run(&["query", "orphans", "--kind", "widget"]);
@@ -138,7 +157,7 @@ fn orphans_unknown_kind_exits_two() {
 // referenced, so it is not standing alone, whatever became of the far end.
 #[test]
 fn a_node_named_by_an_edge_with_an_undeclared_far_endpoint_is_not_an_orphan() {
-    let document = r#"{"contract_version": "1.0",
+    let document = r#"{"interface_version": "1.0",
       "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {},
                  "provenance": {"file": "r.md", "line": 1}}],
       "edges": [{"src": "REQ-1", "tgt": "REQ-9", "kind": "derives",
@@ -186,6 +205,36 @@ fn reaches_edge_kind_restriction_cuts_the_closure() {
 }
 
 #[test]
+fn reaches_attribute_filter_does_not_cut_the_traversal() {
+    let case = graph_case();
+    let output = case.run(&[
+        "query",
+        "reaches",
+        "T-1",
+        "--filter",
+        "status=active",
+        "--format",
+        "plain",
+    ]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    let text = stdout(&output);
+    assert!(text.contains("N-1 need"), "{text}");
+    assert!(!text.contains("REQ-1 req"), "{text}");
+}
+
+#[test]
+fn invalid_attribute_filter_exits_two() {
+    let case = graph_case();
+    let output = case.run(&["query", "reaches", "T-1", "--filter", "status"]);
+    assert_eq!(code(&output), 2);
+    assert!(
+        stderr(&output).contains("invalid filter"),
+        "{}",
+        stderr(&output)
+    );
+}
+
+#[test]
 fn reached_by_walks_incoming_edges() {
     let case = graph_case();
     let output = case.run(&["query", "reached-by", "N-1", "--format", "plain"]);
@@ -213,7 +262,7 @@ fn reaches_unknown_edge_kind_exits_two() {
 
 #[test]
 fn an_undeclared_endpoint_is_never_reported_as_reached() {
-    let document = r#"{"contract_version": "1.0",
+    let document = r#"{"interface_version": "1.0",
       "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {},
                  "provenance": {"file": "r.md", "line": 1}}],
       "edges": [{"src": "REQ-1", "tgt": "REQ-9", "kind": "derives",
@@ -273,7 +322,7 @@ fn path_unknown_endpoint_exits_two() {
 
 #[test]
 fn error_severity_adapter_issues_reach_stderr_but_not_the_exit_code() {
-    let document = r#"{"contract_version": "1.0",
+    let document = r#"{"interface_version": "1.0",
       "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {},
                  "provenance": {"file": "r.md", "line": 1}}],
       "issues": [{"severity": "error", "code": "PARSE_ERROR", "message": "bad row",
@@ -319,18 +368,18 @@ fn git(dir: &Path, args: &[&str]) -> String {
     String::from_utf8_lossy(&output.stdout).trim().to_string()
 }
 
-/// The register at revision A: a chain of two nodes, one axis at M0.
-const DIFF_DOCUMENT_A: &str = r#"{"contract_version": "1.0",
+/// The register at revision A: a chain of two nodes, one pathway at M0.
+const DIFF_DOCUMENT_A: &str = r#"{"interface_version": "1.0",
   "nodes": [
     {"id": "REQ-1", "kind": "req", "attrs": {}, "provenance": {"file": "r.md", "line": 2}},
     {"id": "N-1", "kind": "need", "attrs": {"text": "a"}, "provenance": {"file": "n.md", "line": 3}}],
   "edges": [
     {"src": "REQ-1", "tgt": "N-1", "kind": "derives", "provenance": {"file": "r.md", "line": 2}}],
-  "axes": [{"name": "phase", "order": ["M0", "M1"], "current": "M0"}]}"#;
+  "pathways": [{"name": "phase", "order": ["M0", "M1"], "current": "M0"}]}"#;
 
 /// Revision B: REQ-1 merely moved lines, N-1's attrs changed, T-1 and its
-/// edge arrived, and the axis advanced.
-const DIFF_DOCUMENT_B: &str = r#"{"contract_version": "1.0",
+/// edge arrived, and the pathway advanced.
+const DIFF_DOCUMENT_B: &str = r#"{"interface_version": "1.0",
   "nodes": [
     {"id": "REQ-1", "kind": "req", "attrs": {}, "provenance": {"file": "r.md", "line": 7}},
     {"id": "N-1", "kind": "need", "attrs": {"text": "b"}, "provenance": {"file": "n.md", "line": 3}},
@@ -338,7 +387,7 @@ const DIFF_DOCUMENT_B: &str = r#"{"contract_version": "1.0",
   "edges": [
     {"src": "REQ-1", "tgt": "N-1", "kind": "derives", "provenance": {"file": "r.md", "line": 7}},
     {"src": "T-1", "tgt": "REQ-1", "kind": "verifies", "provenance": {"file": "t.py", "line": 1}}],
-  "axes": [{"name": "phase", "order": ["M0", "M1"], "current": "M1"}]}"#;
+  "pathways": [{"name": "phase", "order": ["M0", "M1"], "current": "M1"}]}"#;
 
 /// A case whose target is a git repo holding `doc.json` at two commits, with
 /// an adapter that emits whatever `doc.json` the materialized target carries.
@@ -368,7 +417,7 @@ fn a_revision_diffed_against_itself_is_empty() {
 }
 
 #[test]
-fn diff_reports_additions_changes_and_the_axis_but_not_a_move() {
+fn diff_reports_additions_changes_and_the_pathway_but_not_a_move() {
     let (case, rev_a, rev_b) = diff_case();
     let output = case.run(&["query", "diff", &rev_a, &rev_b, "--format", "plain"]);
     assert_eq!(code(&output), 0, "{}", stderr(&output));
@@ -377,7 +426,7 @@ fn diff_reports_additions_changes_and_the_axis_but_not_a_move() {
         "node added T-1 test",
         "node changed N-1 need",
         "edge added T-1 verifies REQ-1",
-        "axis changed phase",
+        "pathway changed phase",
     ] {
         assert!(text.contains(line), "missing '{line}' in:\n{text}");
     }
@@ -396,19 +445,19 @@ fn diff_json_carries_the_report_structured() {
     assert_eq!(value["nodes_added"][0]["id"], "T-1");
     assert_eq!(value["nodes_changed"][0]["id"], "N-1");
     assert_eq!(value["edges_added"][0]["src"], "T-1");
-    assert_eq!(value["axes_changed"][0], "phase");
+    assert_eq!(value["pathways_changed"][0], "phase");
     assert_eq!(value["nodes_removed"], serde_json::json!([]));
 }
 
-// A consumer adapter can embed the absolute target path in `file` attrs, so
-// two materialization directories would make every such node "changed" in a
+// An adapter may embed the absolute target path in `file` attrs, so two
+// materialization directories would make every such node "changed" in a
 // self-diff. Both revisions must land at the same path.
 #[test]
 fn a_target_path_embedded_in_attrs_does_not_diff() {
     let case = Case::with_profile(
         QUERY_PROFILE,
         r#"cat <<DOC
-{"contract_version": "1.0",
+{"interface_version": "1.0",
   "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {"file": "$4/r.md"},
              "provenance": {"file": "$4/r.md", "line": 1}}]}
 DOC"#,
@@ -488,7 +537,7 @@ fn at_reports_the_entries_declared_at_a_path() {
 fn at_a_missing_register_file_stays_queryable() {
     // The provenance path exists nowhere on disk; the issue names it, which
     // is exactly when the answer matters most.
-    let document = r#"{"contract_version": "1.0", "nodes": [],
+    let document = r#"{"interface_version": "1.0", "nodes": [],
       "issues": [{"severity": "error", "code": "PARSE_ERROR",
                   "message": "REQUIREMENTS.md not found at gone.md",
                   "provenance": {"file": "gone.md", "line": 0}, "node_id": null}]}"#;
@@ -523,7 +572,7 @@ fn at_an_existing_file_with_no_entries_is_an_empty_answer() {
 
 #[test]
 fn at_a_directory_argument_matches_the_files_beneath_it() {
-    let document = r#"{"contract_version": "1.0",
+    let document = r#"{"interface_version": "1.0",
       "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {},
                  "provenance": {"file": "specs/a.md", "line": 1}}]}"#;
     let case = Case::emitting(document);
@@ -536,7 +585,7 @@ fn at_a_directory_argument_matches_the_files_beneath_it() {
 fn at_a_relative_argument_matches_target_joined_provenance() {
     // The heredoc is unquoted so $4 — the adapter's --target value — lands in
     // the provenance, the way real adapters compose absolute paths.
-    let document = r#"{"contract_version": "1.0",
+    let document = r#"{"interface_version": "1.0",
       "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {},
                  "provenance": {"file": "$4/r.md", "line": 1}}]}"#;
     let case = Case::running(&format!("cat <<DOC\n{document}\nDOC"));
@@ -549,7 +598,7 @@ fn at_a_relative_argument_matches_target_joined_provenance() {
 fn at_a_finding_at_the_path_attached_to_an_entry_elsewhere_is_listed() {
     // The dangling edge is written in r.md but attaches to T-1, whose entry
     // lives at t.py — querying r.md must still surface the finding.
-    let document = r#"{"contract_version": "1.0",
+    let document = r#"{"interface_version": "1.0",
       "nodes": [
         {"id": "T-1", "kind": "test", "attrs": {}, "provenance": {"file": "t.py", "line": 1}}],
       "edges": [
@@ -558,7 +607,7 @@ fn at_a_finding_at_the_path_attached_to_an_entry_elsewhere_is_listed() {
     let output = case.run(&["query", "at", "r.md", "--format", "plain"]);
     assert_eq!(code(&output), 0, "{}", stderr(&output));
     let text = stdout(&output);
-    assert!(text.contains("DANGLING_REF"), "{text}");
+    assert!(text.contains("VACANCY"), "{text}");
     assert!(!text.contains("t.py"), "{text}");
 }
 
@@ -571,10 +620,8 @@ fn at_json_carries_entries_and_findings() {
     assert_eq!(value["path"], "r.md");
     assert_eq!(value["entries"][0]["id"], "REQ-1");
     assert_eq!(value["entries"].as_array().unwrap().len(), 1);
-    assert_eq!(
-        value["entries"][0]["edges"]["derives"],
-        serde_json::json!(["N-1"])
-    );
+    assert_eq!(value["entries"][0]["edges"][0]["tgt"], "N-1");
+    assert_eq!(value["entries"][0]["edges"][0]["kind"], "derives");
     assert!(value["findings"].is_array(), "{value}");
 }
 
@@ -591,7 +638,7 @@ fn at_an_absolute_argument_matches_relative_provenance() {
 
 #[test]
 fn at_an_absolute_directory_argument_matches_relative_provenance_beneath_it() {
-    let document = r#"{"contract_version": "1.0",
+    let document = r#"{"interface_version": "1.0",
       "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {},
                  "provenance": {"file": "specs/a.md", "line": 1}}]}"#;
     let case = Case::emitting(document);

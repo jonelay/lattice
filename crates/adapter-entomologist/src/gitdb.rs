@@ -2,7 +2,7 @@ use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Output, Stdio};
 
-use crate::document::Document;
+use adapter_core::Document;
 
 pub(crate) const BRANCH: &str = "entomologist-data";
 const REFS: [&str; 2] = [
@@ -36,11 +36,12 @@ pub(crate) fn resolve_commit(document: &mut Document, target: &Path) -> Option<S
                     target.display()
                 ),
                 ".",
+                0,
             );
             return None;
         }
         Err(error) => {
-            document.parse_error(format!("failed to run git: {error}"), ".");
+            document.parse_error(format!("failed to run git: {error}"), ".", 0);
             return None;
         }
     };
@@ -51,6 +52,7 @@ pub(crate) fn resolve_commit(document: &mut Document, target: &Path) -> Option<S
             document.parse_error(
                 format!("git repository root is not valid UTF-8: {error}"),
                 ".",
+                0,
             );
             return None;
         }
@@ -61,6 +63,7 @@ pub(crate) fn resolve_commit(document: &mut Document, target: &Path) -> Option<S
             document.parse_error(
                 format!("could not resolve git repository root: {error}"),
                 ".",
+                0,
             );
             return None;
         }
@@ -77,6 +80,7 @@ pub(crate) fn resolve_commit(document: &mut Document, target: &Path) -> Option<S
                 root.display()
             ),
             ".",
+            0,
         );
         return None;
     }
@@ -88,7 +92,7 @@ pub(crate) fn resolve_commit(document: &mut Document, target: &Path) -> Option<S
             }
             Ok(_) => {}
             Err(error) => {
-                document.parse_error(format!("failed to run git: {error}"), ".");
+                document.parse_error(format!("failed to run git: {error}"), ".", 0);
                 return None;
             }
         }
@@ -96,6 +100,7 @@ pub(crate) fn resolve_commit(document: &mut Document, target: &Path) -> Option<S
     document.parse_error(
         format!("repository has no '{BRANCH}' branch (local or origin)"),
         ".",
+        0,
     );
     None
 }
@@ -109,7 +114,7 @@ pub(crate) fn list_tree(
     let output = match git(target, &["ls-tree", "-r", "-z", commit]) {
         Ok(output) => output,
         Err(error) => {
-            document.parse_error(format!("git ls-tree failed for {commit}: {error}"), ".");
+            document.parse_error(format!("git ls-tree failed for {commit}: {error}"), ".", 0);
             return None;
         }
     };
@@ -120,6 +125,7 @@ pub(crate) fn list_tree(
                 String::from_utf8_lossy(&output.stderr).trim()
             ),
             ".",
+            0,
         );
         return None;
     }
@@ -131,7 +137,7 @@ pub(crate) fn list_tree(
         .filter(|r| !r.is_empty())
     {
         let Some(tab) = raw_record.iter().position(|byte| *byte == b'\t') else {
-            document.parse_error("git ls-tree returned a malformed record", ".");
+            document.parse_error("git ls-tree returned a malformed record", ".", 0);
             continue;
         };
         let meta = match std::str::from_utf8(&raw_record[..tab]) {
@@ -140,6 +146,7 @@ pub(crate) fn list_tree(
                 document.parse_error(
                     format!("git ls-tree metadata is not valid UTF-8: {error}"),
                     ".",
+                    0,
                 );
                 continue;
             }
@@ -147,7 +154,11 @@ pub(crate) fn list_tree(
         let path = match std::str::from_utf8(&raw_record[tab + 1..]) {
             Ok(path) => path.to_owned(),
             Err(error) => {
-                document.parse_error(format!("git ls-tree path is not valid UTF-8: {error}"), ".");
+                document.parse_error(
+                    format!("git ls-tree path is not valid UTF-8: {error}"),
+                    ".",
+                    0,
+                );
                 continue;
             }
         };
@@ -155,7 +166,7 @@ pub(crate) fn list_tree(
         let (Some(_mode), Some(object_type), Some(oid), None) =
             (fields.next(), fields.next(), fields.next(), fields.next())
         else {
-            document.parse_error(format!("{path}: malformed git ls-tree metadata"), ".");
+            document.parse_error(format!("{path}: malformed git ls-tree metadata"), ".", 0);
             continue;
         };
         entries.push(TreeEntry {

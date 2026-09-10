@@ -1,0 +1,189 @@
+{
+  "edges": [
+    {
+      "attrs": {},
+      "kind": "traces",
+      "provenance": {
+        "file": "tests.md",
+        "line": 1,
+        "source": "src"
+      },
+      "source": "src",
+      "source_kind": "src:test",
+      "src": "src:T1",
+      "target_kind": "dst:req",
+      "target_source": "dst",
+      "tgt": "dst:R1"
+    },
+    {
+      "attrs": {},
+      "kind": "traces",
+      "provenance": {
+        "file": "tests.md",
+        "line": 1,
+        "source": "src"
+      },
+      "source": "src",
+      "source_kind": "src:test",
+      "src": "src:T1",
+      "tgt": "src:R-absent"
+    },
+    {
+      "attrs": {},
+      "kind": "traces",
+      "provenance": {
+        "file": "tests.md",
+        "line": 2,
+        "source": "src"
+      },
+      "source": "src",
+      "source_kind": "src:test",
+      "src": "src:T2",
+      "target_kind": "dst:req",
+      "target_source": "dst",
+      "tgt": "dst:DUP"
+    }
+  ],
+  "findings": [
+    {
+      "code": "CROSS_SOURCE_DUPLICATE_ID",
+      "file": "tests.md",
+      "line": 3,
+      "locations": [
+        {
+          "file": "tests.md",
+          "line": 3,
+          "source": "src"
+        },
+        {
+          "file": "reqs.md",
+          "line": 3,
+          "source": "dst"
+        }
+      ],
+      "message": "node ID 'DUP' occurs in sources src, dst",
+      "node_id": "DUP",
+      "severity": "error",
+      "sources": [
+        "src",
+        "dst"
+      ]
+    },
+    {
+      "code": "VACANCY",
+      "file": "tests.md",
+      "line": 1,
+      "message": "edge 'src:T1'->'R-absent' (kind 'traces'): target 'R-absent' does not exist in an allowed source kind",
+      "node_id": "src:T1",
+      "severity": "warning",
+      "source": "src"
+    },
+    {
+      "code": "COVERAGE_UNKNOWN",
+      "file": "<profile>",
+      "line": 0,
+      "message": "1 of 3 node(s) of kind 'src:test' (33.3%) carry no outgoing 'traces' edge; coverage state for 'dst:req' is unknown",
+      "node_id": null,
+      "severity": "hint"
+    },
+    {
+      "code": "COVERAGE",
+      "file": "reqs.md",
+      "line": 2,
+      "message": "node 'dst:R2' (kind 'dst:req') has no incoming 'traces' edge",
+      "node_id": "dst:R2",
+      "severity": "warning",
+      "source": "dst",
+      "state": "unknown"
+    }
+  ],
+  "header": {
+    "manifest_version": "1.0.0",
+    "name": "synthetic-fuse",
+    "version": "1.0.0"
+  },
+  "nodes": [
+    {
+      "attrs": {
+        "title": "first test"
+      },
+      "id": "src:T1",
+      "kind": "src:test",
+      "provenance": {
+        "file": "tests.md",
+        "line": 1,
+        "source": "src"
+      }
+    },
+    {
+      "attrs": {
+        "title": "second test"
+      },
+      "id": "src:T2",
+      "kind": "src:test",
+      "provenance": {
+        "file": "tests.md",
+        "line": 2,
+        "source": "src"
+      }
+    },
+    {
+      "attrs": {
+        "title": "duplicate id"
+      },
+      "id": "src:DUP",
+      "kind": "src:test",
+      "provenance": {
+        "file": "tests.md",
+        "line": 3,
+        "source": "src"
+      }
+    },
+    {
+      "attrs": {
+        "title": "first requirement"
+      },
+      "id": "dst:R1",
+      "kind": "dst:req",
+      "provenance": {
+        "file": "reqs.md",
+        "line": 1,
+        "source": "dst"
+      }
+    },
+    {
+      "attrs": {
+        "title": "second requirement"
+      },
+      "id": "dst:R2",
+      "kind": "dst:req",
+      "provenance": {
+        "file": "reqs.md",
+        "line": 2,
+        "source": "dst"
+      }
+    },
+    {
+      "attrs": {
+        "title": "duplicate id in dst"
+      },
+      "id": "dst:DUP",
+      "kind": "dst:req",
+      "provenance": {
+        "file": "reqs.md",
+        "line": 3,
+        "source": "dst"
+      }
+    }
+  ],
+  "pathways": [
+    {
+      "current": "alpha",
+      "name": "src:phase",
+      "order": [
+        "alpha",
+        "beta"
+      ]
+    }
+  ]
+}

@@ -67,8 +67,8 @@ def _nodes(document: dict) -> dict[str, dict]:
     return {node["id"]: node for node in document["nodes"]}
 
 
-def test_contract_version_is_1_1(document):
-    assert document["contract_version"] == "1.1"
+def test_interface_version_is_1_2(document):
+    assert document["interface_version"] == "1.2"
 
 
 def test_labels_select_node_kinds(document):
@@ -113,15 +113,15 @@ def test_provenance_uses_public_github_location(document):
 
 def test_pull_requests_are_skipped_without_a_parse_error(document):
     assert "#5" not in _nodes(document)
-    assert not document["issues"]
+    assert not document["findings"]
 
 
 def test_gh_api_failure_is_reported(mini_github_repo, tmp_path):
     document = _run_adapter(mini_github_repo, tmp_path, fail=True)
     assert document["nodes"] == []
-    assert len(document["issues"]) == 1
-    assert document["issues"][0]["code"] == "PARSE_ERROR"
-    assert "fixture authentication failure" in document["issues"][0]["message"]
+    assert len(document["findings"]) == 1
+    assert document["findings"][0]["code"] == "PARSE_ERROR"
+    assert "fixture authentication failure" in document["findings"][0]["message"]
 
 
 def test_missing_gh_is_parse_error_with_zero_exit(tmp_path):
@@ -143,8 +143,8 @@ def test_missing_gh_is_parse_error_with_zero_exit(tmp_path):
     )
     assert result.returncode == 0, result.stderr
     document = json.loads(result.stdout)
-    assert [issue["code"] for issue in document["issues"]] == ["PARSE_ERROR"]
-    assert "failed to run gh" in document["issues"][0]["message"]
+    assert [issue["code"] for issue in document["findings"]] == ["PARSE_ERROR"]
+    assert "failed to run gh" in document["findings"][0]["message"]
 
 
 def test_malformed_json_from_gh_is_parse_error(tmp_path):
@@ -171,7 +171,7 @@ def test_malformed_json_from_gh_is_parse_error(tmp_path):
     )
     assert result.returncode == 0, result.stderr
     document = json.loads(result.stdout)
-    assert [issue["code"] for issue in document["issues"]] == ["PARSE_ERROR"]
+    assert [issue["code"] for issue in document["findings"]] == ["PARSE_ERROR"]
 
 
 @needs_core

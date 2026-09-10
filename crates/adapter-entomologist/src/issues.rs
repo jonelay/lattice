@@ -1,9 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
 
+use adapter_core::{Document, Edge, Node, Provenance};
 use regex::Regex;
+use serde_json::Value;
 
-use crate::document::{Attributes, Document, Edge, Node, Provenance};
 use crate::gitdb::{self, BRANCH, TreeEntry};
 
 #[derive(Debug, Default)]
@@ -43,6 +44,7 @@ fn parse_batch(
                 document.parse_error(
                     format!("{path}: could not read object: {error}"),
                     branch_file(path),
+                    0,
                 );
             }
             return HashMap::new();
@@ -59,6 +61,7 @@ fn parse_batch(
             document.parse_error(
                 format!("{path}: malformed response from git cat-file"),
                 branch_file(path),
+                0,
             );
             continue;
         };
@@ -70,6 +73,7 @@ fn parse_batch(
             document.parse_error(
                 format!("{path}: object not in the repository"),
                 branch_file(path),
+                0,
             );
             continue;
         }
@@ -77,6 +81,7 @@ fn parse_batch(
             document.parse_error(
                 format!("{path}: malformed response from git cat-file"),
                 branch_file(path),
+                0,
             );
             continue;
         };
@@ -84,6 +89,7 @@ fn parse_batch(
             document.parse_error(
                 format!("{path}: malformed response from git cat-file"),
                 branch_file(path),
+                0,
             );
             continue;
         };
@@ -91,6 +97,7 @@ fn parse_batch(
             document.parse_error(
                 format!("{path}: truncated response from git cat-file"),
                 branch_file(path),
+                0,
             );
             position = output.stdout.len();
             continue;
@@ -106,6 +113,7 @@ fn parse_batch(
                     python_utf8_error(error, blob)
                 ),
                 branch_file(path),
+                0,
             ),
         }
     }
@@ -137,6 +145,7 @@ fn classify_entries(
             document.parse_error(
                 format!("{}: unexpected {} entry", entry.path, entry.object_type),
                 branch_file(&entry.path),
+                0,
             );
         } else if fetched.is_match(&entry.path) {
             wanted.push((entry.path, entry.oid));
@@ -159,6 +168,7 @@ fn classify_entries(
             document.parse_error(
                 format!("{}: no reader for this file shape", entry.path),
                 branch_file(&entry.path),
+                0,
             );
         }
     }
@@ -178,33 +188,46 @@ pub(crate) fn read(document: &mut Document, target: &Path, entries: Vec<TreeEntr
         let author_path = format!("{id}/author");
         let assignee_path = format!("{id}/assignee");
         let state_path = format!("{id}/state");
-        let attrs = Attributes {
-            summary: texts.get(&description_path).map(|text| {
-                text.split_once('\n')
-                    .map_or(text.as_str(), |(first, _)| first)
-                    .trim()
-                    .to_owned()
-            }),
-            author: texts.get(&author_path).map(|text| text.trim().to_owned()),
-            assignee: texts.get(&assignee_path).map(|text| text.trim().to_owned()),
-            state: texts.get(&state_path).map_or_else(
-                || (!fetched_paths.contains(state_path.as_str())).then(|| "new".to_owned()),
-                |text| Some(text.trim().to_owned()),
-            ),
-            tags: (!issue.tags.is_empty()).then_some(issue.tags),
-        };
+        let mut attrs = BTreeMap::new();
+        if let Some(summary) = texts.get(&description_path).map(|text| {
+            text.split_once('\n')
+                .map_or(text.as_str(), |(first, _)| first)
+                .trim()
+                .to_owned()
+        }) {
+            attrs.insert("summary".to_owned(), Value::String(summary));
+        }
+        if let Some(author) = texts.get(&author_path).map(|text| text.trim().to_owned()) {
+            attrs.insert("author".to_owned(), Value::String(author));
+        }
+        if let Some(assignee) = texts.get(&assignee_path).map(|text| text.trim().to_owned()) {
+            attrs.insert("assignee".to_owned(), Value::String(assignee));
+        }
+        if let Some(state) = texts.get(&state_path).map_or_else(
+            || (!fetched_paths.contains(state_path.as_str())).then(|| "new".to_owned()),
+            |text| Some(text.trim().to_owned()),
+        ) {
+            attrs.insert("state".to_owned(), Value::String(state));
+        }
+        if !issue.tags.is_empty() {
+            attrs.insert(
+                "tags".to_owned(),
+                Value::Array(issue.tags.into_iter().map(Value::String).collect()),
+            );
+        }
         document.nodes.push(Node {
             id: id.clone(),
             kind: "issue",
             attrs,
-            provenance: Provenance::new(branch_file(&id)),
+            provenance: Provenance::new_file(branch_file(&id)),
         });
         for dependency in issue.dependencies {
             document.edges.push(Edge {
                 src: id.clone(),
                 tgt: dependency.clone(),
                 kind: "depends_on",
-                provenance: Provenance::new(branch_file(&format!(
+                attrs: BTreeMap::new(),
+                provenance: Provenance::new_file(branch_file(&format!(
                     "{id}/dependencies/{dependency}"
                 ))),
             });

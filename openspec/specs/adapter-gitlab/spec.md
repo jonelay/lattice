@@ -1,7 +1,7 @@
 # adapter-gitlab Specification
 
 ## Purpose
-Reads GitLab issues and their issue links through `glab api` into a contract
+Reads GitLab issues and their issue links through `glab api` into an interface
 document, so a GitLab project can serve as a typed lattice register without
 copying its issue data into repository files.
 
@@ -22,7 +22,7 @@ resolved schema is not `1`, an empty default kind or configured project, a mappe
 or default node kind absent from `node_kinds`, and an edge pattern whose edge
 kind is empty or undeclared, whose regex is invalid, or whose regex has no capture
 group. These are broken setup, not target findings: the adapter SHALL write an
-error to stderr and exit 2 rather than emit a partial contract document.
+error to stderr and exit 2 rather than emit a partial interface document.
 
 Verified by: `cargo test -p adapter-gitlab`, and `.venv/bin/python -m pytest tests/test_adapter_gitlab.py`
 
@@ -36,7 +36,7 @@ Verified by: `cargo test -p adapter-gitlab`, and `.venv/bin/python -m pytest tes
 
 - **WHEN** an `adapter.edge_patterns` regex has no capture group for the target IID
 - **THEN** profile loading fails and the adapter exits 2 without emitting a
-  contract document
+  interface document
 
 #### Scenario: Adapter names an undeclared node kind
 
@@ -97,7 +97,7 @@ The first label in the response whose exact text appears in
 `gitlab:<namespace/project>#<iid>` at line 0, giving every node and issue-derived
 edge a stable source even though the data did not come from a file.
 
-Verified by: `.venv/bin/python -m pytest tests/test_adapter_gitlab.py -k "contract_version_and_all_issue_nodes or labels_choose_node_kinds or provenance_names"`, and
+Verified by: `.venv/bin/python -m pytest tests/test_adapter_gitlab.py -k "interface_version_and_all_issue_nodes or labels_choose_node_kinds or provenance_names"`, and
 `cargo test -p adapter-gitlab maps_gitlab_fields_labels_and_description_edges`
 
 #### Scenario: A mapped label chooses the kind
@@ -159,7 +159,7 @@ not a finding.
 
 The adapter SHALL NOT require a captured target to appear in the fetched issue
 set: endpoint resolution belongs to core validation, where an absent target can
-surface as `DANGLING_REF`. A match whose first capture is absent or is not an
+surface as `VACANCY`. A match whose first capture is absent or is not an
 unsigned integer SHALL instead produce a `PARSE_ERROR` on the source issue and no
 edge for that match, while later matches and issues continue.
 
@@ -218,7 +218,7 @@ Verified by: `cargo test -p adapter-gitlab link_fetches_are_bounded_and_failures
 #### Scenario: A link worker panics
 
 - **WHEN** a link-fetch worker panics
-- **THEN** the adapter propagates the panic and does not emit a partial contract
+- **THEN** the adapter propagates the panic and does not emit a partial interface document
   document as a successful read
 
 ### Requirement: Map only confirmed local issue links to directed edges
@@ -280,13 +280,13 @@ The adapter SHALL decode the paginated issues response first as a JSON array and
 then decode each element as a GitLab issue. If the complete issues response is
 malformed JSON, `glab` cannot be run, or `glab api` exits non-zero, the adapter
 SHALL emit one `PARSE_ERROR` at `gitlab:<namespace/project>`, emit no nodes, write
-the contract document, and exit 0. If one array element has a malformed issue
+the interface document, and exit 0. If one array element has a malformed issue
 shape, the adapter SHALL emit a `PARSE_ERROR` identifying its one-based response
 position, skip only that element, and continue with every decodable issue.
 
 This boundary is deliberate: API data and command availability are facts about
 the attempted input read and must not disappear as an adapter crash. The adapter
-SHALL emit contract version `1.1`; a successfully written document means adapter
+SHALL emit interface version `1.2`; a successfully written document means adapter
 exit 0 even when its only content is a `PARSE_ERROR`. Profile-loading,
 serialization, stdout-write, and propagated panic failures SHALL instead exit 2.
 The adapter itself SHALL NOT use exit 1; that is the core's result for validation
@@ -311,7 +311,7 @@ Verified by: `.venv/bin/python -m pytest tests/test_adapter_gitlab.py -k "glab_a
 #### Scenario: glab is unavailable
 
 - **WHEN** the project is known but the `glab` program cannot be run
-- **THEN** the adapter writes a contract document carrying `PARSE_ERROR` and exits
+- **THEN** the adapter writes an interface document carrying `PARSE_ERROR` and exits
   0
 
 ### Requirement: Serve as the hermetic GitLab gate
@@ -321,7 +321,7 @@ the builder-constructed `tests/fixtures/mini-gitlab` repository SHALL exit 0 and
 produce no error-severity findings. The fixture's `glab` stub SHALL prove that the
 issues endpoint is project-encoded and paginated and that per-issue link endpoints
 are called without the issues pagination flag. The adapter-level fixture checks
-SHALL additionally establish contract version `1.1`, exactly nodes `#1` through
+SHALL additionally establish interface version `1.2`, exactly nodes `#1` through
 `#4`, label-selected and default kinds, declared attrs and provenance, and both
 description-derived and issue-link-derived edges. Checking graph content beside
 the clean finding result prevents an empty read from passing as success.
@@ -344,5 +344,5 @@ Verified by: `.venv/bin/python -m pytest tests/test_adapter_gitlab.py -k gate`, 
 
 - **WHEN** the adapter is invoked directly with `--profile` and `--target` and
   the stub returns malformed API input
-- **THEN** it writes a contract document to stdout and exits 0, carrying the
+- **THEN** it writes an interface document to stdout and exits 0, carrying the
   malformed input as `PARSE_ERROR` rather than using a non-zero adapter exit

@@ -1,0 +1,7 @@
+manifest_version: '1.0.0'
+name: synthetic-fuse
+version: '1.0.0'
+fuse_profile: synthetic.fuse-profile.yaml
+sources:
+  - {name: src, profile: synthetic.fuse-src-profile.yaml, adapter: unused, target: unused}
+  - {name: dst, profile: synthetic.fuse-dst-profile.yaml, adapter: unused, target: unused}

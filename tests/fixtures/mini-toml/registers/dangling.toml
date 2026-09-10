@@ -3,7 +3,7 @@
 # dropped them would hide the finding.
 #
 # `not_yet` sits at a stage the register has not reached, so its DANGLING_REF is
-# demoted to info by the axis binding. `overdue` sits at the current stage, so
+# demoted to info by the pathway binding. `overdue` sits at the current stage, so
 # its finding stands.
 
 [register]

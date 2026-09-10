@@ -326,7 +326,7 @@ def test_unparseable_python_file_is_reported_not_guessed(profile, tmp_path):
     assert built.has_node("tests/test_good.py::test_b")
 
 
-# Requirement: Run as a stdlib-only contract program
+# Requirement: Run as a stdlib-only interface program
 def test_adapter_program_exits_zero_on_malformed_input(mini_target, tmp_path):
     from conftest import resolve_profile
 
@@ -338,7 +338,7 @@ def test_adapter_program_exits_zero_on_malformed_input(mini_target, tmp_path):
     )
     assert result.returncode == 0, result.stderr
     document = json.loads(result.stdout)
-    assert [i for i in document["issues"] if i["code"] == "PARSE_ERROR"]
+    assert [i for i in document["findings"] if i["code"] == "PARSE_ERROR"]
 
 
 # --- the standing gate ----------------------------------------------------
@@ -353,7 +353,7 @@ def test_gate_builds_nodes_and_edges(graph):
     assert edges, "no edges built, so no cross-reference was actually checked"
 
 
-# Requirement: Run as a stdlib-only contract program
+# Requirement: Run as a stdlib-only interface program
 @needs_core
 def test_gate_runs_through_the_core(mini_target):
     result = subprocess.run(
@@ -378,7 +378,7 @@ def test_gate_dangling_citation_is_an_error_and_coverage_a_hint(mini_target):
     )
     assert result.returncode == 1, f"dangling citations must fail the run: {result.stderr}"
     findings = json.loads(result.stdout)["findings"]
-    dangling = [f for f in findings if f["code"] == "DANGLING_REF"]
+    dangling = [f for f in findings if f["code"] == "VACANCY"]
     assert dangling and all(f["severity"] == "error" for f in dangling)
     coverage = [f for f in findings if f["code"] == "COVERAGE"]
     assert coverage and all(f["severity"] == "hint" for f in coverage)

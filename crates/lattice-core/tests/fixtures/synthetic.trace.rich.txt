@@ -35,7 +35,7 @@ REQ-0011             req        The report shall attach diagno     1     1
 02-2.2               spec-goal  Leave one specification goal d     0     1
   WARNING ORPHAN_NODE docs/spec/02-reporting.md:42 node '02-2.2' has no edges
 tests/test_register.py::TestRendering::test_long_identifier_and_summary_columns test       test_long_identifier_and_summa     2     1
-  ERROR   DANGLING_REF tests/test_register.py:36 edge 'tests/test_register.py::TestRendering::test_long_identifier_and_summary_columns'->'REQ-9999' (kind 'verifies'): target 'REQ-9999' does not exist
+  ERROR   VACANCY tests/test_register.py:36 edge 'tests/test_register.py::TestRendering::test_long_identifier_and_summary_columns'->'REQ-9999' (kind 'verifies'): target 'REQ-9999' does not exist
 tests/test_register.py::test_direct_evidence test       test_direct_evidence               1     1
   HINT    REVIEW_SUGGESTION tests/test_register.py:13 synthetic hint demonstrates the lowest-severity rendering
 tests/test_register.py::test_duplicate_evidence_path test       test_duplicate_evidence_path       1     0

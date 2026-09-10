@@ -11,8 +11,8 @@ use serde::ser::{Serialize, SerializeMap, SerializeSeq, Serializer};
 use serde_json::Value;
 
 use crate::types::{
-    AtReport, CountsReport, DiffReport, Issue, OrphansReport, PathReport, ReachReport, Severity,
-    SummaryReport, TraceEntry, TraceReport,
+    AtReport, CountsReport, DiffReport, FuseReport, Issue, OrphansReport, PathReport, PathwayEntry,
+    ReachReport, Severity, SummaryReport, TraceEdge, TraceEntry, TraceReport,
 };
 
 const SEVERITY_COLORS: [(Severity, &str); 4] = [
@@ -458,9 +458,43 @@ impl Serialize for TraceFindingsJson<'_> {
 }
 
 #[derive(DeriveSerialize)]
+struct TraceEdgeJson<'a> {
+    tgt: &'a str,
+    kind: &'a str,
+    attrs: &'a serde_json::Map<String, Value>,
+    provenance: ProvenanceJson<'a>,
+}
+
+impl<'a> From<&'a TraceEdge> for TraceEdgeJson<'a> {
+    fn from(edge: &'a TraceEdge) -> Self {
+        Self {
+            tgt: &edge.tgt,
+            kind: &edge.kind,
+            attrs: &edge.attrs,
+            provenance: ProvenanceJson::from(&edge.provenance),
+        }
+    }
+}
+
+struct TraceEdgesJson<'a>(&'a [TraceEdge]);
+
+impl Serialize for TraceEdgesJson<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut sequence = serializer.serialize_seq(Some(self.0.len()))?;
+        for edge in self.0 {
+            sequence.serialize_element(&TraceEdgeJson::from(edge))?;
+        }
+        sequence.end()
+    }
+}
+
+#[derive(DeriveSerialize)]
 struct TraceEntryJson<'a> {
     attrs: &'a BTreeMap<String, Value>,
-    edges: &'a BTreeMap<String, Vec<String>>,
+    edges: TraceEdgesJson<'a>,
     findings: TraceFindingsJson<'a>,
     id: &'a str,
     kind: &'a str,
@@ -478,7 +512,7 @@ impl Serialize for TraceEntriesJson<'_> {
         for entry in self.0 {
             sequence.serialize_element(&TraceEntryJson {
                 attrs: &entry.attrs,
-                edges: &entry.edges,
+                edges: TraceEdgesJson(&entry.edges),
                 findings: TraceFindingsJson(&entry.findings),
                 id: &entry.id,
                 kind: &entry.kind,
@@ -489,10 +523,37 @@ impl Serialize for TraceEntriesJson<'_> {
     }
 }
 
+struct PathwaysJson<'a>(&'a [PathwayEntry]);
+
+impl Serialize for PathwaysJson<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut sequence = serializer.serialize_seq(Some(self.0.len()))?;
+        for pathway in self.0 {
+            sequence.serialize_element(&PathwayEntryJson {
+                name: &pathway.name,
+                order: &pathway.order,
+                current: &pathway.current,
+            })?;
+        }
+        sequence.end()
+    }
+}
+
+#[derive(DeriveSerialize)]
+struct PathwayEntryJson<'a> {
+    name: &'a str,
+    order: &'a [String],
+    current: &'a str,
+}
+
 #[derive(DeriveSerialize)]
 struct TraceJson<'a> {
     entries: TraceEntriesJson<'a>,
     header: &'a BTreeMap<String, String>,
+    pathways: PathwaysJson<'a>,
     unattachable_findings: TraceFindingsJson<'a>,
 }
 
@@ -500,6 +561,7 @@ fn format_trace_json(report: &TraceReport) -> String {
     render_json(&TraceJson {
         entries: TraceEntriesJson(&report.entries),
         header: &report.header,
+        pathways: PathwaysJson(&report.pathways),
         unattachable_findings: TraceFindingsJson(&report.unattachable_findings),
     })
 }
@@ -901,7 +963,7 @@ fn format_counts_rich(report: &CountsReport) -> String {
 }
 
 /// The diff's shared line list: one line per difference, in a fixed section
-/// order (nodes added/removed/changed, edges added/removed, axes).
+/// order (nodes added/removed/changed, edges added/removed, pathways).
 fn diff_lines(report: &DiffReport) -> Vec<String> {
     let mut lines = Vec::new();
     for n in &report.nodes_added {
@@ -919,8 +981,8 @@ fn diff_lines(report: &DiffReport) -> Vec<String> {
     for e in &report.edges_removed {
         lines.push(format!("edge removed {} {} {}", e.src, e.kind, e.tgt));
     }
-    for name in &report.axes_changed {
-        lines.push(format!("axis changed {name}"));
+    for name in &report.pathways_changed {
+        lines.push(format!("pathway changed {name}"));
     }
     lines
 }
@@ -961,7 +1023,7 @@ impl Serialize for EdgeRefsJson<'_> {
 fn format_diff_json(report: &DiffReport) -> String {
     #[derive(DeriveSerialize)]
     struct DiffJson<'a> {
-        axes_changed: &'a [String],
+        pathways_changed: &'a [String],
         edges_added: EdgeRefsJson<'a>,
         edges_removed: EdgeRefsJson<'a>,
         nodes_added: NodeRefsJson<'a>,
@@ -972,7 +1034,7 @@ fn format_diff_json(report: &DiffReport) -> String {
     }
 
     render_json(&DiffJson {
-        axes_changed: &report.axes_changed,
+        pathways_changed: &report.pathways_changed,
         edges_added: EdgeRefsJson(&report.edges_added),
         edges_removed: EdgeRefsJson(&report.edges_removed),
         nodes_added: NodeRefsJson(&report.nodes_added),
@@ -1056,6 +1118,7 @@ pub enum Payload<'a> {
     Findings(&'a [Issue]),
     Summary(&'a SummaryReport),
     Trace(&'a TraceReport),
+    Fuse(&'a FuseReport),
     At(&'a AtReport),
     Reach(&'a ReachReport),
     Path(&'a PathReport),
@@ -1079,6 +1142,12 @@ impl<'a> From<&'a Vec<Issue>> for Payload<'a> {
 impl<'a> From<&'a SummaryReport> for Payload<'a> {
     fn from(report: &'a SummaryReport) -> Self {
         Payload::Summary(report)
+    }
+}
+
+impl<'a> From<&'a FuseReport> for Payload<'a> {
+    fn from(report: &'a FuseReport) -> Self {
+        Payload::Fuse(report)
     }
 }
 
@@ -1153,6 +1222,12 @@ pub fn output_result<'a>(
             "rich" => Ok(format_summary_rich(report)),
             other => Err(UnknownFormat(other.to_string())),
         },
+        Payload::Fuse(report) => match format {
+            "plain" => Ok(format_fuse_plain(report)),
+            "json" => Ok(format_fuse_json(report)),
+            "rich" => Ok(format_fuse_rich(report)),
+            other => Err(UnknownFormat(other.to_string())),
+        },
         Payload::Trace(report) => match format {
             "plain" => Ok(format_trace_plain(report)),
             "json" => Ok(format_trace_json(report)),
@@ -1196,4 +1271,152 @@ pub fn output_result<'a>(
             other => Err(UnknownFormat(other.to_string())),
         },
     }
+}
+
+fn fuse_provenance_json(provenance: &crate::types::FuseProvenance) -> Value {
+    serde_json::json!({"source": provenance.source, "file": provenance.location.file, "line": provenance.location.line})
+}
+
+fn format_fuse_json(report: &FuseReport) -> String {
+    let nodes: Vec<_> = report
+        .nodes
+        .iter()
+        .map(|node| {
+            serde_json::json!({
+                "id": node.id, "kind": node.kind, "attrs": node.attrs,
+                "provenance": fuse_provenance_json(&node.provenance),
+            })
+        })
+        .collect();
+    let edges: Vec<_> = report
+        .edges
+        .iter()
+        .map(|edge| {
+            let mut value = serde_json::json!({
+                "src": edge.src, "tgt": edge.tgt, "kind": edge.kind, "attrs": edge.attrs,
+                "source": edge.provenance.source, "source_kind": edge.source_kind,
+                "provenance": fuse_provenance_json(&edge.provenance),
+            });
+            if let Some(kind) = &edge.target_kind {
+                value["target_kind"] = kind.clone().into();
+            }
+            if let Some(source) = &edge.target_source {
+                value["target_source"] = source.clone().into();
+            }
+            value
+        })
+        .collect();
+    let findings: Vec<_> = report
+        .findings
+        .iter()
+        .map(|finding| {
+            let mut value = serde_json::to_value(FindingJson::from(&finding.issue))
+                .expect("finding serializes");
+            if let Some(source) = &finding.source {
+                value["source"] = source.clone().into();
+            }
+            if !finding.locations.is_empty() {
+                value["sources"] = serde_json::json!(
+                    finding
+                        .locations
+                        .iter()
+                        .map(|p| &p.source)
+                        .collect::<Vec<_>>()
+                );
+                value["locations"] =
+                    Value::Array(finding.locations.iter().map(fuse_provenance_json).collect());
+            }
+            value
+        })
+        .collect();
+    render_json(&serde_json::json!({
+        "header": report.header, "nodes": nodes, "edges": edges,
+        "pathways": PathwaysJson(&report.pathways), "findings": findings,
+    }))
+}
+
+fn format_fuse_plain(report: &FuseReport) -> String {
+    format_fuse_text(report, false)
+}
+fn format_fuse_rich(report: &FuseReport) -> String {
+    format_fuse_text(report, true)
+}
+
+fn format_fuse_text(report: &FuseReport, rich: bool) -> String {
+    let mut lines = vec![format!(
+        "Fuse {} {}: {} nodes, {} edges, {} pathways",
+        report
+            .header
+            .get("name")
+            .map(String::as_str)
+            .unwrap_or("<unknown>"),
+        report
+            .header
+            .get("version")
+            .map(String::as_str)
+            .unwrap_or(""),
+        report.nodes.len(),
+        report.edges.len(),
+        report.pathways.len()
+    )];
+    for node in &report.nodes {
+        lines.push(format!(
+            "{} [{}] {}",
+            node.id, node.kind, node.provenance.location
+        ));
+    }
+    for edge in &report.edges {
+        lines.push(format!(
+            "{} --{}--> {}{}",
+            edge.src,
+            edge.kind,
+            edge.tgt,
+            if edge.target_kind.is_some() {
+                ""
+            } else {
+                " (unresolved)"
+            }
+        ));
+    }
+    for pathway in &report.pathways {
+        lines.push(format!(
+            "{}: {} (current: {})",
+            pathway.name,
+            pathway.order.join(" -> "),
+            pathway.current
+        ));
+    }
+    for finding in &report.findings {
+        let issue = &finding.issue;
+        let severity = if rich {
+            format!(
+                "{}{}{}",
+                color_for(issue.severity),
+                issue.severity.as_upper(),
+                RESET
+            )
+        } else {
+            issue.severity.as_upper().into()
+        };
+        let source = finding
+            .source
+            .as_deref()
+            .map(str::to_owned)
+            .unwrap_or_else(|| {
+                finding
+                    .locations
+                    .iter()
+                    .map(|p| p.source.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            });
+        lines.push(format!(
+            "{severity} {} [{}] {} {}",
+            issue.code, source, issue.provenance, issue.message
+        ));
+    }
+    if report.findings.is_empty() {
+        lines.push("No findings.".into());
+    }
+    lines.join("\n")
 }

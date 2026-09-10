@@ -12,11 +12,36 @@ from the register at ask time, never stored.
 Every answer SHALL be computed from a live adapter run at invocation time; no
 query result is ever written back or read from a stored artifact.
 
+The node-returning queries `reaches`, `reached-by`, `orphans`, `counts`, and `at`
+SHALL accept a repeatable `--filter <condition>` option. All filters are evaluated
+against each candidate node's attrs and all SHALL match for that node to be included.
+No `--filter` means no filtering. Reachability filtering SHALL restrict only the
+reported closure, never traversal. Counts SHALL filter node tallies while edge tallies
+remain totals over the graph. For `at`, filters SHALL restrict trace entries; findings
+at the selected path remain answer content independently of whether their attached node
+matches.
+
+Each condition SHALL split on the first recognized operator, checking the multi-character
+operators `>=`, `<=`, `!=`, and `~=` before `>`, `<`, and `=`. The operators map to the
+shared condition evaluator as equality, inequality, regex match, and the four ordering
+comparisons. Equality and inequality values SHALL parse as integer, then boolean, then
+string. Ordering values SHALL parse as integer, then string. Conditions are type-aware,
+matching profile condition semantics. A condition with no recognized operator, or an
+invalid regex, SHALL make the command un-runnable and exit 2.
+
 Verified by: `cargo test --test query`
 
 #### Scenario: Query runs the adapter live
 - **WHEN** the user runs `lattice query counts --profile p.yaml --adapter ./a --target /repo`
 - **THEN** lattice loads the profile, runs the adapter, ingests its document, and answers from that graph
+
+#### Scenario: Repeated attribute filters use AND
+- **WHEN** a node-returning query has `--filter status=active --filter priority>=2`
+- **THEN** its answer includes only nodes satisfying both conditions
+
+#### Scenario: Invalid attribute filter
+- **WHEN** a node-returning query is given `--filter status` with no recognized operator
+- **THEN** lattice exits 2 without running the query
 
 ### Requirement: Query exit codes are two-valued
 `lattice query` SHALL exit 0 when the question was answered — including an
@@ -54,7 +79,9 @@ traversal to the named edge kinds; by default all edge kinds are traversed.
 An `--edge-kind` naming a kind the profile does not declare SHALL exit 2.
 The start node itself is not part of the answer. Results SHALL be ordered by
 node ID. An edge endpoint that was never declared as a node is not reported
-as reached — reachability covers declared nodes only.
+as reached — reachability covers declared nodes only. Attribute filters apply after
+the walk, so a non-matching intermediate node does not prevent matching descendants
+from being reached.
 
 Verified by: `cargo test --test query reach`
 
@@ -69,6 +96,11 @@ Verified by: `cargo test --test query reach`
 #### Scenario: Reverse reach
 - **WHEN** the user runs `lattice query reached-by N-1` on the same graph
 - **THEN** the answer lists REQ-1 and T-1
+
+#### Scenario: Reach filter does not stop traversal
+- **WHEN** T-1 reaches active N-1 through a non-matching deferred REQ-1 and the query
+  carries `--filter status=active`
+- **THEN** the answer includes N-1 and excludes REQ-1
 
 ### Requirement: Path query
 `lattice query path <src> <tgt>` SHALL report one path from `<src>` to
@@ -99,7 +131,7 @@ ordered by node ID. `--kind <kind>` SHALL restrict the answer to nodes of
 that kind; a kind the profile does not declare SHALL exit 2. An edge counts
 for a node whenever it names that node's ID, even when the edge's far
 endpoint was never declared — the node is referenced, so it is not standing
-alone; the dangling far endpoint is `DANGLING_REF`'s business, not a new
+alone; the dangling far endpoint is `VACANCY`'s business, not a new
 orphan.
 
 Verified by: `cargo test --test query orphans`
@@ -111,6 +143,10 @@ Verified by: `cargo test --test query orphans`
 #### Scenario: Kind filter
 - **WHEN** `lattice query orphans --kind req` runs
 - **THEN** only orphan nodes of kind `req` are listed
+
+#### Scenario: Orphan attribute filter
+- **WHEN** `lattice query orphans --filter status=active` runs
+- **THEN** only orphan nodes whose `status` attr equals `active` are listed
 
 ### Requirement: Counts query
 `lattice query counts` SHALL report per-kind node tallies and per-kind edge
@@ -178,9 +214,9 @@ Verified by: `cargo test --test query at`
 - **WHEN** `lattice query at /repo/r.md --target /repo` runs and a node's provenance is `r.md`
 - **THEN** that node's entry is in the answer rather than a falsely clean empty one
 
-#### Scenario: A finding at the path attached to an entry elsewhere is listed
+#### Scenario: A finding at the path attached to a node elsewhere is listed
 - **WHEN** an edge written in `r.md` dangles, attaching its finding to a node declared in `t.py`
-- **THEN** `lattice query at r.md` lists the finding beside the entries rather than dropping it
+- **THEN** `lattice query at r.md` lists the finding beside the nodes rather than dropping it
 
 ### Requirement: Live two-revision diff
 `lattice query diff <rev-a> <rev-b>` SHALL materialize the target at each
@@ -190,14 +226,14 @@ snapshot. It SHALL report nodes added, removed, and changed, and edges added
 and removed. Node identity is the ID; a node counts as changed when its kind
 or attrs differ between revisions. Edges compare as a multiset of
 (source, target, kind). Provenance is excluded from comparison on both, so a
-declaration that merely moved lines does not diff. Axis changes (order or
+declaration that merely moved lines does not diff. Pathway changes (order or
 current position) SHALL also be reported. Output is ordered by node ID / edge
 tuple.
 
 Both revisions SHALL be materialized at the same filesystem path: adapters
-embed the target path in attrs (as an adapter's `file` attr can), so
-materializing the two revisions at different paths would report every such
-node as changed when nothing about it changed.
+may embed the target path in attrs, so materializing the two revisions at
+different paths would report every such node as changed when nothing about
+it changed.
 
 When the target is not a git repository, or a named revision is unknown,
 lattice SHALL exit 2. The working tree of the target SHALL be left untouched.

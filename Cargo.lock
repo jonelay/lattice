@@ -3,9 +3,18 @@
 version = 4
 
 [[package]]
-name = "adapter-entomologist"
-version = "0.5.0"
+name = "adapter-core"
+version = "0.6.0"
 dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "adapter-entomologist"
+version = "0.6.0"
+dependencies = [
+ "adapter-core",
  "clap",
  "regex",
  "serde",
@@ -14,8 +23,9 @@ dependencies = [
 
 [[package]]
 name = "adapter-github"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
+ "adapter-core",
  "clap",
  "regex",
  "serde",
@@ -24,8 +34,9 @@ dependencies = [
 
 [[package]]
 name = "adapter-gitlab"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
+ "adapter-core",
  "clap",
  "regex",
  "serde",
@@ -34,8 +45,9 @@ dependencies = [
 
 [[package]]
 name = "adapter-md"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
+ "adapter-core",
  "clap",
  "regex",
  "serde",
@@ -44,8 +56,9 @@ dependencies = [
 
 [[package]]
 name = "adapter-toml"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
+ "adapter-core",
  "clap",
  "regex",
  "serde",
@@ -200,7 +213,7 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "lattice-core"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "regex",

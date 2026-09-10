@@ -7,9 +7,18 @@ use serde::Deserialize;
 pub(crate) struct Config {
     pub(crate) files: Vec<String>,
     pub(crate) tables: BTreeMap<String, TableConfig>,
+    pub(crate) mode: Option<Mode>,
     pub(crate) id_prefix: Option<IdPrefix>,
     pub(crate) header: Option<HeaderConfig>,
-    pub(crate) axis: Option<AxisConfig>,
+    pub(crate) pathway: Option<PathwayConfig>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum Mode {
+    #[default]
+    Tables,
+    Directory,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -35,7 +44,7 @@ pub(crate) struct HeaderConfig {
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct AxisConfig {
+pub(crate) struct PathwayConfig {
     pub(crate) source_file: String,
     pub(crate) name: String,
     pub(crate) order_key: String,
@@ -53,11 +62,13 @@ struct Adapter {
     paths: Paths,
     tables: BTreeMap<String, TableConfig>,
     #[serde(default)]
+    mode: Option<Mode>,
+    #[serde(default)]
     id_prefix: Option<IdPrefix>,
     #[serde(default)]
     header: Option<HeaderConfig>,
     #[serde(default)]
-    axis: Option<AxisConfig>,
+    pathway: Option<PathwayConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -101,6 +112,13 @@ impl Config {
                 path.display()
             ));
         }
+        if matches!(profile.adapter.mode, Some(Mode::Directory)) && profile.adapter.header.is_some()
+        {
+            return Err(format!(
+                "could not load profile {}: 'adapter.header' is not supported when 'adapter.mode' is 'directory'",
+                path.display()
+            ));
+        }
         for (name, table) in &profile.adapter.tables {
             if !nonempty(name)
                 || !nonempty(&table.kind)
@@ -134,18 +152,18 @@ impl Config {
                 path.display()
             ));
         }
-        if let Some(axis) = &profile.adapter.axis
+        if let Some(pathway) = &profile.adapter.pathway
             && [
-                &axis.source_file,
-                &axis.name,
-                &axis.order_key,
-                &axis.current_key,
+                &pathway.source_file,
+                &pathway.name,
+                &pathway.order_key,
+                &pathway.current_key,
             ]
             .into_iter()
             .any(|value| !nonempty(value))
         {
             return Err(format!(
-                "could not load profile {}: 'adapter.axis' has an empty required value",
+                "could not load profile {}: 'adapter.pathway' has an empty required value",
                 path.display()
             ));
         }
@@ -153,9 +171,10 @@ impl Config {
         Ok(Self {
             files: profile.adapter.paths.files,
             tables: profile.adapter.tables,
+            mode: profile.adapter.mode,
             id_prefix: profile.adapter.id_prefix,
             header: profile.adapter.header,
-            axis: profile.adapter.axis,
+            pathway: profile.adapter.pathway,
         })
     }
 }

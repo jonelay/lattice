@@ -1,0 +1,14 @@
+manifest_version: "1.0.0"
+name: mini-fuse
+version: "1.0.0"
+fuse_profile: fuse-profile.yaml
+
+sources:
+  - name: toml
+    profile: ../../../profiles/toml.yaml
+    adapter: ../../../adapters/toml
+    target: ../mini-toml
+  - name: markdown
+    profile: ../../../profiles/md.yaml
+    adapter: ../../../adapters/md
+    target: ../mini-md

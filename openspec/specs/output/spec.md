@@ -85,11 +85,14 @@ findings SHALL appear in a footer section.
 
 ### Requirement: Trace report JSON format
 JSON format for a trace report SHALL output the full `TraceReport` structure: header,
-entries array, and unattachable findings array.
+entries array, unattachable findings array, and pathways array. The header SHALL carry `trace_version`
+`"2"`. Each entry's `edges` SHALL be an array of objects carrying `tgt`, `kind`,
+`attrs`, and nested `provenance` with `file` and `line`.
 
 #### Scenario: JSON trace is parseable
 - **WHEN** `lattice trace --format=json` runs
-- **THEN** stdout is valid JSON containing `header`, `entries`, and `unattachable_findings`
+- **THEN** stdout is valid JSON containing `header`, `entries`, `unattachable_findings`, and `pathways`,
+  with `header.trace_version` equal to `"2"`
 
 ### Requirement: Key attr scalars render as JSON scalars
 In the trace report's key-attr column, a string value SHALL render bare (no

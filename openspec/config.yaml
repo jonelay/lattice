@@ -19,7 +19,7 @@ context: |
        no vocabulary hardcoded. The trace payload is the contract every interface
        reads; an interface adds to it rather than computing locally.
     2. Profiles — node kinds, edge kinds, applicable validations, and an
-       ordering axis. Data, not code, so a core upgrade cannot reinterpret a
+       ordering pathway. Data, not code, so a core upgrade cannot reinterpret a
        register.
     3. Adapters — per-repo ingest. The host repo's existing format stays
        authoritative; the adapter maps it in. An adapter is a program emitting a

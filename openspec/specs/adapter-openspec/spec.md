@@ -8,15 +8,15 @@ cites. Lattice's own register is the first consumer.
 
 ## Requirements
 
-### Requirement: Run as a stdlib-only contract program
-The adapter SHALL be a program that, given `--profile` and `--target`, writes a contract
+### Requirement: Run as a stdlib-only interface program
+The adapter SHALL be a program that, given `--profile` and `--target`, writes an interface
 document to stdout and exits 0. Malformed input SHALL become an `Issue` in that document
 and SHALL NOT change the exit status; a non-zero exit SHALL mean the adapter itself broke.
 It SHALL depend on nothing outside the Python standard library.
 
 #### Scenario: Well-formed register
 - **WHEN** the adapter runs against a target whose register parses
-- **THEN** it exits 0 and stdout is a contract document the core ingests
+- **THEN** it exits 0 and stdout is an interface document the core ingests
 
 #### Scenario: Malformed register still exits 0
 - **WHEN** the target contains a spec file the adapter cannot read
@@ -191,7 +191,7 @@ language it is pointed at.
 
 #### Scenario: Citation naming no declared requirement
 - **WHEN** a citation names a title no spec file declares
-- **THEN** the `verifies` edge is still emitted and validation reports `DANGLING_REF`
+- **THEN** the `verifies` edge is still emitted and validation reports `VACANCY`
 
 **Verified by:** `.venv/bin/python -m pytest -q tests/test_adapter_openspec.py`
 
@@ -217,7 +217,7 @@ citation lines.
 - **WHEN** a citation reads `Requirement: Three output formats / Output dispatcher`, binds
   exactly one test, and no requirement carries that exact title
 - **THEN** one `verifies` edge is emitted naming that whole string, and validation reports
-  one `DANGLING_REF` — one per bound test, since the finding is per edge
+  one `VACANCY` — one per bound test, since the finding is per edge
 
 **Verified by:** `.venv/bin/python -m pytest -q tests/test_adapter_openspec.py`
 
@@ -245,7 +245,7 @@ raise.
 ### Requirement: Coverage is visible and never exit-affecting
 The profile SHALL configure `COVERAGE` over `requirement` via the `verifies` edge at
 severity `hint`, so uncited requirements are reported on every run and contribute to no
-exit code, including under `--strict`. `DANGLING_REF` SHALL remain at severity `error`.
+exit code, including under `--strict`. `VACANCY` SHALL remain at severity `error`.
 
 #### Scenario: Uncited requirements under strict
 - **WHEN** the register holds requirements no test cites and no dangling citations exist
@@ -253,7 +253,7 @@ exit code, including under `--strict`. `DANGLING_REF` SHALL remain at severity `
 
 #### Scenario: A dangling citation fails the run
 - **WHEN** any citation names no declared requirement
-- **THEN** `lattice validate` reports `DANGLING_REF` at error severity and exits 1
+- **THEN** `lattice validate` reports `VACANCY` at error severity and exits 1
 
 **Verified by:** `target/debug/lattice validate --profile profiles/openspec.yaml
 --adapter ./adapters/openspec --target . --strict`
@@ -265,7 +265,7 @@ declare. Uncited requirements are reported as hints and do not affect that resul
 
 #### Scenario: The self-audit is clean
 - **WHEN** the adapter runs against this repository with `profiles/openspec.yaml`
-- **THEN** no `DANGLING_REF` is reported and the exit status is 0
+- **THEN** no `VACANCY` is reported and the exit status is 0
 
 #### Scenario: A count check accompanies the finding count
 - **WHEN** the self-audit is used as evidence

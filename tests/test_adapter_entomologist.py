@@ -29,7 +29,7 @@ ALL_ISSUES = {FULL, NOSTATE, NODESC, NOAUTHOR, BADSTATE, BADDESC}
 
 
 class ContractDoc:
-    """Thin wrapper over a parsed contract document for test assertions."""
+    """Thin wrapper over a parsed interface document for test assertions."""
 
     def __init__(self, doc: dict):
         self._doc = doc
@@ -52,11 +52,11 @@ class ContractDoc:
         }
 
     def issues_by_code(self, code: str) -> list[dict]:
-        return [i for i in self._doc.get("issues", []) if i["code"] == code]
+        return [i for i in self._doc.get("findings", []) if i["code"] == code]
 
     @property
     def all_issues(self) -> list[dict]:
-        return self._doc.get("issues", [])
+        return self._doc.get("findings", [])
 
 
 def _run_adapter(target: Path, tmp_path: Path) -> ContractDoc:
@@ -259,7 +259,7 @@ EXPECTED_FINDINGS = sorted(EXPECTED_ADAPTER_ISSUES + [
     ("ATTR_REQUIRED", f"entomologist-data:{NOAUTHOR}"),
     ("ATTR_REQUIRED", f"entomologist-data:{BADDESC}"),
     ("ATTR_ENUM", f"entomologist-data:{BADSTATE}"),
-    ("DANGLING_REF", f"entomologist-data:{FULL}/dependencies/{DANGLING}"),
+    ("VACANCY", f"entomologist-data:{FULL}/dependencies/{DANGLING}"),
 ])
 
 
@@ -276,7 +276,7 @@ def test_gate_document_is_exact(mini_ent_repo, tmp_path):
     assert {n["id"] for n in doc["nodes"]} == ALL_ISSUES
     assert {(e["src"], e["tgt"]) for e in doc["edges"]} == EXPECTED_EDGES
     assert sorted(
-        (i["code"], i["provenance"]["file"]) for i in doc["issues"]
+        (i["code"], i["provenance"]["file"]) for i in doc["findings"]
     ) == EXPECTED_ADAPTER_ISSUES
 
 

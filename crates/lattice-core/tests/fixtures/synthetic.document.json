@@ -1,5 +1,5 @@
 {
- "contract_version": "1.0",
+ "interface_version": "1.0",
  "nodes": [
   {
    "id": "tests/test_register.py::test_unattributed_candidate_keeps_coverage_unknown",

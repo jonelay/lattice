@@ -1,6 +1,0 @@
-# Fixture register with no [register] table: it has no identity, so it is
-# reported and skipped rather than emitting a node that nothing can name.
-
-[[item]]
-id = "unreachable"
-stage = "s1"

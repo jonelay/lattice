@@ -1,7 +1,7 @@
 # adapter-md Specification
 
 ## Purpose
-Reads profile-selected, pipe-delimited markdown tables into a contract document, so a
+Reads profile-selected, pipe-delimited markdown tables into an interface document, so a
 repository can keep a small typed node/edge register in ordinary `.md` files while the
 profile, rather than the adapter, owns its vocabulary.
 
@@ -200,7 +200,7 @@ one cell may declare zero, one or many edges. Every emitted edge SHALL carry the
 file and line provenance as its source row.
 
 The adapter SHALL NOT check that a target node exists. An unresolvable target is a
-`DANGLING_REF` finding at validation, which is the core's job; an adapter that dropped
+`VACANCY` finding at validation, which is the core's job; an adapter that dropped
 the edge would hide it.
 
 Verified by: `.venv/bin/python -m pytest tests/test_adapter_md.py -k "edge_columns or provenance"`
@@ -218,7 +218,7 @@ Verified by: `.venv/bin/python -m pytest tests/test_adapter_md.py -k "edge_colum
 #### Scenario: Target node is absent
 - **WHEN** a mapped edge cell names an ID no table declares
 - **THEN** the adapter still emits the edge, and `lattice validate` may report
-  `DANGLING_REF` for it
+  `VACANCY` for it
 
 ### Requirement: Report unreadable text, never raise it
 A selected file whose bytes are not valid UTF-8 SHALL produce a `PARSE_ERROR` naming
@@ -228,8 +228,8 @@ and no issue; the separator rule, not a general markdown parser, defines the inp
 adapter claims to understand.
 
 Every target-content problem the adapter reports SHALL be an error-severity
-`PARSE_ERROR` with file-and-line provenance and no `node_id`. No axis is read from this
-format, so the document's `axes` list SHALL be empty.
+`PARSE_ERROR` with file-and-line provenance and no `node_id`. No pathway is read from this
+format, so the document's `pathways` list SHALL be empty.
 
 Verified by: `.venv/bin/python -m pytest tests/test_adapter_md.py -k "non_utf8 or file_without_tables"`
 
@@ -348,10 +348,10 @@ Verified by: `cargo test -p adapter-md`, and
 - **THEN** all tables are read using the single config and no unmatched-heading issues
   are emitted
 
-### Requirement: Emit the contract document and serve as the markdown-table gate
+### Requirement: Emit the interface document and serve as the markdown-table gate
 On target content it can report, the adapter SHALL write one newline-terminated JSON
-contract document with `contract_version` `1.1`, append-only `nodes`, `edges`, and
-`issues`, and an empty `axes` list, then exit 0. Serialization or stdout failure SHALL
+interface document with `interface_version` `1.2`, append-only `nodes`, `edges`, and
+`findings`, and an empty `pathways` list, then exit 0. Serialization or stdout failure SHALL
 fail the adapter and exit 2: no valid document reached the core.
 
 `lattice validate` run with the md profile and adapter against
@@ -372,11 +372,11 @@ Verified by: `.venv/bin/python -m pytest tests/test_adapter_md.py -k gate`, and
 
 #### Scenario: Sound fixture rows survive malformed neighbors
 - **WHEN** the adapter reads the complete mini-md fixture
-- **THEN** its contract document carries nodes `REQ-1`, `REQ-2` and `REQ-3` and the
+- **THEN** its interface document carries nodes `REQ-1`, `REQ-2` and `REQ-3` and the
   three fixture-declared `traces_to` edges
 
 #### Scenario: Adapter is a program that exits 0
 - **WHEN** the adapter is invoked directly with `--profile` and `--target` against the
   fixture containing malformed rows
-- **THEN** it writes a contract `1.1` document to stdout and exits 0, carrying malformed
-  input as issues rather than as a non-zero exit
+- **THEN** it writes an interface `1.2` document to stdout and exits 0, carrying malformed
+  input as findings rather than as a non-zero exit

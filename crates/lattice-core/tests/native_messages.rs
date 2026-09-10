@@ -21,8 +21,8 @@ use serde_json::{Value, json};
 
 #[test]
 fn explicit_null_document_arrays_are_reported_with_native_type() {
-    for key in ["nodes", "edges", "axes", "issues"] {
-        let mut document = json!({"contract_version": "1.0"});
+    for key in ["nodes", "edges", "pathways", "issues"] {
+        let mut document = json!({"interface_version": "1.0"});
         document[key] = Value::Null;
         let error = ingest_document(document).expect_err(&format!(
             "'{key}': null must be reported, not read as empty"
@@ -37,12 +37,12 @@ fn explicit_null_document_arrays_are_reported_with_native_type() {
 // Requirement: Profile errors use the native type vocabulary
 
 #[test]
-fn profile_null_axes_error_names_the_native_type() {
-    let error = profile_from(&format!("{MINIMAL_PROFILE}axes: null\n"))
-        .expect_err("'axes: null' must be reported");
+fn profile_null_pathways_error_names_the_native_type() {
+    let error = profile_from(&format!("{MINIMAL_PROFILE}pathways: null\n"))
+        .expect_err("'pathways: null' must be reported");
     assert!(
         error.0.ends_with(
-            "'axes' must be a list of axis names, got null. Axis values are target \
+            "'pathways' must be a list of pathway names, got null. Pathway values are target \
              state and are read from the register, never declared here"
         ),
         "message was {:?}",
@@ -66,7 +66,7 @@ edge_kinds: {}
 "#;
     let profile = profile_from(yaml).unwrap();
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {"status": "nope"},
                    "provenance": {"file": "r.md", "line": 1}}],
     }));
@@ -97,7 +97,7 @@ edge_kinds: {}
 "#;
     let profile = profile_from(yaml).unwrap();
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [{"id": "REQ-1", "kind": "req",
                    "attrs": {"count": "many", "tags": ["a", {}]},
                    "provenance": {"file": "r.md", "line": 1}}],
@@ -130,7 +130,7 @@ fn coverage_profile(config_lines: &str) -> String {
 
 fn config_errors(yaml: &str) -> Vec<String> {
     let profile = profile_from(yaml).unwrap();
-    let graph = ingest(json!({"contract_version": "1.0"}));
+    let graph = ingest(json!({"interface_version": "1.0"}));
     validate(&graph, &profile, false)
         .into_iter()
         .filter(|i| i.code == "CONFIG_ERROR")
@@ -246,7 +246,7 @@ fn summary_rollup_keys_are_json_scalars() {
     );
     let profile = profile_from(&yaml).unwrap();
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [{"id": "REQ-1", "kind": "req",
                    "attrs": {"status": true, "file": "a.md"},
                    "provenance": {"file": "a.md", "line": 1}}],
@@ -281,7 +281,7 @@ edge_kinds: {}
 "#;
     let profile = profile_from(yaml).unwrap();
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {"flag": true},
                    "provenance": {"file": "r.md", "line": 1}}],
     }));

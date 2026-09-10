@@ -1,20 +1,19 @@
 mod config;
-mod document;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+use adapter_core::{Document, Edge, Issue, Node, Pathway, Provenance};
 use clap::Parser;
 use regex::Regex;
 use serde_json::{Number, Value as JsonValue};
 use toml::Value as TomlValue;
 
-use config::{AxisConfig, Config, HeaderConfig, IdPrefix, TableConfig};
-use document::{Axis, Document, Edge, Node, Provenance};
+use config::{Config, HeaderConfig, IdPrefix, Mode, PathwayConfig, TableConfig};
 
 #[derive(Debug, Parser)]
-#[command(about = "Read TOML registers into a lattice contract document")]
+#[command(about = "Read TOML registers into a lattice interface document")]
 struct Args {
     #[arg(long)]
     profile: PathBuf,
@@ -332,6 +331,7 @@ fn read_edges<'a>(
                 src: node_id.to_owned(),
                 tgt: target.to_owned(),
                 kind,
+                attrs: BTreeMap::new(),
                 provenance: Provenance::new(file, 0),
             });
         }
@@ -359,30 +359,50 @@ fn read_rows<'a>(
             );
             continue;
         };
-        let Some(TomlValue::String(raw_id)) = row.get(&config.id_key) else {
-            document.parse_error(
-                format!(
-                    "{file}: {table_name} row {index} declares no string '{}' ID key",
-                    config.id_key
-                ),
-                file,
-                0,
-            );
-            continue;
-        };
-        let id = match id_prefix {
-            Some(IdPrefix::FileStem) => format!("{file_stem}/{raw_id}"),
-            None => raw_id.clone(),
-        };
-        let attrs = mapped_attributes(document, row, &config.key_map, file, Some(&id));
-        document.nodes.push(Node {
-            id: id.clone(),
-            kind: &config.kind,
-            attrs,
-            provenance: Provenance::new(file, 0),
-        });
-        read_edges(document, config, row, &id, file);
+        read_record(
+            document,
+            config,
+            row,
+            &format!("{table_name} row {index}"),
+            file,
+            file_stem,
+            id_prefix,
+        );
     }
+}
+
+fn read_record<'a>(
+    document: &mut Document<'a>,
+    config: &'a TableConfig,
+    record: &toml::map::Map<String, TomlValue>,
+    description: &str,
+    file: &str,
+    file_stem: &str,
+    id_prefix: Option<IdPrefix>,
+) {
+    let Some(TomlValue::String(raw_id)) = record.get(&config.id_key) else {
+        document.parse_error(
+            format!(
+                "{file}: {description} declares no string '{}' ID key",
+                config.id_key
+            ),
+            file,
+            0,
+        );
+        return;
+    };
+    let id = match id_prefix {
+        Some(IdPrefix::FileStem) => format!("{file_stem}/{raw_id}"),
+        None => raw_id.clone(),
+    };
+    let attrs = mapped_attributes(document, record, &config.key_map, file, Some(&id));
+    document.nodes.push(Node {
+        id: id.clone(),
+        kind: &config.kind,
+        attrs,
+        provenance: Provenance::new(file, 0),
+    });
+    read_edges(document, config, record, &id, file);
 }
 
 fn read_file<'a>(
@@ -442,6 +462,33 @@ fn read_file<'a>(
     }
 }
 
+fn read_directory_file<'a>(
+    document: &mut Document<'a>,
+    config: &'a Config,
+    value: &TomlValue,
+    file: &str,
+    file_stem: &str,
+) {
+    let Some(root) = value.as_table() else {
+        document.parse_error(format!("{file}: TOML root is not a table"), file, 0);
+        return;
+    };
+    let table = config
+        .tables
+        .values()
+        .next()
+        .expect("configuration requires at least one table");
+    read_record(
+        document,
+        table,
+        root,
+        "record",
+        file,
+        file_stem,
+        config.id_prefix,
+    );
+}
+
 fn dot_path<'a>(value: &'a TomlValue, path: &str) -> Option<&'a TomlValue> {
     let mut current = value;
     for component in path.split('.') {
@@ -450,16 +497,16 @@ fn dot_path<'a>(value: &'a TomlValue, path: &str) -> Option<&'a TomlValue> {
     Some(current)
 }
 
-fn attach_axis(
+fn attach_pathway(
     document: &mut Document<'_>,
-    config: &AxisConfig,
+    config: &PathwayConfig,
     parsed: &BTreeMap<String, TomlValue>,
 ) {
     let source_file = config.source_file.replace('\\', "/");
     let Some(source) = parsed.get(&source_file) else {
-        document.axis_invalid(
+        document.pathway_invalid(
             format!(
-                "{}: axis '{}' source file was not read",
+                "{}: pathway '{}' source file was not read",
                 config.source_file, config.name
             ),
             &config.source_file,
@@ -477,9 +524,9 @@ fn attach_axis(
         } else {
             &config.current_key
         };
-        document.axis_invalid(
+        document.pathway_invalid(
             format!(
-                "{}: axis '{}' declares only one of the pair, missing '{missing}'",
+                "{}: pathway '{}' declares only one of the pair, missing '{missing}'",
                 config.source_file, config.name
             ),
             &config.source_file,
@@ -487,9 +534,9 @@ fn attach_axis(
         return;
     };
     let (TomlValue::Array(raw_order), TomlValue::String(current)) = (order, current) else {
-        document.axis_invalid(
+        document.pathway_invalid(
             format!(
-                "{}: axis '{}' expects '{}' to be an array of strings and '{}' to be a string",
+                "{}: pathway '{}' expects '{}' to be an array of strings and '{}' to be a string",
                 config.source_file, config.name, config.order_key, config.current_key
             ),
             &config.source_file,
@@ -501,9 +548,9 @@ fn attach_axis(
         .map(|value| value.as_str().map(str::to_owned))
         .collect()
     else {
-        document.axis_invalid(
+        document.pathway_invalid(
             format!(
-                "{}: axis '{}' order contains a non-string value",
+                "{}: pathway '{}' order contains a non-string value",
                 config.source_file, config.name
             ),
             &config.source_file,
@@ -512,16 +559,16 @@ fn attach_axis(
     };
     let unique: BTreeSet<_> = order.iter().collect();
     if order.is_empty() || unique.len() != order.len() || !order.contains(current) {
-        document.axis_invalid(
+        document.pathway_invalid(
             format!(
-                "{}: axis '{}' requires distinct positions and current '{}' among them",
+                "{}: pathway '{}' requires distinct positions and current '{}' among them",
                 config.source_file, config.name, current
             ),
             &config.source_file,
         );
         return;
     }
-    document.axes.push(Axis {
+    document.pathways.push(Pathway {
         name: config.name.clone(),
         order,
         current: current.clone(),
@@ -541,13 +588,23 @@ fn parse_line(error: &toml::de::Error, text: &str) -> usize {
         .unwrap_or(0)
 }
 
-/// Read every configured TOML file into an append-only contract document.
+/// Read every configured TOML file into an append-only interface document.
 fn build_document<'a>(config: &'a Config, target: &Path) -> Result<Document<'a>, String> {
     let matcher = FileMatcher::new(&config.files)?;
     let mut document = Document::default();
     let mut parsed = BTreeMap::new();
     let target_is_readable = target.is_dir() || target.is_file();
-    for (path, file) in selected_files(&mut document, target, &matcher) {
+    let files = selected_files(&mut document, target, &matcher);
+    if target_is_readable && files.is_empty() {
+        document.findings.push(Issue {
+            severity: "info",
+            code: "NO_MATCHING_FILES",
+            message: "no files matched adapter.paths.files".to_owned(),
+            provenance: Provenance::new(".", 0),
+            node_id: None,
+        });
+    }
+    for (path, file) in files {
         let bytes = match std::fs::read(&path) {
             Ok(bytes) => bytes,
             Err(error) => {
@@ -566,7 +623,11 @@ fn build_document<'a>(config: &'a Config, target: &Path) -> Result<Document<'a>,
             Ok(value) => value,
             Err(error) => {
                 let line = parse_line(&error, text);
-                document.parse_error(format!("{file}: could not parse TOML: {error}"), file, line);
+                document.parse_error(
+                    format!("{file}: could not parse TOML: {error}"),
+                    file,
+                    line as u32,
+                );
                 continue;
             }
         };
@@ -574,11 +635,16 @@ fn build_document<'a>(config: &'a Config, target: &Path) -> Result<Document<'a>,
             .file_stem()
             .map(|stem| stem.to_string_lossy().into_owned())
             .unwrap_or_default();
-        read_file(&mut document, config, &value, &file, &file_stem);
+        match config.mode.unwrap_or_default() {
+            Mode::Tables => read_file(&mut document, config, &value, &file, &file_stem),
+            Mode::Directory => {
+                read_directory_file(&mut document, config, &value, &file, &file_stem)
+            }
+        }
         parsed.insert(file, value);
     }
-    if target_is_readable && let Some(axis) = &config.axis {
-        attach_axis(&mut document, axis, &parsed);
+    if target_is_readable && let Some(pathway) = &config.pathway {
+        attach_pathway(&mut document, pathway, &parsed);
     }
     Ok(document)
 }
@@ -600,8 +666,8 @@ fn run(args: Args) -> Result<(), String> {
     let stdout = io::stdout();
     let mut writer = stdout.lock();
     serde_json::to_writer(&mut writer, &document)
-        .map_err(|error| format!("could not serialize contract document: {error}"))?;
-    writeln!(writer).map_err(|error| format!("could not write contract document: {error}"))?;
+        .map_err(|error| format!("could not serialize interface document: {error}"))?;
+    writeln!(writer).map_err(|error| format!("could not write interface document: {error}"))?;
     Ok(())
 }
 
@@ -617,9 +683,9 @@ fn main() {
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{attach_axis, glob_regex, json_value};
-    use crate::config::AxisConfig;
-    use crate::document::Document;
+    use super::{attach_pathway, glob_regex, json_value};
+    use crate::config::{Mode, PathwayConfig};
+    use adapter_core::Document;
     use regex::Regex;
     use serde_json::json;
     use toml::Value as TomlValue;
@@ -640,21 +706,27 @@ mod tests {
     }
 
     #[test]
-    fn valid_axis_is_attached() {
+    fn directory_mode_config_deserializes() {
+        let mode: Mode = serde_json::from_str(r#""directory""#).unwrap();
+        assert!(matches!(mode, Mode::Directory));
+    }
+
+    #[test]
+    fn valid_pathway_is_attached() {
         let source: TomlValue =
             toml::from_str("[register]\nstage_order = [\"s1\", \"s2\"]\ncurrent_stage = \"s2\"\n")
                 .unwrap();
         let mut parsed = BTreeMap::new();
         parsed.insert("registers/index.toml".to_owned(), source);
-        let config = AxisConfig {
+        let config = PathwayConfig {
             source_file: "registers/index.toml".to_owned(),
             name: "stage".to_owned(),
             order_key: "register.stage_order".to_owned(),
             current_key: "register.current_stage".to_owned(),
         };
         let mut document = Document::default();
-        attach_axis(&mut document, &config, &parsed);
-        assert_eq!(document.axes.len(), 1);
-        assert_eq!(document.axes[0].current, "s2");
+        attach_pathway(&mut document, &config, &parsed);
+        assert_eq!(document.pathways.len(), 1);
+        assert_eq!(document.pathways[0].current, "s2");
     }
 }

@@ -4,16 +4,15 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::graph::LatticeGraph;
 use crate::profile::Profile;
-use crate::types::{Issue, TraceEntry, TraceReport};
+use crate::types::{Issue, PathwayEntry, TraceEdge, TraceEntry, TraceReport};
 
 /// The rank a kind the profile does not declare sorts at — after every declared
 /// kind, and mirroring the reference core's fixed sentinel rather than inventing
 /// a wider one.
 const UNDECLARED_KIND_RANK: usize = 999;
 
-/// Outgoing targets by source node, then by edge kind. Each target carries the
-/// referencing edge's provenance, which is the tail of its sort key.
-type Adjacency<'a> = BTreeMap<&'a str, BTreeMap<&'a str, Vec<(&'a str, &'a str, i64)>>>;
+/// Outgoing edges by source node, then by edge kind.
+type Adjacency<'a> = BTreeMap<&'a str, BTreeMap<&'a str, Vec<&'a crate::graph::Edge>>>;
 
 /// Build the trace report for a validated graph.
 ///
@@ -39,7 +38,7 @@ pub(crate) fn build_trace_report_for_nodes(
     lattice_version: &str,
     node_ids: Option<&BTreeSet<&str>>,
 ) -> TraceReport {
-    let header = BTreeMap::from([
+    let mut header = BTreeMap::from([
         ("lattice_version".to_string(), lattice_version.to_string()),
         ("profile".to_string(), profile.name().to_owned()),
         (
@@ -47,11 +46,12 @@ pub(crate) fn build_trace_report_for_nodes(
             profile.profile_version().to_owned(),
         ),
     ]);
+    header.insert("trace_version".to_owned(), "2".to_owned());
 
     let mut findings_by_node: BTreeMap<&str, Vec<Issue>> = BTreeMap::new();
     let mut unattachable: Vec<Issue> = Vec::new();
     for issue in issues {
-        // A node_id naming no graph node — a DANGLING_REF on a ghost source, say
+        // A node_id naming no graph node — a VACANCY on a ghost source, say
         // — must not vanish: no entry would ever carry it.
         match issue.node_id.as_deref() {
             Some(node_id)
@@ -77,14 +77,20 @@ pub(crate) fn build_trace_report_for_nodes(
             .or_default()
             .entry(&edge.kind)
             .or_default()
-            .push((&edge.tgt, &edge.provenance.file, edge.provenance.line));
+            .push(edge);
     }
     // Sorted in place, once, rather than per node: the entry pass reads these
     // lists behind a shared borrow and would otherwise have to copy each one to
     // sort it.
     for by_kind in adjacency.values_mut() {
-        for targets in by_kind.values_mut() {
-            targets.sort_unstable();
+        for edges in by_kind.values_mut() {
+            edges.sort_unstable_by(|a, b| {
+                (&a.tgt, &a.provenance.file, a.provenance.line).cmp(&(
+                    &b.tgt,
+                    &b.provenance.file,
+                    b.provenance.line,
+                ))
+            });
         }
     }
 
@@ -97,11 +103,13 @@ pub(crate) fn build_trace_report_for_nodes(
                 .map(|by_kind| {
                     by_kind
                         .iter()
-                        .map(|(kind, targets)| {
-                            (
-                                (*kind).to_string(),
-                                targets.iter().map(|(tgt, _, _)| tgt.to_string()).collect(),
-                            )
+                        .flat_map(|(kind, edges)| {
+                            edges.iter().map(|edge| TraceEdge {
+                                tgt: edge.tgt.clone(),
+                                kind: (*kind).to_string(),
+                                attrs: edge.attrs.clone(),
+                                provenance: edge.provenance.clone(),
+                            })
                         })
                         .collect()
                 })
@@ -134,6 +142,14 @@ pub(crate) fn build_trace_report_for_nodes(
         header,
         entries,
         unattachable_findings: unattachable,
+        pathways: graph
+            .iter_pathways()
+            .map(|pathway| PathwayEntry {
+                name: pathway.name.clone(),
+                order: pathway.order.clone(),
+                current: pathway.current.clone(),
+            })
+            .collect(),
     }
 }
 

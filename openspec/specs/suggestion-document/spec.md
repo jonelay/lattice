@@ -32,7 +32,7 @@ Verified by: `cargo test --test suggestions schema`
 
 #### Scenario: A missing required field is a contract failure
 - **WHEN** a document declares a suggestion with no `basis` field
-- **THEN** the core reports the document as failing the contract schema and exits 2, rather
+- **THEN** the core reports the document as failing the interface schema and exits 2, rather
   than rendering a partial entry
 
 #### Scenario: Basis text survives unchanged
@@ -43,7 +43,7 @@ Verified by: `cargo test --test suggestions schema`
 A suggestion document SHALL declare `suggestion_version`, and the core SHALL reject a version
 it does not support rather than reading the document on a guess. An unsupported version is a
 setup fault, not a finding: the core SHALL exit 2, the same way it treats an adapter
-declaring an unsupported contract version.
+declaring an unsupported interface version.
 
 Verified by: `cargo test --test suggestions version`
 

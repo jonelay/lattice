@@ -2,7 +2,7 @@ name: entomologist
 profile_version: "1.0.0"
 
 # Entomologist ("ent") issue register, read from the entomologist-data orphan
-# branch of the target repo. No axis: ent states are per-issue statuses with no
+# branch of the target repo. No pathway: ent states are per-issue statuses with no
 # register-wide current position, so there is nothing to bind one to.
 
 node_kinds:

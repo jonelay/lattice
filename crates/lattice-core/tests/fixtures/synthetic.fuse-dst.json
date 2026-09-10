@@ -1,0 +1,31 @@
+{
+  "header": {"trace_version": "2"},
+  "entries": [
+    {
+      "id": "R1",
+      "kind": "req",
+      "attrs": {"title": "first requirement"},
+      "provenance": {"file": "reqs.md", "line": 1},
+      "edges": [],
+      "findings": []
+    },
+    {
+      "id": "R2",
+      "kind": "req",
+      "attrs": {"title": "second requirement"},
+      "provenance": {"file": "reqs.md", "line": 2},
+      "edges": [],
+      "findings": []
+    },
+    {
+      "id": "DUP",
+      "kind": "req",
+      "attrs": {"title": "duplicate id in dst"},
+      "provenance": {"file": "reqs.md", "line": 3},
+      "edges": [],
+      "findings": []
+    }
+  ],
+  "unattachable_findings": [],
+  "pathways": []
+}

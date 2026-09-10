@@ -69,18 +69,18 @@ class TestResolvedReader:
 
     def test_validations_surface(self, tmp_path):
         doc = _minimal(
-            axes=["phase"],
+            pathways=["phase"],
             validations=[
                 {"COVERAGE": {"severity": "error", "target_kind": "req",
                               "edge_kind": "verifies",
-                              "axis": "phase", "position_attr": "phase"}},
+                              "pathway": "phase", "position_attr": "phase"}},
             ],
         )
         profile = load_profile(_write_doc(tmp_path, doc))
         assert profile.validation_overrides["COVERAGE"] == "error"
         assert profile.validation_configs["COVERAGE"][0]["target_kind"] == "req"
-        assert profile.axes == ("phase",)
-        assert profile.axis_bindings["COVERAGE"].axis == "phase"
+        assert profile.pathways == ("phase",)
+        assert profile.pathway_bindings["COVERAGE"].pathway == "phase"
 
     def test_missing_resolved_schema_rejected(self, tmp_path):
         doc = _minimal()

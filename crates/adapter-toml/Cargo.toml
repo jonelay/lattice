@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+adapter-core = { workspace = true }
 clap.workspace = true
 regex.workspace = true
 serde.workspace = true

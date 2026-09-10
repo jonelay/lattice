@@ -1,18 +1,16 @@
-mod document;
 mod gitdb;
 mod issues;
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+use adapter_core::Document;
 use clap::Parser;
 use serde::Serialize;
 use serde_json::ser::{CompactFormatter, Formatter};
 
-use document::Document;
-
 #[derive(Debug, Parser)]
-#[command(about = "Read an entomologist register into a lattice contract document")]
+#[command(about = "Read an entomologist register into a lattice interface document")]
 struct Args {
     #[arg(long)]
     profile: PathBuf,
@@ -95,8 +93,8 @@ fn run(args: Args) -> Result<(), String> {
         serde_json::Serializer::with_formatter(&mut writer, PythonFormatter::default());
     document
         .serialize(&mut serializer)
-        .map_err(|error| format!("could not serialize contract document: {error}"))?;
-    writeln!(writer).map_err(|error| format!("could not write contract document: {error}"))?;
+        .map_err(|error| format!("could not serialize interface document: {error}"))?;
+    writeln!(writer).map_err(|error| format!("could not write interface document: {error}"))?;
     Ok(())
 }
 

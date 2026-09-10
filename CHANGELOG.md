@@ -11,6 +11,58 @@ Patch bumps (0.x.y) do not change public surfaces.**
 See `openspec/specs/trace-report/spec.md` for which trace-JSON fields are
 public and what each version axis governs.
 
+## [Unreleased]
+
+## [0.6.0] — 2026-09-09
+
+### Added
+- **`lattice fuse` subcommand.** Core Rust implementation of multi-source
+  graph composition. Reads a fuse manifest, runs `lattice trace` per source,
+  assembles a composed graph with `source:` qualified IDs and kinds (colon
+  separator), resolves cross-source edges via fuse-profile allowed pairings,
+  and runs standard validators on the result. Supports `--strict` and all
+  three output formats.
+- Fuse manifest uses `name`/`version`/`fuse_profile` keys (renamed from
+  `program`/`program_version`/`program_profile`).
+- Pathway preservation through fuse: source pathways carried as
+  `source:pathway_name`.
+- **Composed-ID `id_pattern` validation.** Fuse validates composed node IDs
+  against the source profile's declared `id_pattern`, with anchor stripping
+  for compatibility with `^...$`-style patterns. Node kinds added only from
+  fuse edge endpoint declarations accept any ID.
+- Fuse emits a CONFIG_ERROR warning when a source profile cannot be
+  reloaded for ID validation.
+
+### Changed
+- **BREAKING (finding code).** `DANGLING_REF` renamed to `VACANCY`. Profiles
+  that override its severity and downstream consumers matching the code string
+  need updating. Adopts the crystal lattice vocabulary from `docs/glossary.md`:
+  a missing target node is a vacancy in the lattice structure.
+- **Fuse COVERAGE routes through the standard validator.** COVERAGE validations
+  in a fuse profile now use the standard `validate` pass, gaining `where:`
+  filtering, `COVERAGE_UNKNOWN` hints, `state: "unknown"` for unattributed
+  sources, and per-code last-wins severity (replaces per-entry severity).
+  Undeclared `edge_kind` now produces CONFIG_ERROR (previously, the custom
+  loop would match no nodes and emit no findings).
+- Fuse profile COVERAGE entries accept a `where:` condition block.
+- `load_profile_value` extracted from `load_profile` for in-memory profile
+  construction (removes temp-file round-trip from fuse).
+- Fixture `tests/fixtures/mini-program/` renamed to `mini-fuse/` with updated
+  manifest keys.
+
+### Removed
+- **`tools/lattice-compose` retired.** The Python composition shim is fully
+  superseded by `lattice fuse`. Parity gate demonstrated matching nodes,
+  edges, and finding codes on the mini-fuse fixture before deletion.
+
+## [0.5.1] — 2026-09-09
+
+### Changed
+- Trace baseline test uses a self-contained fixture profile.
+- Contract and pinned-behaviour tests exercise the openspec profile.
+- Removed a project-specific adapter and profile that belonged in the
+  consumer repo.
+
 ## [0.5.0] — 2026-09-08
 
 ### Added

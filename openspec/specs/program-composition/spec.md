@@ -2,183 +2,246 @@
 
 ## Purpose
 
-External shim for composing multiple single-source lattice runs into a unified
-program graph, validating cross-source edges, and reporting findings — the
-consumer-first step before native core support.
+Multi-source graph composition: combine independent single-source lattice runs
+into a unified graph, qualify IDs and kinds by source, resolve cross-source
+edges, and report findings. Implemented as `lattice fuse` (core subcommand).
 
 ## Requirements
 
-### Requirement: Read a program manifest
-The shim SHALL accept a program manifest (YAML) declaring `manifest_version`,
-`program` (name), `program_version`, `program_profile` (path to the program
-profile), and an ordered `sources` list. Each source SHALL declare `name`
-(unique), `profile`, `adapter`, and `target`. All paths SHALL be relative to the
-manifest file's directory.
+### Requirement: Read a fuse manifest
+`lattice fuse` SHALL accept a fuse manifest (YAML) declaring `manifest_version`,
+`name`, `version`, `fuse_profile` (path to the fuse profile), and an ordered
+`sources` list. Each source SHALL declare `name` (unique, must not contain `:`),
+`profile`, `adapter`, and `target`. All paths SHALL be relative to the manifest
+file's directory.
 
-The shim SHALL exit 2 if the manifest is missing, malformed, declares no sources,
-or contains duplicate source names.
+The command SHALL exit 2 if the manifest is missing, malformed, declares no
+sources, contains duplicate source names, or has a source name containing `:`.
 
-Verified by: `.venv/bin/python -m pytest tests/test_lattice_compose.py -k manifest`
+Verified by: `cargo test -p lattice-core --test fuse -- manifest`
 
 #### Scenario: Valid manifest loads
-- **WHEN** the shim reads a manifest with two sources, each with name, profile,
-  adapter, and target
+- **WHEN** the command reads a manifest with two sources, each with name,
+  profile, adapter, and target
 - **THEN** it loads both sources in declared order
 
 #### Scenario: Duplicate source names
 - **WHEN** a manifest declares two sources with the same name
-- **THEN** the shim exits 2 with an error naming the duplicate
+- **THEN** the command exits 2 with an error naming the duplicate
 
-#### Scenario: Manifest missing
-- **WHEN** the manifest path does not exist
-- **THEN** the shim exits 2
+#### Scenario: Source name with colon
+- **WHEN** a source name contains `:`
+- **THEN** the command exits 2 — colons are reserved for source qualification
 
-### Requirement: Read a program profile
-The shim SHALL load the program profile referenced by the manifest. The program
+### Requirement: Read a fuse profile
+The command SHALL load the fuse profile referenced by the manifest. The fuse
 profile SHALL declare `edge_kinds` with allowed endpoint pairs using
-source-qualified kind names (`source/kind`), and optionally `validations` for
-cross-source checks.
+source-qualified kind names (`source:kind` with colon separator), and optionally
+`validations` for cross-source checks.
 
-The program profile SHALL NOT declare `node_kinds` — those are owned by source
+The fuse profile SHALL NOT declare `node_kinds` — those are owned by source
 profiles.
 
-Verified by: `.venv/bin/python -m pytest tests/test_lattice_compose.py -k program_profile`
+Verified by: `cargo test -p lattice-core --test fuse -- rejects_bad_profiles`
 
-#### Scenario: Program profile with cross-source edge kinds
-- **WHEN** the program profile declares `derives` with allowed pair
-  `[compliance/clause, product/requirement]`
-- **THEN** the shim uses this for cross-source edge resolution
+#### Scenario: Fuse profile with cross-source edge kinds
+- **WHEN** the fuse profile declares `derives` with allowed pair
+  `[compliance:clause, product:requirement]`
+- **THEN** the command uses this for cross-source edge resolution
 
-#### Scenario: Program profile declares node_kinds
-- **WHEN** the program profile contains a `node_kinds` section
-- **THEN** the shim exits 2 — node kinds belong to source profiles
+#### Scenario: Fuse profile declares node_kinds
+- **WHEN** the fuse profile contains a `node_kinds` section
+- **THEN** the command exits 2 — node kinds belong to source profiles
 
-### Requirement: Run each source through lattice
-The shim SHALL run `lattice trace --format json --profile <profile> --adapter <adapter> --target <target>` for each source in manifest order. It SHALL parse the JSON trace
-payload from each run.
+### Requirement: Run each source through lattice trace
+The command SHALL run `lattice trace --format json --profile <profile> --adapter
+<adapter> --target <target>` for each source in manifest order. It SHALL parse
+the JSON trace payload from each run.
 
-A source whose lattice run exits 2 SHALL be recorded as failed. The shim SHALL
-continue running remaining sources. After all sources run, if any source exited 2,
-the shim SHALL report the healthy sources' findings and exit 2 without attempting
+A source whose trace run exits 2, fails to execute, or emits unparseable output
+SHALL be recorded as `SOURCE_FAILURE`. The command SHALL continue running
+remaining sources. After all sources run, if any source failed, the command SHALL
+report the healthy sources' findings alongside SOURCE_FAILURE findings and exit 2
+without assembling the graph.
+
+A source whose trace run exits 0 or 1 SHALL contribute its trace payload to the
 merge.
 
-A source whose lattice run exits 0 or 1 SHALL contribute its trace payload to the
-merge.
-
-Verified by: `.venv/bin/python -m pytest tests/test_lattice_compose.py -k source_run`
+Verified by: `cargo test -p lattice-core --test fuse -- failed_trace`
 
 #### Scenario: All sources succeed
 - **WHEN** all sources exit 0 or 1
-- **THEN** the shim proceeds to merge
+- **THEN** the command proceeds to merge
 
-#### Scenario: One source exits 2
-- **WHEN** one of three sources exits 2 and the other two exit 0
-- **THEN** the shim reports the two healthy sources' findings and exits 2
+#### Scenario: One source fails
+- **WHEN** one of two sources exits 2 and the other exits 0
+- **THEN** the command reports the healthy source's findings and
+  SOURCE_FAILURE for the failed source, and exits 2
 
-### Requirement: Merge trace payloads with source qualification
-The shim SHALL merge trace payloads from all successful sources in declared order.
-Node kinds SHALL be qualified by source name: a node of kind `requirement` from
-source `product` becomes kind `product/requirement` in the merged graph. Node IDs
-SHALL remain unqualified (flat).
+### Requirement: Source-qualified merge with colon separator
+The command SHALL merge trace payloads from all successful sources in declared
+order. Node IDs SHALL be qualified as `source:raw_id` and kinds as
+`source:raw_kind`, using the colon separator. Pathways SHALL be qualified as
+`source:pathway_name`. Edge targets SHALL be initially qualified within the same
+source.
 
-If a node ID appears in multiple sources, the shim SHALL emit a
-`CROSS_SOURCE_DUPLICATE_ID` finding at error severity naming both sources and the
-conflicting ID. All conflicting occurrences SHALL be reported, not just the second.
+If a raw node ID appears in multiple sources, the command SHALL emit a
+`CROSS_SOURCE_DUPLICATE_ID` finding at error severity (profile-overridable)
+naming the conflicting sources.
 
 Merge order SHALL affect output ordering only, not which declaration wins.
 
-Verified by: `.venv/bin/python -m pytest tests/test_lattice_compose.py -k merge`
+Verified by: `cargo test -p lattice-core --test fuse -- assembly_qualifies`
 
-#### Scenario: Kinds are source-qualified
-- **WHEN** source `product` emits a node of kind `requirement` and source
-  `compliance` emits a node of kind `clause`
-- **THEN** the merged graph contains `product/requirement` and `compliance/clause`
+#### Scenario: IDs and kinds are source-qualified with colon
+- **WHEN** source `product` emits node `REQ-1` of kind `requirement`
+- **THEN** the composed graph contains node `product:REQ-1` of kind
+  `product:requirement`
 
-#### Scenario: Duplicate ID across sources
-- **WHEN** source `product` and source `compliance` both emit a node with ID `T-11`
-- **THEN** the shim emits `CROSS_SOURCE_DUPLICATE_ID` naming both sources
+#### Scenario: Duplicate raw ID across sources
+- **WHEN** sources `a` and `b` both emit a node with raw ID `T-11`
+- **THEN** the command emits `CROSS_SOURCE_DUPLICATE_ID` naming both sources
 
-### Requirement: Resolve cross-source edges via allowed pairings
-For each edge whose kind is declared in the program profile's `edge_kinds`, the
-shim SHALL resolve the target by finding a node whose source-qualified kind matches
-the allowed target kind and whose ID matches the edge's target. The source of the
-edge is determined by which source's adapter emitted it.
+### Requirement: Cross-source edge resolution via allowed pairings
+For each edge whose kind is declared in the fuse profile's `edge_kinds`, the
+command SHALL resolve the target by finding a node whose source-qualified kind
+matches an allowed target kind and whose raw ID matches the edge's raw target.
 
-If the target ID matches nodes in multiple sources and the allowed pairings do not
-disambiguate, the shim SHALL emit `AMBIGUOUS_CROSS_REF` at error severity.
+If the target matches nodes in multiple allowed kinds, the command SHALL emit
+`AMBIGUOUS_CROSS_REF` at error severity (profile-overridable).
 
-If the target ID matches no node in any allowed target kind, the shim SHALL emit
-`DANGLING_REF` at the program profile's declared severity for that edge kind.
+If the target matches no node in any allowed target kind, the command SHALL emit
+`VACANCY` at the fuse profile's declared severity for that code.
 
-Verified by: `.venv/bin/python -m pytest tests/test_lattice_compose.py -k resolution`
+Resolved edges SHALL carry `target_kind` and `target_source` in the output.
+
+Verified by: `cargo test -p lattice-core --test fuse -- duplicates_ambiguity`
 
 #### Scenario: Unambiguous resolution
-- **WHEN** `derives` allows `[compliance/clause, product/requirement]` and a
-  compliance edge targets `E1.01` which exists only in source `product`
-- **THEN** the edge resolves to `product/requirement` node `E1.01`
+- **WHEN** `traces_to` allows `[markdown:requirement, toml:item]` and a
+  markdown edge targets `alpha/one` which exists only in source `toml`
+- **THEN** the edge resolves to `toml:alpha/one` of kind `toml:item`
 
 #### Scenario: Ambiguous resolution
-- **WHEN** `derives` allows two target kinds and the target ID exists in both
-- **THEN** the shim emits `AMBIGUOUS_CROSS_REF`
+- **WHEN** an edge kind allows two target kinds and the raw target ID exists
+  in both
+- **THEN** the command emits `AMBIGUOUS_CROSS_REF`
 
 #### Scenario: Unresolvable target
 - **WHEN** an edge targets an ID that exists in no allowed target kind
-- **THEN** the shim emits `DANGLING_REF`
+- **THEN** the command emits `VACANCY`
 
-### Requirement: Three-phase validation
-The shim SHALL validate in three phases:
+### Requirement: Standard validators on the composed graph
+The command SHALL construct a temporary profile from the composed graph's node
+kinds and the fuse profile's edge kinds and validations, then run the standard
+`validate` pass on the composed graph. Findings from standard validators (such as
+ORPHAN_NODE) SHALL carry source attribution derived from the node's provenance.
+For node kinds emitted by source traces, the temporary profile SHALL qualify the
+source profile's `id_pattern` so that it validates composed IDs while preserving
+the source profile's validation of the raw ID. Node kinds added only from fuse
+edge endpoint declarations SHALL accept any ID.
 
-1. **Source validation.** Each source's lattice run validates independently. Only
-   source-local findings are reported. Cross-source edge kinds (marked
-   `cross_source: true` in the source profile) produce hint-severity DANGLING_REF
-   for unresolvable targets rather than errors.
+COVERAGE validations declared in the fuse profile SHALL route through the
+standard validator on the composed profile. Before inclusion, the command SHALL
+validate each COVERAGE entry's `edge_kind` against the fuse profile's declared
+`edge_kinds`; an undeclared kind produces a CONFIG_ERROR finding and the entry
+is excluded. Unresolved edges do not count as covering their target. COVERAGE
+entries MAY include `where:` conditions, consistent with standard profiles.
 
-2. **Merge.** Payloads are merged with source qualification and duplicate detection.
+`--strict` SHALL promote warnings to errors after all findings are collected,
+consistent with single-source behavior.
 
-3. **Cross-source validation.** The program profile's edge kinds and validations
-   are checked against the merged graph.
+Verified by: `cargo test -p lattice-core --test fuse -- standard_constraints duplicates_ambiguity coverage_undeclared coverage_last_wins coverage_unknown coverage_where composed_ids`
 
-Source profiles govern phase-1 finding severity. The program profile governs
-phase-3 finding severity.
+#### Scenario: Standard validators produce findings on composed graph
+- **WHEN** the fuse profile declares a CONSTRAINT validation and a composed
+  node violates it
+- **THEN** the command emits the CONSTRAINT finding with source attribution
 
-Verified by: `.venv/bin/python -m pytest tests/test_lattice_compose.py -k phase`
+#### Scenario: Composed IDs retain source pattern validation
+- **WHEN** source `product` declares ID pattern `REQ-[0-9]+` and emits a node
+  whose composed ID is `product:malformed`
+- **THEN** the command emits an ID_FORMAT finding for that composed node
+- **AND** it does not emit ID_FORMAT for a composed ID such as `product:REQ-001`
 
-#### Scenario: Source findings reported before cross-source
-- **WHEN** a source has an intra-source DANGLING_REF and the merged graph has a
-  cross-source DANGLING_REF
-- **THEN** both are reported, with the source finding attributed to its source
+#### Scenario: Coverage checks resolved edges only
+- **WHEN** a COVERAGE validation targets a kind and an edge to that kind is
+  unresolved
+- **THEN** the unresolved edge does not count as covering its target
 
-#### Scenario: Source-local coverage not contradicted by cross-source edges
-- **WHEN** a source profile declares a COVERAGE validation and the program profile
-  declares a COVERAGE validation over the same target kind but different edge kind
-- **THEN** both run independently in their respective phases
+#### Scenario: Undeclared COVERAGE edge_kind produces CONFIG_ERROR
+- **WHEN** a COVERAGE validation names an edge_kind not declared in the fuse
+  profile's `edge_kinds`
+- **THEN** the command emits a CONFIG_ERROR finding and excludes that entry
+  from the composed profile
 
-### Requirement: JSON output
-The shim SHALL write JSON to stdout containing the merged graph (nodes with
-source-qualified kinds, edges) and all findings from all three phases. Each
-finding SHALL carry source attribution when applicable. The `axes` field SHALL
-be present but empty — axis merging is deferred to native core support.
+#### Scenario: COVERAGE_UNKNOWN fires when sources lack attribution
+- **WHEN** source nodes that could carry an edge have no outgoing edge of the
+  configured kind in the composed graph (unresolved edges count neither toward
+  coverage nor toward attribution)
+- **THEN** the command emits a COVERAGE_UNKNOWN hint and COVERAGE findings
+  carry `state: "unknown"`
 
-Verified by: `.venv/bin/python -m pytest tests/test_lattice_compose.py -k output`
+#### Scenario: COVERAGE where condition filters target nodes
+- **WHEN** a COVERAGE validation includes a `where:` condition
+- **THEN** only target nodes matching the condition are checked for coverage
 
-#### Scenario: Output contains merged nodes and findings
-- **WHEN** the shim runs against a two-source program
-- **THEN** stdout is valid JSON containing nodes from both sources with qualified
-  kinds, edges, and any findings from all phases
+#### Scenario: Repeated COVERAGE entries use last-wins severity
+- **WHEN** two COVERAGE entries target the same kind with different severities
+- **THEN** the last severity wins, consistent with standard profile semantics
 
-### Requirement: Program exit codes
-The shim SHALL use the same three-valued exit codes as lattice:
+#### Scenario: Strict promotes warnings after collection
+- **WHEN** `--strict` is passed and the composed graph has warning-severity
+  findings
+- **THEN** those findings are promoted to error severity
+
+### Requirement: Pathway preservation
+The command SHALL preserve pathways from each source's trace payload, qualified
+as `source:pathway_name`. Pathways SHALL appear in the fuse output.
+
+Verified by: `cargo test -p lattice-core --test fuse -- assembly_qualifies`
+
+#### Scenario: Pathways are source-qualified
+- **WHEN** source `toml` has a pathway named `stage`
+- **THEN** the fuse output contains pathway `toml:stage`
+
+### Requirement: Tri-format output
+The command SHALL output the fuse report through `output_result` in all three
+formats (plain, json, rich). The JSON output SHALL include `header` (with `name`,
+`version`, `manifest_version`), `nodes`, `edges`, `pathways`, and `findings`.
+Each finding SHALL carry source attribution when applicable.
+
+Verified by: `cargo test -p lattice-core --test fuse -- cli_clean_warning`
+
+#### Scenario: JSON output contains composed graph
+- **WHEN** the command runs with `--format json` against two sources
+- **THEN** stdout is valid JSON with `header`, `nodes`, `edges`, `pathways`,
+  and `findings` fields
+
+#### Scenario: Plain output lists nodes and findings
+- **WHEN** the command runs with `--format plain`
+- **THEN** the output contains a header line, node listings, edge listings,
+  and finding lines
+
+### Requirement: Fuse exit codes
+The command SHALL use the same three-valued exit codes as lattice:
 - **0** — no error-severity findings in any phase.
 - **1** — error-severity findings in source or cross-source validation.
-- **2** — shim could not run: bad manifest, bad program profile, or any source
-  adapter exiting 2.
+- **2** — could not run: bad manifest, bad fuse profile, source adapter failure,
+  or unparseable trace output.
 
-Verified by: `.venv/bin/python -m pytest tests/test_lattice_compose.py -k exit_code`
+Exit 2 SHALL never be collapsed into 1.
+
+Verified by: `cargo test -p lattice-core --test fuse -- cli_clean_warning`
 
 #### Scenario: Clean run
 - **WHEN** all sources pass and no cross-source findings at error severity
-- **THEN** the shim exits 0
+- **THEN** the command exits 0
 
 #### Scenario: Cross-source finding at error severity
-- **WHEN** the merged graph has a `CROSS_SOURCE_DUPLICATE_ID`
-- **THEN** the shim exits 1
+- **WHEN** the composed graph has a `CROSS_SOURCE_DUPLICATE_ID`
+- **THEN** the command exits 1
+
+#### Scenario: Source failure
+- **WHEN** one source's adapter exits 2
+- **THEN** the command exits 2

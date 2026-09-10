@@ -1,5 +1,0 @@
-# Fixture register that is not valid TOML: the decoder must fail on it, and the
-# adapter must report that rather than raising or skipping in silence.
-
-[register]
-id = = "reg.broken"

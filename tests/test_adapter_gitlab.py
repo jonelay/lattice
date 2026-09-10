@@ -75,8 +75,8 @@ def edge_set(document: dict, kind: str) -> set[tuple[str, str]]:
     }
 
 
-def test_contract_version_and_all_issue_nodes(document: dict):
-    assert document["contract_version"] == "1.1"
+def test_interface_version_and_all_issue_nodes(document: dict):
+    assert document["interface_version"] == "1.2"
     assert set(nodes(document)) == {"#1", "#2", "#3", "#4"}
 
 
@@ -124,9 +124,9 @@ def test_glab_api_failure_is_parse_error_with_zero_exit(
     )
     assert result.returncode == 0, result.stderr
     assert not doc["nodes"]
-    assert len(doc["issues"]) == 1
-    assert doc["issues"][0]["code"] == "PARSE_ERROR"
-    assert "simulated GitLab API failure" in doc["issues"][0]["message"]
+    assert len(doc["findings"]) == 1
+    assert doc["findings"][0]["code"] == "PARSE_ERROR"
+    assert "simulated GitLab API failure" in doc["findings"][0]["message"]
 
 
 def test_malformed_api_response_is_parse_error_with_zero_exit(
@@ -137,7 +137,7 @@ def test_malformed_api_response_is_parse_error_with_zero_exit(
     )
     assert result.returncode == 0, result.stderr
     assert not doc["nodes"]
-    assert [issue["code"] for issue in doc["issues"]] == ["PARSE_ERROR"]
+    assert [issue["code"] for issue in doc["findings"]] == ["PARSE_ERROR"]
 
 
 def test_missing_glab_is_parse_error_with_zero_exit(tmp_path: Path):
@@ -159,8 +159,8 @@ def test_missing_glab_is_parse_error_with_zero_exit(tmp_path: Path):
     )
     assert result.returncode == 0, result.stderr
     doc = json.loads(result.stdout)
-    assert [issue["code"] for issue in doc["issues"]] == ["PARSE_ERROR"]
-    assert "could not run glab" in doc["issues"][0]["message"]
+    assert [issue["code"] for issue in doc["findings"]] == ["PARSE_ERROR"]
+    assert "could not run glab" in doc["findings"][0]["message"]
 
 
 @needs_core

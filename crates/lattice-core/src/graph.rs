@@ -1,4 +1,4 @@
-//! The in-memory register: nodes, edges, axes and accumulated adapter issues.
+//! The in-memory register: nodes, edges, pathways and accumulated adapter issues.
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -6,24 +6,24 @@ use serde_json::{Map, Value};
 
 use crate::types::{Issue, Provenance};
 
-/// An ordering axis read from the target: its positions and where it stands now.
+/// An ordering pathway read from the target: its positions and where it stands now.
 ///
 /// Ingested data, on the same footing as nodes and edges — the register declares
 /// it and the adapter reads it. Nothing here is computed or defaulted.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Axis {
+pub struct Pathway {
     pub name: String,
     pub order: Vec<String>,
     pub current: String,
 }
 
-impl Axis {
-    /// True when `position` is one of this axis's declared positions.
+impl Pathway {
+    /// True when `position` is one of this pathway's declared positions.
     pub fn is_member(&self, position: &str) -> bool {
         self.order.iter().any(|p| p == position)
     }
 
-    /// True when `position` sits strictly later on the axis than `current`.
+    /// True when `position` sits strictly later on the pathway than `current`.
     ///
     /// False for a non-member, which callers must screen with `is_member` first —
     /// the two cases mean different things and share no answer.
@@ -39,17 +39,17 @@ impl Axis {
     }
 }
 
-/// An axis the graph refuses: repeated positions, or a `current` outside the order.
+/// An pathway the graph refuses: repeated positions, or a `current` outside the order.
 #[derive(Debug)]
-pub struct AxisError(pub String);
+pub struct PathwayError(pub String);
 
-impl std::fmt::Display for AxisError {
+impl std::fmt::Display for PathwayError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
     }
 }
 
-impl std::error::Error for AxisError {}
+impl std::error::Error for PathwayError {}
 
 /// A repeated node ID, carrying both provenances so the caller can report them.
 ///
@@ -89,6 +89,7 @@ pub struct Edge {
     pub src: String,
     pub tgt: String,
     pub kind: String,
+    pub attrs: Map<String, Value>,
     pub provenance: Provenance,
 }
 
@@ -98,13 +99,14 @@ pub struct EdgeSpec {
     pub src: String,
     pub tgt: String,
     pub kind: String,
+    pub attrs: Map<String, Value>,
 }
 
 /// A typed node/edge register with provenance and accumulated parse issues.
 ///
 /// An edge may name a target no adapter declared, so edges hold endpoint IDs as
 /// plain strings and never materialize a node. `iter_nodes` therefore yields only
-/// explicitly added nodes, and the unresolved reference surfaces as a DANGLING_REF
+/// explicitly added nodes, and the unresolved reference surfaces as a VACANCY
 /// at validation rather than as a phantom node.
 #[derive(Debug, Default)]
 pub struct LatticeGraph {
@@ -112,7 +114,7 @@ pub struct LatticeGraph {
     index: HashMap<String, usize>,
     edges: Vec<Edge>,
     issues: Vec<Issue>,
-    axes: BTreeMap<String, Axis>,
+    pathways: BTreeMap<String, Pathway>,
 }
 
 impl LatticeGraph {
@@ -151,6 +153,7 @@ impl LatticeGraph {
             src: edge.src,
             tgt: edge.tgt,
             kind: edge.kind,
+            attrs: edge.attrs,
             provenance,
         });
     }
@@ -159,33 +162,33 @@ impl LatticeGraph {
         self.issues.push(issue);
     }
 
-    /// Attach an ordering axis the adapter read from the target.
+    /// Attach an ordering pathway the adapter read from the target.
     ///
     /// Rejects rather than repairing: repeated positions leave "before" and "after"
     /// depending on which occurrence matched, and a current position outside the
-    /// order places the axis nowhere.
-    pub fn set_axis(
+    /// order places the pathway nowhere.
+    pub fn set_pathway(
         &mut self,
         name: impl Into<String>,
         order: Vec<String>,
         current: impl Into<String>,
-    ) -> Result<(), AxisError> {
+    ) -> Result<(), PathwayError> {
         let name = name.into();
         let current = current.into();
         let unique: std::collections::HashSet<&String> = order.iter().collect();
         if unique.len() != order.len() {
-            return Err(AxisError(format!(
-                "axis '{name}': positions are not unique: {order:?}"
+            return Err(PathwayError(format!(
+                "pathway '{name}': positions are not unique: {order:?}"
             )));
         }
         if !order.contains(&current) {
-            return Err(AxisError(format!(
-                "axis '{name}': current position '{current}' is not in {order:?}"
+            return Err(PathwayError(format!(
+                "pathway '{name}': current position '{current}' is not in {order:?}"
             )));
         }
-        self.axes.insert(
+        self.pathways.insert(
             name.clone(),
-            Axis {
+            Pathway {
                 name,
                 order,
                 current,
@@ -194,13 +197,13 @@ impl LatticeGraph {
         Ok(())
     }
 
-    pub fn axis(&self, name: &str) -> Option<&Axis> {
-        self.axes.get(name)
+    pub fn pathway(&self, name: &str) -> Option<&Pathway> {
+        self.pathways.get(name)
     }
 
-    /// Yield the attached axes, in name order.
-    pub fn iter_axes(&self) -> impl Iterator<Item = &Axis> {
-        self.axes.values()
+    /// Yield the attached pathways, in name order.
+    pub fn iter_pathways(&self) -> impl Iterator<Item = &Pathway> {
+        self.pathways.values()
     }
 
     pub fn adapter_issues(&self) -> &[Issue] {

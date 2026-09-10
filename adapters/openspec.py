@@ -31,7 +31,7 @@ _VERIFIED_BY = re.compile(r"^\*{0,2}Verified by:?\*{0,2}\s")
 
 # The citation prefix inside a comment. The whole remainder is one title —
 # splitting on any separator would guess, so a compound citation resolves to
-# nothing and surfaces as DANGLING_REF, which is the signal to split the line.
+# nothing and surfaces as VACANCY, which is the signal to split the line.
 _CITATION_PREFIX = "Requirement:"
 
 _RUST_FN = re.compile(r"^\s*(?:pub\s+)?(?:async\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)")
@@ -327,7 +327,7 @@ def _read_test_file(graph: DocumentBuilder, path: Path, target: Path,
 
 
 def build_graph(profile: Profile, target_path: Path) -> DocumentBuilder:
-    """Read an OpenSpec register and its citing tests into a contract document.
+    """Read an OpenSpec register and its citing tests into an interface document.
 
     Every spec and test file is read whatever the others do: an unreadable one
     becomes an issue and the rest still reach the graph, because a file the

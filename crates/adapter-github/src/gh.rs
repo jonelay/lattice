@@ -1,9 +1,8 @@
 use std::path::Path;
 use std::process::{Command, Output};
 
+use adapter_core::Document;
 use serde_json::Value;
-
-use crate::document::Document;
 
 fn command(program: &str, target: &Path, args: &[&str]) -> std::io::Result<Output> {
     Command::new(program)
@@ -17,7 +16,7 @@ pub(crate) fn derive_repo(document: &mut Document, target: &Path) -> Option<Stri
     let output = match command("git", target, &["config", "--get", "remote.origin.url"]) {
         Ok(output) => output,
         Err(error) => {
-            document.parse_error(format!("failed to run git: {error}"), ".");
+            document.parse_error(format!("failed to run git: {error}"), ".", 0);
             return None;
         }
     };
@@ -29,13 +28,14 @@ pub(crate) fn derive_repo(document: &mut Document, target: &Path) -> Option<Stri
                 String::from_utf8_lossy(&output.stderr).trim()
             ),
             ".",
+            0,
         );
         return None;
     }
     let remote = match std::str::from_utf8(&output.stdout) {
         Ok(remote) => remote.trim(),
         Err(error) => {
-            document.parse_error(format!("origin remote is not valid UTF-8: {error}"), ".");
+            document.parse_error(format!("origin remote is not valid UTF-8: {error}"), ".", 0);
             return None;
         }
     };
@@ -45,6 +45,7 @@ pub(crate) fn derive_repo(document: &mut Document, target: &Path) -> Option<Stri
             document.parse_error(
                 format!("origin remote '{remote}' is not a GitHub repository URL"),
                 ".",
+                0,
             );
             None
         }
@@ -87,6 +88,7 @@ pub(crate) fn fetch_issues(
             document.parse_error(
                 format!("failed to run gh: {error}"),
                 format!("github:{repo}"),
+                0,
             );
             return None;
         }
@@ -98,6 +100,7 @@ pub(crate) fn fetch_issues(
                 String::from_utf8_lossy(&output.stderr).trim()
             ),
             format!("github:{repo}"),
+            0,
         );
         return None;
     }
@@ -112,6 +115,7 @@ pub(crate) fn fetch_issues(
                 document.parse_error(
                     format!("malformed response from gh api: {error}"),
                     format!("github:{repo}"),
+                    0,
                 );
                 break;
             }

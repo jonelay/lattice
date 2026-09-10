@@ -27,7 +27,9 @@ node_kinds:
       text: {type: string, required: true}
       status: {type: enum, values: [done, partial, todo, blocked]}
       tags: {type: list, items: string}
+      milestones: {type: list, items: date}
       count: {type: int}
+      expires: {type: date}
   test:
     id_pattern: "^T-\\d+$"
 edge_kinds:
@@ -65,7 +67,7 @@ fn find<'a>(issues: &'a [Issue], code: &str) -> &'a Issue {
 #[test]
 fn an_issue_carries_severity_code_provenance_and_message() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t"}))],
     }));
     let issues = validate(&graph, &kinds_profile(), false);
@@ -79,7 +81,7 @@ fn an_issue_carries_severity_code_provenance_and_message() {
 #[test]
 fn a_node_scoped_finding_carries_its_node_id() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-1", json!({"text": "t"}))],
     }));
     let issues = validate(&graph, &kinds_profile(), false);
@@ -92,7 +94,7 @@ fn a_node_scoped_finding_carries_its_node_id() {
 fn a_coverage_gap_names_the_uncovered_node() {
     let profile = profile_from(&coverage_profile(&["verifies"])).unwrap();
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t"})),
                   {"id": "T-1", "kind": "test", "attrs": {},
                    "provenance": {"file": "t.py", "line": 1}}],
@@ -108,6 +110,24 @@ fn a_coverage_gap_names_the_uncovered_node() {
         "{}",
         coverage.message
     );
+}
+
+#[test]
+fn coverage_where_filters_only_matching_targets() {
+    let yaml = format!(
+        "{KINDS_PROFILE}validations:\n  - COVERAGE:\n      target_kind: req\n\
+         \x20     edge_kind: verifies\n      where:\n        status: {{not: deferred}}\n"
+    );
+    let profile = profile_from(&yaml).unwrap();
+    let graph = ingest(json!({
+        "interface_version": "1.0",
+        "nodes": [req("REQ-0001", json!({"text": "t", "status": "todo"})),
+                  req("REQ-0002", json!({"text": "t", "status": "deferred"}))],
+    }));
+    let issues = validate(&graph, &profile, false);
+
+    assert_eq!(coverage_for(&issues, "REQ-0001").len(), 1);
+    assert!(coverage_for(&issues, "REQ-0002").is_empty());
 }
 
 #[test]
@@ -188,7 +208,7 @@ fn coverage_profile(edge_kinds: &[&str]) -> String {
 /// rule over `verifies`/`fulfills` is satisfied.
 fn covered_by(edge_kind: &str) -> LatticeGraph {
     ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t"})),
                   req("REQ-0002", json!({"text": "t"})),
                   {"id": "T-1", "kind": "test", "attrs": {},
@@ -202,7 +222,7 @@ fn covered_by(edge_kind: &str) -> LatticeGraph {
 #[test]
 fn an_id_not_matching_its_pattern_is_reported_with_the_node_provenance() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-1", json!({"text": "t"}))],
     }));
     let issues = validate(&graph, &kinds_profile(), false);
@@ -215,7 +235,7 @@ fn an_id_not_matching_its_pattern_is_reported_with_the_node_provenance() {
 #[test]
 fn an_edge_between_disallowed_kinds_is_attributed_to_its_source() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [{"id": "NEED-1", "kind": "need", "attrs": {},
                    "provenance": {"file": "n.md", "line": 1}},
                   req("REQ-0001", json!({"text": "t"}))],
@@ -230,16 +250,16 @@ fn an_edge_between_disallowed_kinds_is_attributed_to_its_source() {
 }
 
 #[test]
-fn a_dangling_reference_is_attributed_to_its_source() {
+fn a_vacancyerence_is_attributed_to_its_source() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0604", json!({"text": "t"}))],
         "edges": [{"src": "REQ-0604", "tgt": "RISK-001", "kind": "derives",
                    "provenance": {"file": "REQS.md", "line": 7}}],
     }));
     let issues = validate(&graph, &kinds_profile(), false);
     assert_eq!(
-        find(&issues, "DANGLING_REF").node_id.as_deref(),
+        find(&issues, "VACANCY").node_id.as_deref(),
         Some("REQ-0604")
     );
 }
@@ -247,7 +267,7 @@ fn a_dangling_reference_is_attributed_to_its_source() {
 #[test]
 fn a_missing_required_attr_is_reported() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({}))],
     }));
     let issues = validate(&graph, &kinds_profile(), false);
@@ -259,7 +279,7 @@ fn a_missing_required_attr_is_reported() {
 #[test]
 fn an_attr_of_the_wrong_type_is_reported() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t", "count": "seven"}))],
     }));
     let issues = validate(&graph, &kinds_profile(), false);
@@ -269,7 +289,7 @@ fn an_attr_of_the_wrong_type_is_reported() {
 #[test]
 fn an_enum_value_outside_the_declared_list_is_reported() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t", "status": "unknown"}))],
     }));
     let issues = validate(&graph, &kinds_profile(), false);
@@ -279,7 +299,7 @@ fn an_enum_value_outside_the_declared_list_is_reported() {
 #[test]
 fn a_list_element_of_the_wrong_type_is_reported() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t", "tags": ["a", 42]}))],
     }));
     let issues = validate(&graph, &kinds_profile(), false);
@@ -295,18 +315,74 @@ fn a_list_element_of_the_wrong_type_is_reported() {
 }
 
 #[test]
-fn the_axis_codes_take_a_profile_override() {
-    // AXIS_INVALID is adapter-emitted, so the override is the only thing core
+fn valid_date_attrs_and_list_items_pass() {
+    let graph = ingest(json!({
+        "interface_version": "1.0",
+        "nodes": [req("REQ-0001", json!({
+            "text": "t",
+            "expires": "2028-02-29",
+            "milestones": ["2026-09-09", "2030-01-15"]
+        }))],
+    }));
+    let issues = validate(&graph, &kinds_profile(), false);
+    assert!(
+        !issues
+            .iter()
+            .any(|i| i.code == "ATTR_TYPE" || i.code == "ATTR_LIST_ITEMS"),
+        "valid dates produced type findings: {:?}",
+        codes(&issues)
+    );
+}
+
+#[test]
+fn invalid_date_strings_report_the_required_format() {
+    for invalid in [
+        "2030-02-29",
+        "2030-13-01",
+        "2030-1-15",
+        "2030-01-15T00:00:00Z",
+    ] {
+        let graph = ingest(json!({
+            "interface_version": "1.0",
+            "nodes": [req("REQ-0001", json!({"text": "t", "expires": invalid}))],
+        }));
+        let issues = validate(&graph, &kinds_profile(), false);
+        let attr = find(&issues, "ATTR_TYPE");
+        assert!(
+            attr.message.contains("date (YYYY-MM-DD)"),
+            "{}",
+            attr.message
+        );
+    }
+
+    let graph = ingest(json!({
+        "interface_version": "1.0",
+        "nodes": [req("REQ-0001", json!({
+            "text": "t", "milestones": ["2030-01-15", "2030-13-01"]
+        }))],
+    }));
+    let issues = validate(&graph, &kinds_profile(), false);
+    let item = find(&issues, "ATTR_LIST_ITEMS");
+    assert!(
+        item.message.contains("date (YYYY-MM-DD)"),
+        "{}",
+        item.message
+    );
+}
+
+#[test]
+fn the_pathway_codes_take_a_profile_override() {
+    // PATHWAY_INVALID is adapter-emitted, so the override is the only thing core
     // does to it. A code with no shipped default must still be overridable.
-    let yaml = format!("{KINDS_PROFILE}validations:\n  - AXIS_INVALID:\n      severity: info\n");
+    let yaml = format!("{KINDS_PROFILE}validations:\n  - PATHWAY_INVALID:\n      severity: info\n");
     let profile = profile_from(&yaml).unwrap();
     let graph = ingest(json!({
-        "contract_version": "1.0",
-        "issues": [{"severity": "warning", "code": "AXIS_INVALID", "message": "m",
+        "interface_version": "1.0",
+        "issues": [{"severity": "warning", "code": "PATHWAY_INVALID", "message": "m",
                     "provenance": {"file": "r.md", "line": 1}, "node_id": null}],
     }));
     assert_eq!(
-        find(&validate(&graph, &profile, false), "AXIS_INVALID").severity,
+        find(&validate(&graph, &profile, false), "PATHWAY_INVALID").severity,
         Severity::Info
     );
 }
@@ -316,7 +392,7 @@ fn the_axis_codes_take_a_profile_override() {
 #[test]
 fn strict_promotes_warnings_but_not_infos() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t"}))],
         "issues": [{"severity": "info", "code": "NOTE", "message": "m",
                     "provenance": {"file": "r.md", "line": 1}, "node_id": null}],
@@ -333,9 +409,9 @@ fn strict_promotes_warnings_but_not_infos() {
 }
 
 #[test]
-fn strict_does_not_promote_an_axis_demoted_finding() {
-    let graph = axis_graph("M4".into());
-    let issues = validate(&graph, &axis_profile(), true);
+fn strict_does_not_promote_a_pathway_demoted_finding() {
+    let graph = pathway_graph("M4".into());
+    let issues = validate(&graph, &pathway_profile(), true);
 
     assert_eq!(
         find(&issues, "OBLIGATION_UNBACKED").severity,
@@ -356,7 +432,7 @@ fn a_profile_override_applies_to_a_built_in_code() {
     let yaml = format!("{KINDS_PROFILE}validations:\n  - ORPHAN_NODE:\n      severity: info\n");
     let profile = profile_from(&yaml).unwrap();
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t"}))],
     }));
     assert_eq!(
@@ -370,7 +446,7 @@ fn a_profile_override_applies_to_an_adapter_code() {
     let yaml = format!("{KINDS_PROFILE}validations:\n  - PARSE_ERROR:\n      severity: info\n");
     let profile = profile_from(&yaml).unwrap();
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "issues": [{"severity": "warning", "code": "PARSE_ERROR", "message": "m",
                     "provenance": {"file": "REQS.md", "line": 12}, "node_id": null}],
     }));
@@ -388,7 +464,7 @@ fn an_override_promoting_an_externally_emitted_hint_is_a_config_error() {
     let yaml = format!("{KINDS_PROFILE}validations:\n  - ADAPTER_ADVICE:\n      severity: error\n");
     let profile = profile_from(&yaml).unwrap();
     let graph = ingest(json!({
-        "contract_version": "1.1",
+        "interface_version": "1.1",
         "issues": [{"severity": "hint", "code": "ADAPTER_ADVICE", "message": "m",
                     "provenance": {"file": "REQS.md", "line": 12}, "node_id": null}],
     }));
@@ -408,7 +484,7 @@ fn a_demoting_override_on_an_externally_emitted_hint_is_silent() {
     let yaml = format!("{KINDS_PROFILE}validations:\n  - ADAPTER_ADVICE:\n      severity: hint\n");
     let profile = profile_from(&yaml).unwrap();
     let graph = ingest(json!({
-        "contract_version": "1.1",
+        "interface_version": "1.1",
         "issues": [{"severity": "hint", "code": "ADAPTER_ADVICE", "message": "m",
                     "provenance": {"file": "REQS.md", "line": 12}, "node_id": null}],
     }));
@@ -426,7 +502,7 @@ fn a_refused_override_promotion_is_reported_once_per_code() {
     let yaml = format!("{KINDS_PROFILE}validations:\n  - ADAPTER_ADVICE:\n      severity: error\n");
     let profile = profile_from(&yaml).unwrap();
     let graph = ingest(json!({
-        "contract_version": "1.1",
+        "interface_version": "1.1",
         "issues": [{"severity": "hint", "code": "ADAPTER_ADVICE", "message": "one",
                     "provenance": {"file": "REQS.md", "line": 12}, "node_id": null},
                    {"severity": "hint", "code": "ADAPTER_ADVICE", "message": "two",
@@ -446,7 +522,7 @@ fn a_refused_override_promotion_is_reported_once_per_code() {
 #[test]
 fn an_adapter_issue_appears_beside_the_graph_findings() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t"}))],
         "issues": [{"severity": "error", "code": "PARSE_ERROR", "message": "bad row",
                     "provenance": {"file": "REQS.md", "line": 12}, "node_id": null}],
@@ -466,7 +542,7 @@ fn an_adapter_issue_appears_beside_the_graph_findings() {
 #[test]
 fn an_unknown_kind_does_not_cascade_into_edge_constraints() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [{"id": "M-1", "kind": "mystery", "attrs": {},
                    "provenance": {"file": "m.md", "line": 1}},
                   req("REQ-0001", json!({"text": "t"}))],
@@ -486,32 +562,32 @@ fn an_unknown_kind_does_not_cascade_into_edge_constraints() {
     );
 }
 
-// Requirement: Axis severity resolution
+// Requirement: Pathway severity resolution
 
-/// `KINDS_PROFILE` with a `phase` axis bound to the adapter code
+/// `KINDS_PROFILE` with a `phase` pathway bound to the adapter code
 /// `OBLIGATION_UNBACKED` through each `req` node's `trigger` attr.
-fn axis_profile() -> Profile {
+fn pathway_profile() -> Profile {
     let yaml = format!(
-        "{KINDS_PROFILE}axes: [phase]\nvalidations:\n  - OBLIGATION_UNBACKED:\n\
-         \x20     axis: phase\n      position_attr: trigger\n"
+        "{KINDS_PROFILE}pathways: [phase]\nvalidations:\n  - OBLIGATION_UNBACKED:\n\
+         \x20     pathway: phase\n      position_attr: trigger\n"
     );
-    profile_from(&yaml).expect("the axis profile loads")
+    profile_from(&yaml).expect("the pathway profile loads")
 }
 
 /// One `req` node whose `trigger` is as given, carrying one bound finding, on an
-/// axis whose current position is `M0`.
+/// pathway whose current position is `M0`.
 ///
 /// A second node and an edge join it, so the bound finding is the graph's only
 /// one — otherwise an incidental `ORPHAN_NODE` would answer the strict case
 /// instead of the demotion under test.
-fn axis_graph(trigger: Value) -> LatticeGraph {
+fn pathway_graph(trigger: Value) -> LatticeGraph {
     let mut attrs = json!({"text": "t"});
     if !trigger.is_null() {
         attrs["trigger"] = trigger;
     }
     ingest(json!({
-        "contract_version": "1.0",
-        "axes": [{"name": "phase", "order": ["CB", "M0", "M4"], "current": "M0"}],
+        "interface_version": "1.0",
+        "pathways": [{"name": "phase", "order": ["CB", "M0", "M4"], "current": "M0"}],
         "nodes": [req("REQ-0001", attrs), req("REQ-0002", json!({"text": "t"}))],
         "edges": [{"src": "REQ-0001", "tgt": "REQ-0002", "kind": "derives",
                    "provenance": {"file": "REQS.md", "line": 42}}],
@@ -524,7 +600,7 @@ fn axis_graph(trigger: Value) -> LatticeGraph {
 #[test]
 fn a_finding_at_or_before_the_current_position_keeps_its_severity() {
     for position in ["M0", "CB"] {
-        let issues = validate(&axis_graph(position.into()), &axis_profile(), false);
+        let issues = validate(&pathway_graph(position.into()), &pathway_profile(), false);
         assert_eq!(
             find(&issues, "OBLIGATION_UNBACKED").severity,
             Severity::Warning,
@@ -535,7 +611,7 @@ fn a_finding_at_or_before_the_current_position_keeps_its_severity() {
 
 #[test]
 fn a_finding_after_the_current_position_is_demoted() {
-    let issues = validate(&axis_graph("M4".into()), &axis_profile(), false);
+    let issues = validate(&pathway_graph("M4".into()), &pathway_profile(), false);
     assert_eq!(
         find(&issues, "OBLIGATION_UNBACKED").severity,
         Severity::Info
@@ -543,9 +619,9 @@ fn a_finding_after_the_current_position_is_demoted() {
 }
 
 #[test]
-fn a_position_value_not_on_the_axis_is_demoted() {
+fn a_position_value_not_on_the_pathway_is_demoted() {
     let position = "subscribe DbD (precedes M0 wiring)";
-    let issues = validate(&axis_graph(position.into()), &axis_profile(), false);
+    let issues = validate(&pathway_graph(position.into()), &pathway_profile(), false);
     assert_eq!(
         find(&issues, "OBLIGATION_UNBACKED").severity,
         Severity::Info
@@ -555,9 +631,9 @@ fn a_position_value_not_on_the_axis_is_demoted() {
 #[test]
 fn a_non_string_position_leaves_severity_unchanged() {
     // Demotion is a positive claim that a finding is not yet due. A value the
-    // axis cannot hold has proven nothing, so quieting it would be a drop.
+    // pathway cannot hold has proven nothing, so quieting it would be a drop.
     for position in [json!(0), json!(["M4"]), json!({"phase": "M4"})] {
-        let issues = validate(&axis_graph(position.clone()), &axis_profile(), false);
+        let issues = validate(&pathway_graph(position.clone()), &pathway_profile(), false);
         assert_eq!(
             find(&issues, "OBLIGATION_UNBACKED").severity,
             Severity::Warning,
@@ -568,7 +644,7 @@ fn a_non_string_position_leaves_severity_unchanged() {
 
 #[test]
 fn an_absent_position_attr_leaves_severity_unchanged() {
-    let issues = validate(&axis_graph(Value::Null), &axis_profile(), false);
+    let issues = validate(&pathway_graph(Value::Null), &pathway_profile(), false);
     assert_eq!(
         find(&issues, "OBLIGATION_UNBACKED").severity,
         Severity::Warning
@@ -576,28 +652,28 @@ fn an_absent_position_attr_leaves_severity_unchanged() {
 }
 
 #[test]
-fn an_unbound_code_is_untouched_by_the_axis_pass() {
+fn an_unbound_code_is_untouched_by_the_pathway_pass() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
-        "axes": [{"name": "phase", "order": ["CB", "M0", "M4"], "current": "M0"}],
-        // Not yet due on the axis, so a bound finding here would be demoted.
+        "interface_version": "1.0",
+        "pathways": [{"name": "phase", "order": ["CB", "M0", "M4"], "current": "M0"}],
+        // Not yet due on the pathway, so a bound finding here would be demoted.
         "nodes": [req("REQ-0001", json!({"text": "t", "trigger": "M4"}))],
     }));
-    let issues = validate(&graph, &axis_profile(), false);
+    let issues = validate(&graph, &pathway_profile(), false);
     assert_eq!(find(&issues, "ORPHAN_NODE").severity, Severity::Warning);
 }
 
-// Requirement: Findings the axis pass cannot resolve
+// Requirement: Findings the pathway pass cannot resolve
 
 #[test]
 fn a_bound_finding_without_a_node_id_keeps_its_severity() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
-        "axes": [{"name": "phase", "order": ["CB", "M0", "M4"], "current": "M0"}],
+        "interface_version": "1.0",
+        "pathways": [{"name": "phase", "order": ["CB", "M0", "M4"], "current": "M0"}],
         "issues": [{"severity": "warning", "code": "OBLIGATION_UNBACKED", "message": "m",
                     "provenance": {"file": "REQS.md", "line": 42}, "node_id": null}],
     }));
-    let issues = validate(&graph, &axis_profile(), false);
+    let issues = validate(&graph, &pathway_profile(), false);
     assert_eq!(
         find(&issues, "OBLIGATION_UNBACKED").severity,
         Severity::Warning
@@ -606,20 +682,20 @@ fn a_bound_finding_without_a_node_id_keeps_its_severity() {
 
 #[test]
 fn a_binding_the_graph_cannot_satisfy_reports_once_against_the_profile() {
-    // Same document as the axis cases but with no `axes` array at all.
+    // Same document as the pathway cases but with no `pathways` array at all.
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t", "trigger": "M4"}))],
         "issues": [{"severity": "warning", "code": "OBLIGATION_UNBACKED", "message": "m",
                     "provenance": {"file": "REQS.md", "line": 42}, "node_id": "REQ-0001"},
                    {"severity": "warning", "code": "OBLIGATION_UNBACKED", "message": "m2",
                     "provenance": {"file": "REQS.md", "line": 43}, "node_id": "REQ-0001"}],
     }));
-    let issues = validate(&graph, &axis_profile(), false);
+    let issues = validate(&graph, &pathway_profile(), false);
 
     let unresolved: Vec<&Issue> = issues
         .iter()
-        .filter(|i| i.code == "AXIS_UNRESOLVED")
+        .filter(|i| i.code == "PATHWAY_UNRESOLVED")
         .collect();
     assert_eq!(unresolved.len(), 1, "one per bound code, not per finding");
     assert_eq!(unresolved[0].provenance, Provenance::new("<profile>", 0));
@@ -634,15 +710,15 @@ fn a_binding_the_graph_cannot_satisfy_reports_once_against_the_profile() {
 }
 
 #[test]
-fn two_codes_bound_to_one_missing_axis_each_report() {
+fn two_codes_bound_to_one_missing_pathway_each_report() {
     let yaml = format!(
-        "{KINDS_PROFILE}axes: [phase]\nvalidations:\n\
-         \x20 - OBLIGATION_UNBACKED:\n      axis: phase\n      position_attr: trigger\n\
-         \x20 - ORPHAN_NODE:\n      axis: phase\n      position_attr: trigger\n"
+        "{KINDS_PROFILE}pathways: [phase]\nvalidations:\n\
+         \x20 - OBLIGATION_UNBACKED:\n      pathway: phase\n      position_attr: trigger\n\
+         \x20 - ORPHAN_NODE:\n      pathway: phase\n      position_attr: trigger\n"
     );
     let profile = profile_from(&yaml).unwrap();
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t"}))],
         "issues": [{"severity": "warning", "code": "OBLIGATION_UNBACKED", "message": "m",
                     "provenance": {"file": "REQS.md", "line": 42}, "node_id": "REQ-0001"}],
@@ -651,7 +727,7 @@ fn two_codes_bound_to_one_missing_axis_each_report() {
 
     let unresolved: Vec<&Issue> = issues
         .iter()
-        .filter(|i| i.code == "AXIS_UNRESOLVED")
+        .filter(|i| i.code == "PATHWAY_UNRESOLVED")
         .collect();
     assert_eq!(unresolved.len(), 2);
     assert!(
@@ -666,8 +742,8 @@ fn two_codes_bound_to_one_missing_axis_each_report() {
 
 #[test]
 fn validate_and_the_adapter_issue_channel_agree_on_a_demoted_severity() {
-    let graph = axis_graph("M4".into());
-    let profile = axis_profile();
+    let graph = pathway_graph("M4".into());
+    let profile = pathway_profile();
 
     let from_validate = find(&validate(&graph, &profile, false), "OBLIGATION_UNBACKED").severity;
     let adapter_issues = resolve_adapter_issues(&graph, &profile);
@@ -687,7 +763,7 @@ fn validate_and_the_adapter_issue_channel_agree_on_a_demoted_severity() {
 #[test]
 fn a_well_formed_node_produces_no_finding_but_the_orphan_one() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t", "status": "done",
                                          "tags": ["a"], "count": 3}))],
     }));
@@ -698,7 +774,7 @@ fn a_well_formed_node_produces_no_finding_but_the_orphan_one() {
 #[test]
 fn a_connected_node_is_not_an_orphan() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t"})),
                   req("REQ-0002", json!({"text": "t"}))],
         "edges": [{"src": "REQ-0001", "tgt": "REQ-0002", "kind": "derives",
@@ -716,7 +792,7 @@ fn a_connected_node_is_not_an_orphan() {
 #[test]
 fn an_allowed_endpoint_pair_produces_no_constraint_finding() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [{"id": "T-1", "kind": "test", "attrs": {},
                    "provenance": {"file": "t.py", "line": 1}},
                   req("REQ-0001", json!({"text": "t"}))],
@@ -733,7 +809,7 @@ fn an_allowed_endpoint_pair_produces_no_constraint_finding() {
 #[test]
 fn an_edge_of_an_undeclared_kind_is_reported() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t"})),
                   req("REQ-0002", json!({"text": "t"}))],
         "edges": [{"src": "REQ-0001", "tgt": "REQ-0002", "kind": "invents",
@@ -747,7 +823,7 @@ fn an_edge_of_an_undeclared_kind_is_reported() {
 fn a_boolean_is_not_accepted_where_an_int_is_declared() {
     // Python's bool is an int; conflating the two would let `count: true` pass.
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t", "count": true}))],
     }));
     let issues = validate(&graph, &kinds_profile(), false);
@@ -785,7 +861,7 @@ fn a_dangling_edge_source_is_not_counted_as_coverage() {
     // a requirement as verified by a test the register never declares.
     let profile = profile_from(&coverage_profile(&["verifies"])).unwrap();
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t"}))],
         "edges": [{"src": "T-9", "tgt": "REQ-0001", "kind": "verifies",
                    "provenance": {"file": "t.py", "line": 1}}],
@@ -804,11 +880,11 @@ fn render(issues: &[Issue]) -> String {
 #[test]
 fn findings_do_not_depend_on_the_order_the_register_was_written_in() {
     let one = json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-1", json!({})), req("REQ-0002", json!({"text": "t"}))],
     });
     let two = json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0002", json!({"text": "t"})), req("REQ-1", json!({}))],
     });
     let profile = kinds_profile();
@@ -818,31 +894,31 @@ fn findings_do_not_depend_on_the_order_the_register_was_written_in() {
     );
 }
 
-// Requirement: Findings the axis pass cannot resolve
+// Requirement: Findings the pathway pass cannot resolve
 
 #[test]
 fn a_bound_finding_naming_a_node_the_graph_lacks_keeps_its_severity() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
-        "axes": [{"name": "phase", "order": ["CB", "M0", "M4"], "current": "M0"}],
+        "interface_version": "1.0",
+        "pathways": [{"name": "phase", "order": ["CB", "M0", "M4"], "current": "M0"}],
         "issues": [{"severity": "warning", "code": "OBLIGATION_UNBACKED", "message": "m",
                     "provenance": {"file": "REQS.md", "line": 42}, "node_id": "REQ-9999"}],
     }));
-    let issues = validate(&graph, &axis_profile(), false);
+    let issues = validate(&graph, &pathway_profile(), false);
     assert_eq!(
         find(&issues, "OBLIGATION_UNBACKED").severity,
         Severity::Warning
     );
 }
 
-// Requirement: Axis severity resolution
+// Requirement: Pathway severity resolution
 
 #[test]
-fn axis_resolution_does_not_depend_on_collection_order() {
+fn pathway_resolution_does_not_depend_on_collection_order() {
     let issues = |first_line: i64, second_line: i64| {
         let graph = ingest(json!({
-            "contract_version": "1.0",
-            "axes": [{"name": "phase", "order": ["CB", "M0", "M4"], "current": "M0"}],
+            "interface_version": "1.0",
+            "pathways": [{"name": "phase", "order": ["CB", "M0", "M4"], "current": "M0"}],
             "nodes": [req("REQ-0001", json!({"text": "t", "trigger": "M4"})),
                       req("REQ-0002", json!({"text": "t", "trigger": "M0"}))],
             "issues": [{"severity": "warning", "code": "OBLIGATION_UNBACKED", "message": "a",
@@ -852,7 +928,7 @@ fn axis_resolution_does_not_depend_on_collection_order() {
                         "provenance": {"file": "r.md", "line": second_line},
                         "node_id": "REQ-0002"}],
         }));
-        let resolved = validate(&graph, &axis_profile(), false);
+        let resolved = validate(&graph, &pathway_profile(), false);
         let mut by_message: Vec<(String, Severity)> = resolved
             .iter()
             .filter(|i| i.code == "OBLIGATION_UNBACKED")
@@ -870,7 +946,7 @@ fn axis_resolution_does_not_depend_on_collection_order() {
 
 #[test]
 fn strict_still_promotes_a_finding_that_is_due() {
-    let issues = validate(&axis_graph("M0".into()), &axis_profile(), true);
+    let issues = validate(&pathway_graph("M0".into()), &pathway_profile(), true);
     assert_eq!(
         find(&issues, "OBLIGATION_UNBACKED").severity,
         Severity::Error
@@ -884,7 +960,7 @@ fn a_demotion_to_hint_is_honoured() {
     let yaml = format!("{KINDS_PROFILE}validations:\n  - ORPHAN_NODE:\n      severity: hint\n");
     let profile = profile_from(&yaml).unwrap();
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t"}))],
     }));
     assert_eq!(
@@ -898,7 +974,7 @@ fn strict_does_not_promote_a_hint_finding() {
     let yaml = format!("{KINDS_PROFILE}validations:\n  - ORPHAN_NODE:\n      severity: hint\n");
     let profile = profile_from(&yaml).unwrap();
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t"}))],
     }));
     let issues = validate(&graph, &profile, true);
@@ -926,7 +1002,7 @@ fn orphan_ok_profile() -> Profile {
 #[test]
 fn an_orphan_ok_kind_raises_no_orphan_node() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [{"id": "T-1", "kind": "test", "attrs": {},
                    "provenance": {"file": "t.py", "line": 1}}],
     }));
@@ -941,7 +1017,7 @@ fn an_orphan_ok_kind_raises_no_orphan_node() {
 #[test]
 fn orphan_ok_on_one_kind_leaves_the_others_checked() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [{"id": "T-1", "kind": "test", "attrs": {},
                    "provenance": {"file": "t.py", "line": 1}},
                   req("REQ-0001", json!({"text": "t"}))],
@@ -956,7 +1032,7 @@ fn orphan_ok_on_one_kind_leaves_the_others_checked() {
 /// `REQ-0001` unverified; `T-1` attributed to `REQ-0002`, so no candidate is left.
 fn fully_attributed() -> LatticeGraph {
     ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t"})),
                   req("REQ-0002", json!({"text": "t"})),
                   {"id": "T-1", "kind": "test", "attrs": {},
@@ -969,7 +1045,7 @@ fn fully_attributed() -> LatticeGraph {
 /// `REQ-0001` unverified beside an unattributed `T-1`.
 fn with_unattributed_test() -> LatticeGraph {
     ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t"})),
                   {"id": "T-1", "kind": "test", "attrs": {},
                    "provenance": {"file": "t.py", "line": 1}}],
@@ -1005,7 +1081,7 @@ fn coverage_state_is_unknown_when_an_unattributed_candidate_exists() {
 fn coverage_state_never_invents_a_finding_for_a_verified_node() {
     let profile = profile_from(&coverage_profile(&["verifies"])).unwrap();
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t"})),
                   {"id": "T-1", "kind": "test", "attrs": {},
                    "provenance": {"file": "t.py", "line": 1}},
@@ -1025,7 +1101,7 @@ fn coverage_state_never_invents_a_finding_for_a_verified_node() {
 fn coverage_state_reports_the_population_once_per_config() {
     let profile = profile_from(&coverage_profile(&["verifies"])).unwrap();
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t"})),
                   req("REQ-0002", json!({"text": "t"})),
                   req("REQ-0003", json!({"text": "t"})),
@@ -1052,7 +1128,7 @@ fn coverage_state_hint_names_the_base_population() {
     // test layer is not wired" — the misreading observed on live data.
     let profile = profile_from(&coverage_profile(&["verifies"])).unwrap();
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t"})),
                   req("REQ-0002", json!({"text": "t"})),
                   {"id": "T-1", "kind": "test", "attrs": {},
@@ -1088,5 +1164,414 @@ fn an_override_promoting_a_hint_default_code_is_a_config_error() {
         config_error.message.contains("COVERAGE_UNKNOWN"),
         "{}",
         config_error.message
+    );
+}
+
+// ── CONSTRAINT validation ──────────────────────────────────────────
+// Requirement: CONSTRAINT evaluation
+// Requirement: CONSTRAINT condition operators
+
+fn constraint_profile(constraint_yaml: &str) -> String {
+    format!("{KINDS_PROFILE}validations:\n  - CONSTRAINT:\n{constraint_yaml}")
+}
+
+fn constraint_graph(attrs: Value) -> LatticeGraph {
+    ingest(json!({
+        "interface_version": "1.0",
+        "nodes": [{"id": "REQ-0001", "kind": "req", "attrs": attrs,
+                   "provenance": {"file": "REQS.md", "line": 1}}],
+    }))
+}
+
+#[test]
+fn constraint_expect_passes_no_finding() {
+    let yaml =
+        constraint_profile("      kind: req\n      expect:\n        text: {present: true}\n");
+    let profile = profile_from(&yaml).unwrap();
+    let graph = constraint_graph(json!({"text": "hello"}));
+    let issues = validate(&graph, &profile, false);
+    assert!(
+        !issues.iter().any(|i| i.code == "CONSTRAINT"),
+        "expected no CONSTRAINT finding, got {:?}",
+        codes(&issues)
+    );
+}
+
+#[test]
+fn constraint_expect_fails() {
+    let yaml =
+        constraint_profile("      kind: req\n      expect:\n        status: {present: true}\n");
+    let profile = profile_from(&yaml).unwrap();
+    let graph = constraint_graph(json!({"text": "hello"}));
+    let issues = validate(&graph, &profile, false);
+    let c = find(&issues, "CONSTRAINT");
+    assert_eq!(c.node_id.as_deref(), Some("REQ-0001"));
+    assert_eq!(c.severity, Severity::Warning);
+}
+
+#[test]
+fn constraint_reject_fires() {
+    let yaml =
+        constraint_profile("      kind: req\n      reject:\n        status: {eq: \"blocked\"}\n");
+    let profile = profile_from(&yaml).unwrap();
+    let graph = constraint_graph(json!({"text": "hello", "status": "blocked"}));
+    let issues = validate(&graph, &profile, false);
+    find(&issues, "CONSTRAINT");
+}
+
+#[test]
+fn constraint_reject_passes() {
+    let yaml =
+        constraint_profile("      kind: req\n      reject:\n        status: {eq: \"blocked\"}\n");
+    let profile = profile_from(&yaml).unwrap();
+    let graph = constraint_graph(json!({"text": "hello", "status": "done"}));
+    let issues = validate(&graph, &profile, false);
+    assert!(
+        !issues.iter().any(|i| i.code == "CONSTRAINT"),
+        "expected no CONSTRAINT, got {:?}",
+        codes(&issues)
+    );
+}
+
+#[test]
+fn constraint_when_guard_skips() {
+    let yaml = constraint_profile(
+        "      kind: req\n      when:\n        status: {eq: \"approved\"}\n      expect:\n        count: {present: true}\n",
+    );
+    let profile = profile_from(&yaml).unwrap();
+    let graph = constraint_graph(json!({"text": "hello", "status": "draft"}));
+    let issues = validate(&graph, &profile, false);
+    assert!(
+        !issues.iter().any(|i| i.code == "CONSTRAINT"),
+        "when guard should skip, got {:?}",
+        codes(&issues)
+    );
+}
+
+#[test]
+fn constraint_when_passes_expect_fails() {
+    let yaml = constraint_profile(
+        "      kind: req\n      when:\n        status: {eq: \"done\"}\n      expect:\n        count: {present: true}\n",
+    );
+    let profile = profile_from(&yaml).unwrap();
+    let graph = constraint_graph(json!({"text": "hello", "status": "done"}));
+    let issues = validate(&graph, &profile, false);
+    find(&issues, "CONSTRAINT");
+}
+
+#[test]
+fn constraint_both_expect_and_reject() {
+    let yaml = constraint_profile(
+        "      kind: req\n      expect:\n        text: {present: true}\n      reject:\n        status: {eq: \"blocked\"}\n",
+    );
+    let profile = profile_from(&yaml).unwrap();
+    let graph = constraint_graph(json!({"text": "hello", "status": "blocked"}));
+    let issues = validate(&graph, &profile, false);
+    find(&issues, "CONSTRAINT");
+}
+
+#[test]
+fn constraint_custom_message() {
+    let yaml = constraint_profile(
+        "      kind: req\n      expect:\n        count: {present: true}\n      message: \"Requirements must have a count\"\n",
+    );
+    let profile = profile_from(&yaml).unwrap();
+    let graph = constraint_graph(json!({"text": "hello"}));
+    let issues = validate(&graph, &profile, false);
+    assert_eq!(
+        find(&issues, "CONSTRAINT").message,
+        "Requirements must have a count"
+    );
+}
+
+#[test]
+fn constraint_generated_message_names_attr() {
+    let yaml =
+        constraint_profile("      kind: req\n      expect:\n        count: {present: true}\n");
+    let profile = profile_from(&yaml).unwrap();
+    let graph = constraint_graph(json!({"text": "hello"}));
+    let issues = validate(&graph, &profile, false);
+    let msg = &find(&issues, "CONSTRAINT").message;
+    assert!(
+        msg.contains("count"),
+        "generated message should name 'count', got: {msg}"
+    );
+}
+
+#[test]
+fn constraint_kind_mismatch_skips() {
+    let yaml =
+        constraint_profile("      kind: test\n      expect:\n        status: {present: true}\n");
+    let profile = profile_from(&yaml).unwrap();
+    let graph = constraint_graph(json!({"text": "hello"}));
+    let issues = validate(&graph, &profile, false);
+    assert!(
+        !issues.iter().any(|i| i.code == "CONSTRAINT"),
+        "kind mismatch should skip"
+    );
+}
+
+#[test]
+fn constraint_multiple_entries() {
+    let yaml = format!(
+        "{KINDS_PROFILE}validations:\n\
+         \x20 - CONSTRAINT:\n      kind: req\n      expect:\n        count: {{present: true}}\n\
+         \x20 - CONSTRAINT:\n      kind: req\n      reject:\n        status: {{eq: \"blocked\"}}\n"
+    );
+    let profile = profile_from(&yaml).unwrap();
+    let graph = constraint_graph(json!({"text": "hello", "status": "blocked"}));
+    let issues = validate(&graph, &profile, false);
+    let constraints: Vec<_> = issues.iter().filter(|i| i.code == "CONSTRAINT").collect();
+    assert_eq!(constraints.len(), 2, "both CONSTRAINT entries should fire");
+}
+
+#[test]
+fn constraint_op_eq() {
+    let yaml =
+        constraint_profile("      kind: req\n      expect:\n        status: {eq: \"done\"}\n");
+    let profile = profile_from(&yaml).unwrap();
+    let graph = constraint_graph(json!({"text": "hello", "status": "done"}));
+    assert!(
+        !validate(&graph, &profile, false)
+            .iter()
+            .any(|i| i.code == "CONSTRAINT")
+    );
+
+    let graph2 = constraint_graph(json!({"text": "hello", "status": "draft"}));
+    find(&validate(&graph2, &profile, false), "CONSTRAINT");
+}
+
+#[test]
+fn constraint_op_not() {
+    let yaml =
+        constraint_profile("      kind: req\n      expect:\n        status: {not: \"blocked\"}\n");
+    let profile = profile_from(&yaml).unwrap();
+    let graph = constraint_graph(json!({"text": "hello", "status": "done"}));
+    assert!(
+        !validate(&graph, &profile, false)
+            .iter()
+            .any(|i| i.code == "CONSTRAINT")
+    );
+
+    let graph2 = constraint_graph(json!({"text": "hello", "status": "blocked"}));
+    find(&validate(&graph2, &profile, false), "CONSTRAINT");
+}
+
+#[test]
+fn constraint_op_in() {
+    let yaml = constraint_profile(
+        "      kind: req\n      expect:\n        status: {in: [\"done\", \"partial\"]}\n",
+    );
+    let profile = profile_from(&yaml).unwrap();
+    let graph = constraint_graph(json!({"text": "hello", "status": "partial"}));
+    assert!(
+        !validate(&graph, &profile, false)
+            .iter()
+            .any(|i| i.code == "CONSTRAINT")
+    );
+
+    let graph2 = constraint_graph(json!({"text": "hello", "status": "blocked"}));
+    find(&validate(&graph2, &profile, false), "CONSTRAINT");
+}
+
+#[test]
+fn constraint_op_matches() {
+    let yaml =
+        constraint_profile("      kind: req\n      expect:\n        text: {matches: \"^[A-Z]\"}\n");
+    let profile = profile_from(&yaml).unwrap();
+    let graph = constraint_graph(json!({"text": "Hello"}));
+    assert!(
+        !validate(&graph, &profile, false)
+            .iter()
+            .any(|i| i.code == "CONSTRAINT")
+    );
+
+    let graph2 = constraint_graph(json!({"text": "hello"}));
+    find(&validate(&graph2, &profile, false), "CONSTRAINT");
+}
+
+#[test]
+fn constraint_op_present_true() {
+    let yaml =
+        constraint_profile("      kind: req\n      expect:\n        count: {present: true}\n");
+    let profile = profile_from(&yaml).unwrap();
+    let graph = constraint_graph(json!({"text": "hello", "count": 0}));
+    assert!(
+        !validate(&graph, &profile, false)
+            .iter()
+            .any(|i| i.code == "CONSTRAINT")
+    );
+}
+
+#[test]
+fn constraint_op_present_false() {
+    let yaml =
+        constraint_profile("      kind: req\n      expect:\n        count: {present: false}\n");
+    let profile = profile_from(&yaml).unwrap();
+    let graph = constraint_graph(json!({"text": "hello"}));
+    assert!(
+        !validate(&graph, &profile, false)
+            .iter()
+            .any(|i| i.code == "CONSTRAINT")
+    );
+
+    let graph2 = constraint_graph(json!({"text": "hello", "count": 5}));
+    find(&validate(&graph2, &profile, false), "CONSTRAINT");
+}
+
+#[test]
+fn constraint_type_aware_comparison() {
+    let yaml = constraint_profile("      kind: req\n      expect:\n        count: {eq: \"42\"}\n");
+    let profile = profile_from(&yaml).unwrap();
+    let graph = constraint_graph(json!({"text": "hello", "count": 42}));
+    find(&validate(&graph, &profile, false), "CONSTRAINT");
+}
+
+#[test]
+fn constraint_date_comparison_operators() {
+    let cases = [
+        ("lt", "2029-12-31", "2030-01-01", "2030-01-01"),
+        ("gt", "2030-01-02", "2030-01-01", "2030-01-01"),
+        ("lte", "2030-01-01", "2030-01-01", "2030-01-02"),
+        ("gte", "2030-01-01", "2030-01-01", "2029-12-31"),
+    ];
+    for (op, passing, expected, failing) in cases {
+        let yaml = constraint_profile(&format!(
+            "      kind: req\n      expect:\n        expires: {{{op}: \"{expected}\"}}\n"
+        ));
+        let profile = profile_from(&yaml).unwrap();
+        let graph = constraint_graph(json!({"text": "hello", "expires": passing}));
+        assert!(
+            !validate(&graph, &profile, false)
+                .iter()
+                .any(|i| i.code == "CONSTRAINT"),
+            "date operator {op} should pass"
+        );
+
+        let graph = constraint_graph(json!({"text": "hello", "expires": failing}));
+        find(&validate(&graph, &profile, false), "CONSTRAINT");
+    }
+}
+
+#[test]
+fn constraint_int_comparison_operators() {
+    let cases = [
+        ("lt", 4, 5, 5),
+        ("gt", 6, 5, 5),
+        ("lte", 5, 5, 6),
+        ("gte", 5, 5, 4),
+    ];
+    for (op, passing, expected, failing) in cases {
+        let yaml = constraint_profile(&format!(
+            "      kind: req\n      expect:\n        count: {{{op}: {expected}}}\n"
+        ));
+        let profile = profile_from(&yaml).unwrap();
+        let graph = constraint_graph(json!({"text": "hello", "count": passing}));
+        assert!(
+            !validate(&graph, &profile, false)
+                .iter()
+                .any(|i| i.code == "CONSTRAINT"),
+            "int operator {op} should pass"
+        );
+
+        let graph = constraint_graph(json!({"text": "hello", "count": failing}));
+        find(&validate(&graph, &profile, false), "CONSTRAINT");
+    }
+}
+
+#[test]
+fn constraint_comparison_fails_for_wrong_order_or_mixed_types() {
+    let yaml = constraint_profile("      kind: req\n      expect:\n        count: {lt: 5}\n");
+    let profile = profile_from(&yaml).unwrap();
+
+    let wrong_order = constraint_graph(json!({"text": "hello", "count": 6}));
+    find(&validate(&wrong_order, &profile, false), "CONSTRAINT");
+
+    let mixed_types = constraint_graph(json!({"text": "hello", "count": "4"}));
+    find(&validate(&mixed_types, &profile, false), "CONSTRAINT");
+}
+
+// Profile loader tests
+
+#[test]
+fn constraint_missing_kind_rejected() {
+    let yaml = constraint_profile("      expect:\n        text: {present: true}\n");
+    assert!(profile_from(&yaml).is_err());
+}
+
+#[test]
+fn constraint_missing_expect_and_reject_rejected() {
+    let yaml = constraint_profile("      kind: req\n");
+    assert!(profile_from(&yaml).is_err());
+}
+
+#[test]
+fn constraint_unknown_operator_rejected() {
+    let yaml =
+        constraint_profile("      kind: req\n      expect:\n        count: {between: [1, 5]}\n");
+    assert!(profile_from(&yaml).is_err());
+}
+
+#[test]
+fn constraint_undeclared_kind_rejected() {
+    let yaml =
+        constraint_profile("      kind: widget\n      expect:\n        x: {present: true}\n");
+    assert!(profile_from(&yaml).is_err());
+}
+
+#[test]
+fn constraint_invalid_regex_rejected() {
+    let yaml = constraint_profile(
+        "      kind: req\n      expect:\n        text: {matches: \"[invalid\"}\n",
+    );
+    assert!(profile_from(&yaml).is_err());
+}
+
+// Integration: pathway demotion and strict
+
+#[test]
+fn constraint_pathway_demotion() {
+    let yaml = format!(
+        "{KINDS_PROFILE}\
+         pathways: [stage]\n\
+         validations:\n\
+         \x20 - CONSTRAINT:\n\
+         \x20     kind: req\n\
+         \x20     expect:\n\
+         \x20       count: {{present: true}}\n\
+         \x20     pathway: stage\n\
+         \x20     position_attr: status\n"
+    );
+    let profile = profile_from(&yaml).unwrap();
+    let doc = json!({
+        "interface_version": "1.0",
+        "nodes": [{"id": "REQ-0001", "kind": "req",
+                   "attrs": {"text": "hello", "status": "done"},
+                   "provenance": {"file": "REQS.md", "line": 1}}],
+        "pathways": [{"name": "stage", "order": ["todo", "done"], "current": "todo"}]
+    });
+    let graph = ingest(doc);
+    let issues = validate(&graph, &profile, false);
+    let c = issues.iter().find(|i| i.code == "CONSTRAINT");
+    assert!(c.is_some(), "CONSTRAINT should fire");
+    assert_eq!(
+        c.unwrap().severity,
+        Severity::Info,
+        "should be demoted to info"
+    );
+}
+
+#[test]
+fn constraint_strict_promotion() {
+    let yaml =
+        constraint_profile("      kind: req\n      expect:\n        count: {present: true}\n");
+    let profile = profile_from(&yaml).unwrap();
+    let graph = constraint_graph(json!({"text": "hello"}));
+    let issues = validate(&graph, &profile, true);
+    let c = find(&issues, "CONSTRAINT");
+    assert_eq!(
+        c.severity,
+        Severity::Error,
+        "strict should promote warning to error"
     );
 }

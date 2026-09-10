@@ -1,0 +1,15 @@
+Fuse synthetic-fuse 1.0.0: 6 nodes, 3 edges, 1 pathways
+src:T1 [src:test] tests.md:1
+src:T2 [src:test] tests.md:2
+src:DUP [src:test] tests.md:3
+dst:R1 [dst:req] reqs.md:1
+dst:R2 [dst:req] reqs.md:2
+dst:DUP [dst:req] reqs.md:3
+src:T1 --traces--> dst:R1
+src:T1 --traces--> src:R-absent (unresolved)
+src:T2 --traces--> dst:DUP
+src:phase: alpha -> beta (current: alpha)
+ERROR CROSS_SOURCE_DUPLICATE_ID [src, dst] tests.md:3 node ID 'DUP' occurs in sources src, dst
+WARNING VACANCY [src] tests.md:1 edge 'src:T1'->'R-absent' (kind 'traces'): target 'R-absent' does not exist in an allowed source kind
+HINT COVERAGE_UNKNOWN [] <profile>:0 1 of 3 node(s) of kind 'src:test' (33.3%) carry no outgoing 'traces' edge; coverage state for 'dst:req' is unknown
+WARNING COVERAGE [dst] reqs.md:2 node 'dst:R2' (kind 'dst:req') has no incoming 'traces' edge

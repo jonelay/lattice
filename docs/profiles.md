@@ -6,8 +6,9 @@ connected, and which of those rules are worth reporting on. The core ships no vo
 of its own — it does not know what a requirement, an issue or a test is. Everything
 domain-specific arrives from a profile.
 
-This is the reference for writing one. `openspec/specs/profile-schema/spec.md` is the
-normative contract; where this guide and that spec disagree, the spec is right.
+This is the reference for writing one. [glossary.md](glossary.md) defines every term
+lattice uses; `openspec/specs/profile-schema/spec.md` is the normative contract; where
+this guide and that spec disagree, the spec is right.
 
 ## What belongs in a profile, and what does not
 
@@ -16,7 +17,7 @@ A profile declares **vocabulary and policy**. An adapter reads **syntax**.
 The split matters because it decides where your work goes. If your register is a markdown
 table and you want a new column recognised, that is an adapter change — code. If your
 register already parses and you want a new ID shape accepted, a new node kind, a different
-severity, or a coverage rule, that is a profile change — data, no code at all.
+severity, or a coverage validation, that is a profile change — data, no code at all.
 
 Concretely:
 
@@ -31,7 +32,7 @@ Concretely:
 
 There is deliberately no parser DSL. A profile is data, not a programming language written
 in YAML, so a register whose on-disk shape differs from every shipped adapter needs an
-adapter — a standalone program taking `--profile` and `--target` and writing a contract
+adapter — a standalone program taking `--profile` and `--target` and writing an interface
 document to stdout. `openspec/specs/adapter-contract/spec.md` defines that interface, and
 `crates/adapter-toml/` is a worked example over a non-markdown register.
 
@@ -86,7 +87,7 @@ adapter — so a load error surfaces here rather than halfway through a validati
 | `node_kinds` | yes | map of kind name → declaration |
 | `edge_kinds` | yes | map of kind name → declaration |
 | `validations` | no | list of validator configurations |
-| `axes` | no | list of ordering-axis names |
+| `pathways` | no | list of ordering-pathway names |
 | `extends` | no | path to a parent profile |
 
 **A top-level key the core does not recognise is preserved, not rejected.** This is how a
@@ -182,6 +183,31 @@ adapter:
 With `adapter.id_prefix: file_stem`, row IDs are qualified as `<file-stem>/<id>`; omit it
 to keep the value of `id_key` unchanged. The only supported prefix mode is `file_stem`.
 
+For a one-file-per-record register, set `adapter.mode: directory`. Each matched `.toml`
+file's root table is then read as one record. `adapter.tables` is still required, but
+only its first entry by key order is used; that entry's map key is ignored and its
+`kind`, `id_key`, `key_map`, and `edge_keys` describe every file-root record:
+
+```yaml
+adapter:
+  mode: directory
+  paths:
+    files: ["records/*.toml"]
+  tables:
+    record:
+      kind: device
+      id_key: id
+      key_map:
+        name: name
+      edge_keys:
+        refs: references
+```
+
+`mode` defaults to `tables`, preserving the array-of-tables behavior above. Directory
+mode supports `id_prefix` and `pathway`, but not `header`: the whole file is already the
+record. A readable target with no files matching the configured globs produces an
+info-severity `NO_MATCHING_FILES` finding.
+
 An optional `adapter.header` reads one singleton table per selected file. It names the
 TOML `table`, output node `kind`, ID source (`id`), and attribute `key_map`. Set `id` to
 `file_stem` to derive the node ID from the filename, or name a key in the header table:
@@ -197,13 +223,13 @@ adapter:
       status: status
 ```
 
-An optional `adapter.axis` reads an ordering axis from one file beneath the target.
-`source_file` identifies that file, `name` names the profile axis, and `order_key` and
+An optional `adapter.pathway` reads an ordering pathway from one file beneath the target.
+`source_file` identifies that file, `name` names the profile pathway, and `order_key` and
 `current_key` are dotted paths to the ordered values and current value:
 
 ```yaml
 adapter:
-  axis:
+  pathway:
     source_file: registers/index.toml
     name: stage
     order_key: register.stage_order
@@ -211,7 +237,7 @@ adapter:
 ```
 
 See `profiles/toml.yaml` for a worked example combining table dispatch, a header node,
-file-stem ID qualification, and an axis reader.
+file-stem ID qualification, and a pathway reader.
 
 ## Node kinds
 
@@ -264,20 +290,24 @@ mostly link to nothing. It is validation policy only — an exempt node still ap
 
 ## Attributes
 
-Five types: `string`, `int`, `bool`, `enum`, `list`.
+Six types: `string`, `int`, `bool`, `date`, `enum`, `list`.
 
 ```yaml
 attrs:
   text:     { type: string, required: true }
   count:    { type: int }
   active:   { type: bool }
+  expires:  { type: date }
   status:   { type: enum, values: [done, partial, todo], required: true }
   tags:     { type: list, items: string }
+  dates:    { type: list, items: date }
 ```
 
 - `type` is required; `required` defaults to `false`.
 - `enum` must declare `values`.
-- `list` must declare `items`, naming a **scalar** type only — `string`, `int` or `bool`.
+- `date` is an ISO 8601 calendar date string in exact `YYYY-MM-DD` form. Calendar-invalid
+  dates, datetimes, and non-zero-padded dates fail with `ATTR_TYPE`.
+- `list` must declare `items`, naming a **scalar** type only — `string`, `int`, `bool` or `date`.
   Lists of lists and lists of enums are rejected, which keeps list validation one flat pass.
 - A kind with no `attrs` key loads with an empty map. A kind that carries no typed
   attributes needs no placeholder.
@@ -308,7 +338,7 @@ An edge outside the allowed pairs gets an `EDGE_CONSTRAINT` finding carrying the
 node's ID. A pair naming a kind not in `node_kinds` is a load error.
 
 **`cross_source`** — `true` marks an edge kind whose targets may live in another source.
-When a target does not resolve in a standalone run, its `DANGLING_REF` is retained at
+When a target does not resolve in a standalone run, its `VACANCY` is retained at
 hint severity instead of the configured or default severity. The program composition
 layer resolves the same plain target ID against its source-qualified allowed pairs.
 Absent means `false`; source-local edge kinds keep the existing behavior.
@@ -324,7 +354,7 @@ kind whose endpoints both exist with declared kinds produces `EDGE_CONSTRAINT`. 
 mean "any pairing", enumerate the pairings.
 
 Edges may name endpoints that were never declared as nodes. That is not silently tolerated
-and not treated as a node either — it surfaces as `DANGLING_REF`.
+and not treated as a node either — it surfaces as `VACANCY`.
 
 ## Validations
 
@@ -357,18 +387,19 @@ a load error rather than a setting that quietly does nothing.
 | `ID_FORMAT` | node ID does not match its kind's `id_pattern` | error |
 | `UNKNOWN_KIND` | node or edge kind not declared in the profile | error |
 | `EDGE_CONSTRAINT` | edge kind used between disallowed kinds | error |
-| `DANGLING_REF` | edge references an ID not in the graph | error |
+| `VACANCY` | edge references an ID not in the graph | error |
 | `ATTR_REQUIRED` | a required attr is missing | error |
 | `ATTR_TYPE` | attr value does not match its declared type | error |
 | `ATTR_ENUM` | enum value not in `values` | error |
 | `ATTR_LIST_ITEMS` | list element does not match `items` | error |
 | `CONFIG_ERROR` | validation config is malformed or names an undeclared kind | error |
+| `CONSTRAINT` | a node fails a cross-field constraint declared in the profile | warning |
 | `ORPHAN_NODE` | node has no incoming or outgoing edges | warning |
 | `COVERAGE` | target node has no incoming edge of the configured kind | warning |
 | `COVERAGE_DEEP` | target uncovered under the rollup rule | warning |
 | `SOURCE_MISSING` | a cited path does not resolve on disk (adapter-emitted) | warning |
-| `AXIS_UNRESOLVED` | an axis binding names an axis the graph does not carry | warning |
-| `AXIS_INVALID` | a register's declared axis does not hold (adapter-emitted) | warning |
+| `PATHWAY_UNRESOLVED` | a pathway binding names a pathway the graph does not carry | warning |
+| `PATHWAY_INVALID` | a register's declared pathway does not hold (adapter-emitted) | warning |
 | `COVERAGE_UNKNOWN` | evidence-bearing nodes exist that attribute to nothing | hint |
 | `SUGGESTED_EDGE` | the suggestion sidecar proposes an edge | hint |
 | `SUGGESTION_UNRESOLVED` | a suggestion names something that does not resolve | hint |
@@ -378,8 +409,9 @@ never affect the exit code and cannot be promoted; see [Severities](#severities)
 
 Configuration keys by code:
 
-- `COVERAGE` — `target_kind`, `edge_kind`, `severity`
-- `COVERAGE_DEEP` — `target_kind`, `via`, `evidence`, `severity`
+- `COVERAGE` — `target_kind`, `edge_kind`, `where`, `severity`
+- `COVERAGE_DEEP` — `target_kind`, `via`, `evidence`, `where`, `severity`
+- `CONSTRAINT` — `kind`, `when`, `expect`, `reject`, `message`, `severity`
 - `SUMMARY` — `node_kind`, `status_attr`, `group_by_attr`, `severity`
 - any other code — `severity` alone
 
@@ -392,18 +424,34 @@ implement, including codes your own adapter emits.
 a rollup — a node is covered if it has direct evidence, **or** it has children and every
 one of them is covered.
 
+Both coverage validators accept an optional `where` block using the same condition syntax
+as `CONSTRAINT`. It limits which target-kind nodes are checked. Omitting it checks every
+target, as before.
+
+```yaml
+  - COVERAGE:
+      target_kind: req
+      edge_kind: verifies
+      where:
+        status: {not: "deferred"}
+```
+
 ```yaml
   - COVERAGE_DEEP:
       target_kind: req
       via: derives        # edge kind whose *targets* are the parents
       evidence: verifies
+      where:
+        status: {not: "deferred"}
       severity: warning
 ```
 
-Use it wherever requirements decompose. A flat check reads a parent covered only through
+Use it wherever requirements decompose. A flat validation reads a parent covered only through
 its children as a false positive; the rollup does not. It is computed per run as a least
 fixed point and stored nowhere, so a childless target with no evidence stays uncovered and
-an evidence-free cycle stays uncovered.
+an evidence-free cycle stays uncovered. `where` filters only the targets that may produce a
+finding; non-matching target-kind nodes remain in the traversal and can still carry coverage
+between descendants and ancestors.
 
 ### SUMMARY is not a finding
 
@@ -424,6 +472,53 @@ of the `status_attr` enum. Above, that is one row per spec file and one column p
 A non-string value for `node_kind`, `status_attr` or `group_by_attr` makes `lattice
 summary` exit 2 with an error rather than producing a partial table.
 
+### Cross-field constraints
+
+`CONSTRAINT` lets a profile express per-node invariants as data. Each entry declares
+which node kind to check, an optional guard (`when`), and one or both of `expect` (all
+conditions must hold) and `reject` (no condition may hold).
+
+```yaml
+  - CONSTRAINT:
+      kind: requirement
+      when:
+        status: { eq: "approved" }
+      expect:
+        rationale: { present: true }
+      reject:
+        priority: { eq: "" }
+      message: "Approved requirements must have rationale and non-empty priority"
+      severity: warning
+```
+
+The `when` block is a guard: if any condition fails, the rule is silently skipped for
+that node. Then `expect` and `reject` are checked — a failure in either emits a
+`CONSTRAINT` finding. A rule must declare at least one of `expect` or `reject`.
+
+The condition operators are:
+
+| Operator | Meaning |
+|---|---|
+| `eq: <value>` | attr equals value (type-aware) |
+| `not: <value>` | attr does not equal value |
+| `in: [v1, v2]` | attr is one of the listed values |
+| `lt: <value>` | attr is less than value |
+| `gt: <value>` | attr is greater than value |
+| `lte: <value>` | attr is less than or equal to value |
+| `gte: <value>` | attr is greater than or equal to value |
+| `matches: <regex>` | attr string matches the pattern |
+| `present: true` | attr exists (even if empty) |
+| `present: false` | attr does not exist |
+
+Comparison is type-aware: a string `"42"` does not match an integer `42`. Ordering
+operators compare integers numerically and strings lexically, which gives chronological
+ordering for validated `YYYY-MM-DD` dates. Missing attrs, mixed types, floats, and other
+JSON values do not compare. An unknown operator is a load error, not a silently inert
+condition.
+
+Multiple `CONSTRAINT` entries are honoured independently, following the same repeated-code
+contract as `COVERAGE`. Pathway demotion and `--strict` promotion apply normally.
+
 ### Severities
 
 Four tiers: `error`, `warning`, `info`, `hint`.
@@ -440,34 +535,34 @@ warning, and promoting it would launder advice into a gate; an attempt is report
 The rule is stated over the severity a finding *arrives at*, not over its shipped default,
 because the core has no default for a code it does not implement.
 
-## Ordering axes
+## Ordering pathways
 
-An axis lets a finding's severity depend on how far the target has actually progressed —
+A pathway lets a finding's severity depend on how far the target has actually progressed —
 so that a reference to something from a stage the register has not reached yet reads as
 advice rather than as a gap.
 
-Declare the axis, then bind a code to it:
+Declare the pathway, then bind a code to it:
 
 ```yaml
-axes:
+pathways:
   - stage
 
 validations:
-  - DANGLING_REF:
-      axis: stage
+  - VACANCY:
+      pathway: stage
       position_attr: stage
 ```
 
-`axes` is a list of bare names and nothing else. It must not carry the ordered positions or
+`pathways` is a list of bare names and nothing else. It must not carry the ordered positions or
 the current position: those are target state, read from the register by the adapter at
 ingest. A copy held in the profile would advance without lattice noticing, which is the
 hand-maintained derived state the tool exists to eliminate.
 
 Rules worth knowing before you write one:
 
-- `axis` and `position_attr` are required together. A partial binding is a load error,
+- `pathway` and `position_attr` are required together. A partial binding is a load error,
   because a setting that silently does nothing is indistinguishable from one that works.
-- `axis` must name an axis in the same profile's `axes` list.
+- `pathway` must name a pathway in the same profile's `pathways` list.
 - One binding per code. A second is a load error naming the duplicated code — with two
   bindings there would be two answers for one finding and no rule to choose. Repeated
   *non-binding* configuration of the same code is still honoured.
@@ -525,7 +620,7 @@ shape is additive and safe; renumbering is not.
 
 - **The parser.** No profile-driven grammar. Registers whose on-disk shape differs need an
   adapter.
-- **Axis values.** The ordered positions and the current position are read from the
+- **Pathway values.** The ordered positions and the current position are read from the
   register, never declared in the profile.
 - **Promotion out of `hint`.** See [Severities](#severities).
 - **Caching.** Nothing computed is written back. Coverage, rollups and orphans are derived

@@ -8,9 +8,9 @@ use std::path::{Path, PathBuf};
 use common::{Case, MINIMAL_PROFILE};
 use serde_json::json;
 
-/// A contract document declaring two `req` nodes the suggestions can name.
+/// A interface document declaring two `req` nodes the suggestions can name.
 const TWO_NODES: &str = r#"{
-  "contract_version": "1.1",
+  "interface_version": "1.1",
   "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {},
              "provenance": {"file": "reqs.md", "line": 3}},
             {"id": "REQ-2", "kind": "req", "attrs": {},
@@ -193,7 +193,7 @@ fn overlay_ordering_leaves_the_registers_findings_unchanged() {
     // A lone node with no edges is an orphan, so this register has findings of
     // its own for the overlay to sort in among.
     let lone = r#"{
-      "contract_version": "1.1",
+      "interface_version": "1.1",
       "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {},
                  "provenance": {"file": "reqs.md", "line": 3}}]
     }"#;
@@ -294,7 +294,7 @@ fn suggestions_do_not_change_an_exit_code_findings_already_set() {
     // An undeclared node kind is an error-severity finding, so this register
     // exits 1 with or without the overlay.
     let broken = r#"{
-      "contract_version": "1.1",
+      "interface_version": "1.1",
       "nodes": [{"id": "REQ-1", "kind": "mystery", "attrs": {},
                  "provenance": {"file": "reqs.md", "line": 3}}]
     }"#;

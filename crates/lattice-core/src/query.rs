@@ -12,12 +12,54 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use serde_json::{Map, Value};
 
 use crate::graph::{Edge, LatticeGraph};
-use crate::profile::Profile;
+use crate::profile::{Condition, ConditionOp, Profile};
 use crate::trace::build_trace_report_for_nodes;
 use crate::types::{
     AtReport, CountsReport, DiffReport, EdgeRef, Issue, NodeRef, OrphanEntry, OrphansReport,
     PathReport, ReachReport,
 };
+use crate::validate::eval_conditions;
+
+/// Parse one command-line attribute filter.
+pub fn parse_filter(value: &str) -> Result<Condition, String> {
+    let (attr, operator, raw) = [">=", "<=", "!=", "~=", ">", "<", "="]
+        .into_iter()
+        .find_map(|operator| {
+            value
+                .find(operator)
+                .map(|at| (&value[..at], operator, &value[at + operator.len()..]))
+        })
+        .ok_or_else(|| format!("invalid filter '{value}': expected an attribute operator"))?;
+
+    let integer = || {
+        raw.parse::<i64>()
+            .ok()
+            .map(Value::from)
+            .or_else(|| raw.parse::<u64>().ok().map(Value::from))
+    };
+    let int_or_string = || integer().unwrap_or_else(|| Value::String(raw.to_string()));
+    let equality_value = || {
+        integer()
+            .or_else(|| raw.parse::<bool>().ok().map(Value::from))
+            .unwrap_or_else(|| Value::String(raw.to_string()))
+    };
+    let op = match operator {
+        "=" => ConditionOp::Eq(equality_value()),
+        "!=" => ConditionOp::Not(equality_value()),
+        "~=" => ConditionOp::Matches(
+            regex::Regex::new(raw).map_err(|error| format!("invalid filter '{value}': {error}"))?,
+        ),
+        "<" => ConditionOp::Lt(int_or_string()),
+        ">" => ConditionOp::Gt(int_or_string()),
+        "<=" => ConditionOp::Lte(int_or_string()),
+        ">=" => ConditionOp::Gte(int_or_string()),
+        _ => unreachable!(),
+    };
+    Ok(Condition {
+        attr: attr.to_string(),
+        op,
+    })
+}
 
 /// A question that cannot be posed: an ID or kind the run does not know.
 ///
@@ -127,6 +169,7 @@ pub fn reach(
     origin: &str,
     edge_kinds: &BTreeSet<String>,
     direction: Direction,
+    filters: &[Condition],
 ) -> Result<ReachReport, QueryError> {
     check_node(graph, origin)?;
     check_edge_kinds(profile, edge_kinds)?;
@@ -155,6 +198,7 @@ pub fn reach(
         nodes: seen
             .iter()
             .filter_map(|id| graph.node(id))
+            .filter(|node| eval_conditions(filters, &node.attrs, true))
             .map(|n| NodeRef {
                 id: n.id.clone(),
                 kind: n.kind.clone(),
@@ -225,11 +269,12 @@ pub fn path(
 ///
 /// An edge counts for a node whenever it names that node's ID, even when its
 /// far endpoint was never declared — the node is referenced, so it is not
-/// standing alone; the far endpoint is `DANGLING_REF`'s business.
+/// standing alone; the far endpoint is `VACANCY`'s business.
 pub fn orphans(
     graph: &LatticeGraph,
     profile: &Profile,
     kind: Option<&str>,
+    filters: &[Condition],
 ) -> Result<OrphansReport, QueryError> {
     if let Some(kind) = kind
         && !profile.node_kinds().contains_key(kind)
@@ -250,6 +295,7 @@ pub fn orphans(
         .iter_nodes()
         .filter(|n| !named.contains(n.id.as_str()))
         .filter(|n| kind.is_none_or(|k| n.kind == k))
+        .filter(|n| eval_conditions(filters, &n.attrs, true))
         .map(|n| OrphanEntry {
             id: n.id.clone(),
             kind: n.kind.clone(),
@@ -269,7 +315,7 @@ pub fn orphans(
 /// Every kind the profile declares appears, zero when uninstantiated — a zero
 /// edge count must be visible, not absent. A kind the register carries without
 /// a declaration appears too, so counts never under-report what was ingested.
-pub fn counts(graph: &LatticeGraph, profile: &Profile) -> CountsReport {
+pub fn counts(graph: &LatticeGraph, profile: &Profile, filters: &[Condition]) -> CountsReport {
     let mut nodes: BTreeMap<String, i64> = profile
         .node_kinds()
         .keys()
@@ -281,7 +327,9 @@ pub fn counts(graph: &LatticeGraph, profile: &Profile) -> CountsReport {
         .map(|k| (k.clone(), 0))
         .collect();
     for node in graph.iter_nodes() {
-        *nodes.entry(node.kind.clone()).or_insert(0) += 1;
+        if eval_conditions(filters, &node.attrs, true) {
+            *nodes.entry(node.kind.clone()).or_insert(0) += 1;
+        }
     }
     for edge in graph.iter_edges() {
         *edges.entry(edge.kind.clone()).or_insert(0) += 1;
@@ -305,6 +353,7 @@ pub fn at(
     target: &Path,
     path_arg: &str,
     lattice_version: &str,
+    filters: &[Condition],
 ) -> Result<AtReport, QueryError> {
     let arg = path_arg.trim_end_matches('/');
     let joined = target.join(arg).to_string_lossy().into_owned();
@@ -338,6 +387,7 @@ pub fn at(
     let node_ids: BTreeSet<&str> = graph
         .iter_nodes()
         .filter(|node| matches(&node.provenance.file))
+        .filter(|node| eval_conditions(filters, &node.attrs, true))
         .map(|node| node.id.as_str())
         .collect();
     let report =
@@ -374,7 +424,7 @@ pub fn at(
 /// Compare two ingested registers by semantic identity, provenance excluded.
 ///
 /// Nodes compare by ID → (kind, attrs); edges as a multiset of (src, tgt,
-/// kind); axes by name → (order, current). A declaration that merely moved
+/// kind); pathways by name → (order, current). A declaration that merely moved
 /// lines therefore does not diff — line numbers are where a thing was said,
 /// not what was said.
 pub fn diff(rev_a: &str, a: &LatticeGraph, rev_b: &str, b: &LatticeGraph) -> DiffReport {
@@ -440,14 +490,14 @@ pub fn diff(rev_a: &str, a: &LatticeGraph, rev_b: &str, b: &LatticeGraph) -> Dif
         }
     }
 
-    let axis_names: BTreeSet<&str> = a
-        .iter_axes()
-        .chain(b.iter_axes())
-        .map(|axis| axis.name.as_str())
+    let pathway_names: BTreeSet<&str> = a
+        .iter_pathways()
+        .chain(b.iter_pathways())
+        .map(|pathway| pathway.name.as_str())
         .collect();
-    let axes_changed = axis_names
+    let pathways_changed = pathway_names
         .into_iter()
-        .filter(|name| a.axis(name) != b.axis(name))
+        .filter(|name| a.pathway(name) != b.pathway(name))
         .map(str::to_string)
         .collect();
 
@@ -459,17 +509,16 @@ pub fn diff(rev_a: &str, a: &LatticeGraph, rev_b: &str, b: &LatticeGraph) -> Dif
         nodes_changed,
         edges_added,
         edges_removed,
-        axes_changed,
+        pathways_changed,
     }
 }
 
 /// One directory both revisions are materialized into, removed on drop.
 ///
-/// One path, not one per revision, and that is load-bearing: adapters embed
-/// the target path in attrs (as a consumer adapter's `file` attr can), so two
-/// materialization directories would make every such node "changed" in a diff
-/// of identical content. Extractions are sequential; the second replaces the
-/// first.
+/// One path, not one per revision, and that is load-bearing: adapters may
+/// embed the target path in attrs, so two materialization directories would
+/// make every such node "changed" in a diff of identical content. Extractions
+/// are sequential; the second replaces the first.
 pub struct MaterializationDir {
     path: PathBuf,
 }
@@ -546,4 +595,90 @@ pub fn materialize_revision(
         return Err(QueryError(format!("tar failed extracting '{rev}'")));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod filter_tests {
+    use serde_json::json;
+
+    use super::parse_filter;
+    use crate::profile::ConditionOp;
+
+    #[test]
+    fn parses_every_filter_operator() {
+        let cases = [
+            ("a=x", "eq"),
+            ("a!=x", "not"),
+            ("a~=^x$", "matches"),
+            ("a<1", "lt"),
+            ("a>1", "gt"),
+            ("a<=1", "lte"),
+            ("a>=1", "gte"),
+        ];
+        for (input, expected) in cases {
+            let condition = parse_filter(input).unwrap();
+            let actual = match condition.op {
+                ConditionOp::Eq(_) => "eq",
+                ConditionOp::Not(_) => "not",
+                ConditionOp::Matches(_) => "matches",
+                ConditionOp::Lt(_) => "lt",
+                ConditionOp::Gt(_) => "gt",
+                ConditionOp::Lte(_) => "lte",
+                ConditionOp::Gte(_) => "gte",
+                ConditionOp::In(_) | ConditionOp::Present(_) => unreachable!(),
+            };
+            assert_eq!(actual, expected, "{input}");
+        }
+    }
+
+    #[test]
+    fn equality_filters_infer_int_bool_then_string() {
+        for operator in ["=", "!="] {
+            for (raw, expected) in [
+                ("42", json!(42)),
+                ("18446744073709551615", json!(u64::MAX)),
+                ("true", json!(true)),
+                ("text", json!("text")),
+            ] {
+                let condition = parse_filter(&format!("a{operator}{raw}")).unwrap();
+                let actual = match condition.op {
+                    ConditionOp::Eq(value) | ConditionOp::Not(value) => value,
+                    _ => unreachable!(),
+                };
+                assert_eq!(actual, expected, "{operator}{raw}");
+            }
+        }
+    }
+
+    #[test]
+    fn ordering_filters_infer_int_then_string() {
+        for operator in ["<", ">", "<=", ">="] {
+            for (raw, expected) in [("42", json!(42)), ("true", json!("true"))] {
+                let condition = parse_filter(&format!("a{operator}{raw}")).unwrap();
+                let actual = match condition.op {
+                    ConditionOp::Lt(value)
+                    | ConditionOp::Gt(value)
+                    | ConditionOp::Lte(value)
+                    | ConditionOp::Gte(value) => value,
+                    _ => unreachable!(),
+                };
+                assert_eq!(actual, expected, "{operator}{raw}");
+            }
+        }
+    }
+
+    #[test]
+    fn match_filter_compiles_its_regex() {
+        let condition = parse_filter("status~=^act").unwrap();
+        let ConditionOp::Matches(regex) = condition.op else {
+            panic!("expected matches")
+        };
+        assert!(regex.is_match("active"));
+        assert!(!regex.is_match("inactive"));
+    }
+
+    #[test]
+    fn filter_without_an_operator_is_rejected() {
+        assert!(parse_filter("status").is_err());
+    }
 }

@@ -34,7 +34,7 @@ Core SHALL provide these validators, each identified by a code:
 - `UNKNOWN_KIND`: node or edge kind not declared in the profile
 - `EDGE_CONSTRAINT`: edge kind used between disallowed source/target kinds.
   The issue SHALL carry `node_id` set to the edge's source node
-- `DANGLING_REF`: edge references a node ID that does not exist in the graph.
+- `VACANCY`: edge references a node ID that does not exist in the graph.
   The issue SHALL carry `node_id` set to the edge's source node
 - `ORPHAN_NODE`: node has no incoming or outgoing edges
 - `ATTR_REQUIRED`: a required attr is missing from a node
@@ -42,49 +42,74 @@ Core SHALL provide these validators, each identified by a code:
 - `ATTR_ENUM`: an enum attr value is not in the declared `values` list
 - `ATTR_LIST_ITEMS`: a list element does not match the declared `items` type
 - `COVERAGE`: a node of the configured `target_kind` has no incoming edge of the
-  configured `edge_kind` (warning by default)
+  configured `edge_kind` (warning by default). An optional `where` condition block
+  restricts the target-kind nodes checked; absent `where`, every target is checked
 - `SOURCE_MISSING`: a path cited by the register does not resolve on disk
   (warning by default). Emitted by adapters, not by core; core SHALL declare its
   default severity so a profile can override it like any other code
 - `CONFIG_ERROR`: a profile's validation configuration is missing required keys or
   names a node/edge kind the profile does not declare (error by default)
-- `AXIS_UNRESOLVED`: a profile binds a finding code to an ordering axis the graph does
+- `PATHWAY_UNRESOLVED`: a profile binds a finding code to an ordering pathway the graph does
   not carry (warning by default). Emitted by core
-- `AXIS_INVALID`: a register declares an ordering axis that does not hold — a current
+- `PATHWAY_INVALID`: a register declares an ordering pathway that does not hold — a current
   position absent from its order, either value of the wrong shape, one of the pair
   declared without the other, or repeated positions in the order (warning by default).
   Emitted by adapters, not by core; core SHALL declare its default severity so a profile
   can override it like any other code
+- `CONSTRAINT`: a node fails a cross-field constraint declared in the profile
+  (warning by default). Core evaluates the constraint conditions against node
+  attrs; no adapter involvement. A profile MAY declare multiple CONSTRAINT
+  entries, each with its own condition set — every entry SHALL be honoured
+  independently per the existing repeated-code contract
 
 A profile MAY configure the same validation code more than once. The profile's
 `validations:` list SHALL be read as a sequence, and every entry SHALL be honoured
 independently — a later entry for a code already seen SHALL NOT replace an earlier one.
 Silently discarding a declared configuration is the failure this tool exists to prevent.
 
-An axis binding is the one exception, and it is an exception by rejection rather than by
+A pathway binding is the one exception, and it is an exception by rejection rather than by
 discard: a second binding for an already-bound code SHALL be a load error, per the
 profile-schema spec. Every other repeated configuration for that code, binding or not,
 SHALL still be honoured. Nothing declared is ever dropped.
+
+`COVERAGE_DEEP` MAY carry the same optional `where` condition block. It restricts only
+which target-kind nodes produce deep-coverage findings. Every target-kind node remains
+part of the fixed-point traversal, including a non-matching child needed to establish a
+matching parent's coverage.
+
+#### Scenario: Deep coverage filter does not remove intermediates
+- **WHEN** a matching parent is deep-covered through a non-matching target-kind child
+  that has direct evidence
+- **THEN** the parent is covered and no finding is emitted for either node
 
 #### Scenario: Coverage gap
 - **WHEN** the profile configures `COVERAGE` with `target_kind: req`, `edge_kind: verifies` and a `req` node has no incoming `verifies` edge
 - **THEN** validation emits a `COVERAGE` issue naming that node
 
-#### Scenario: Two coverage rules both apply
+#### Scenario: Attribute-filtered coverage
+- **WHEN** `COVERAGE` has `where: {status: {not: deferred}}` and uncovered target-kind
+  nodes have statuses `active` and `deferred`
+- **THEN** validation emits a `COVERAGE` issue only for the active node
+
+#### Scenario: Coverage without where retains all targets
+- **WHEN** `COVERAGE` omits `where` and two target-kind nodes are uncovered
+- **THEN** validation checks both nodes
+
+#### Scenario: Two coverage validations both apply
 - **WHEN** a profile's `validations:` list declares `COVERAGE` twice, once with `edge_kind: verifies` and once with `edge_kind: fulfills`, and a `req` node has an incoming `verifies` edge but no incoming `fulfills` edge
 - **THEN** validation emits exactly one `COVERAGE` issue for that node, naming `fulfills`
 
-#### Scenario: Each coverage rule is checked independently
+#### Scenario: Each coverage validation is checked independently
 - **WHEN** a profile declares `COVERAGE` twice as above and a `req` node has neither edge
 - **THEN** validation emits two `COVERAGE` issues for that node, one per configured `edge_kind`
 
 #### Scenario: Coverage config names an undeclared kind
 - **WHEN** a `COVERAGE` config sets `target_kind` to a kind not present in `node_kinds`
-- **THEN** validation emits a `CONFIG_ERROR` issue and performs no coverage check
+- **THEN** validation emits a `CONFIG_ERROR` issue and performs no coverage validation
 
 #### Scenario: One bad config among several does not suppress the others
 - **WHEN** a profile declares `COVERAGE` twice and only the first names an undeclared `target_kind`
-- **THEN** validation emits a `CONFIG_ERROR` for the first and still performs the second config's coverage check
+- **THEN** validation emits a `CONFIG_ERROR` for the first and still performs the second config's coverage validation
 
 #### Scenario: ID format violation
 - **WHEN** a node of kind `req` (pattern `^REQ-\d{4}$`) has id "REQ-1"
@@ -96,7 +121,7 @@ SHALL still be honoured. Nothing declared is ever dropped.
 
 #### Scenario: Dangling reference
 - **WHEN** an edge of kind `derives` connects `REQ-0604` to `RISK-001` and `RISK-001` does not exist
-- **THEN** validation emits a `DANGLING_REF` issue with `node_id` set to `REQ-0604`
+- **THEN** validation emits a `VACANCY` issue with `node_id` set to `REQ-0604`
 
 #### Scenario: Missing required attr
 - **WHEN** a `req` node lacks a `text` attr declared as `required: true`
@@ -110,8 +135,17 @@ SHALL still be honoured. Nothing declared is ever dropped.
 - **WHEN** a node has attr `tags: ["a", 42]` with `items: string`
 - **THEN** validation emits an `ATTR_LIST_ITEMS` issue for element 42
 
-#### Scenario: Axis codes are profile-overridable
-- **WHEN** a profile sets `AXIS_INVALID` severity to `info` and an adapter emits one
+#### Scenario: Valid date
+- **WHEN** a node has attr `expires: "2030-01-15"` declared as `date`
+- **THEN** validation emits no `ATTR_TYPE` issue for that attr
+
+#### Scenario: Invalid date
+- **WHEN** a node has attr `expires: "2030-02-29"` declared as `date`
+- **THEN** validation emits an `ATTR_TYPE` issue identifying `date (YYYY-MM-DD)` as the
+  expected type and `string` as the runtime type
+
+#### Scenario: Pathway codes are profile-overridable
+- **WHEN** a profile sets `PATHWAY_INVALID` severity to `info` and an adapter emits one
 - **THEN** the report carries that issue at `info`
 
 ### Requirement: Strict mode
@@ -119,7 +153,7 @@ When `--strict` is passed, warnings SHALL be promoted to errors. Validation SHAL
 a non-zero exit code if any errors exist (after promotion). `--strict` SHALL NOT promote
 `hint` or `info` findings: promotion reaches exactly the warning tier.
 
-Axis severity resolution SHALL run before `--strict` promotion. The order is load-bearing:
+Pathway severity resolution SHALL run before `--strict` promotion. The order is load-bearing:
 a finding demoted because it is not yet due becomes `info`, and `--strict` promotes only
 warnings, so the demotion survives. A register's future obligations are not a reason for a
 strict build to fail today. This holds because the demotion target is fixed at `info`; a
@@ -135,7 +169,7 @@ Verified by: `cargo test --test validation strict`
 - **WHEN** validation runs without `--strict` and finds only warning-severity issues
 - **THEN** the exit code is zero
 
-#### Scenario: Strict does not promote an axis-demoted finding
+#### Scenario: Strict does not promote a pathway-demoted finding
 - **WHEN** validation runs with `--strict` and a bound warning-severity finding was
   demoted because its position is after the current one
 - **THEN** that finding remains `info` and does not by itself make the exit code non-zero
@@ -159,8 +193,8 @@ launder advice into a gate. Core SHALL report such an override as a `CONFIG_ERRO
 the code and leave the finding at `hint`, rather than ignoring the override in silence.
 The `CONFIG_ERROR` is emitted once per offending code, not once per finding.
 
-The rule is stated over the severity an issue *arrives at*, not over the code's shipped
-default, because core has no default for a code it does not implement — an issue emitted at
+The rule is stated over the severity a finding *arrives at*, not over the code's shipped
+default, because core has no default for a code it does not implement — a finding emitted at
 `hint` by an adapter or a suggestion overlay would otherwise be promoted by an override with
 no `CONFIG_ERROR` raised, which is promotion in exactly the silence this requirement forbids.
 
@@ -219,9 +253,9 @@ that node, because its kind cannot be checked against any `allowed` pair.
 - **WHEN** a node has kind `mystery` (not in the profile) and an edge connects it to a `req` node
 - **THEN** validation emits `UNKNOWN_KIND` for the node and no `EDGE_CONSTRAINT` for the edge
 
-### Requirement: Axis severity resolution
-Where a profile binds a finding code to an ordering axis, core SHALL resolve that code's
-findings against the axis after collection, and SHALL apply the resolution to findings from
+### Requirement: Pathway severity resolution
+Where a profile binds a finding code to an ordering pathway, core SHALL resolve that code's
+findings against the pathway after collection, and SHALL apply the resolution to findings from
 adapters and built-in validators alike.
 
 For a finding carrying a `node_id`, core SHALL read the bound `position_attr` from that
@@ -229,41 +263,41 @@ node and resolve as follows:
 
 | the node's position value | resolution |
 |---|---|
-| a string in the axis order, at or before the current position | severity unchanged — the finding is due |
-| a string in the axis order, after the current position | severity becomes `info` |
-| a string that is **not a member** of the axis order | severity becomes `info` |
+| a string in the pathway order, at or before the current position | severity unchanged — the finding is due |
+| a string in the pathway order, after the current position | severity becomes `info` |
+| a string that is **not a member** of the pathway order | severity becomes `info` |
 | not a string (int, list, mapping, null) | severity unchanged |
 | the attribute is absent | severity unchanged |
 
 Membership in the order is the whole discriminator for string values. A position value the
-register never placed on the axis — a named event, a free-text condition — SHALL demote by
+register never placed on the pathway — a named event, a free-text condition — SHALL demote by
 construction, so core never learns the host register's vocabulary for such values.
 
 An absent attribute, or one carrying a non-string value, SHALL leave severity unchanged.
 Demotion is a positive claim that a finding is provably not yet due; a node that does not
-state its position, or states it in a shape the axis cannot hold, has proven nothing.
+state its position, or states it in a shape the pathway cannot hold, has proven nothing.
 Quieting either would be indistinguishable from dropping it. A wrong-shaped attr is
 separately reported by the attribute-type validator where the profile types it.
 
 Resolution SHALL be deterministic and independent of the order findings were collected in.
 
-Verified by: `cargo test --test validation axis`
+Verified by: `cargo test --test validation pathway`
 
 #### Scenario: Finding at the current position stays
-- **WHEN** the axis current position is `M0` and a bound node's `trigger` is `M0`
+- **WHEN** the pathway current position is `M0` and a bound node's `trigger` is `M0`
 - **THEN** the finding keeps its declared severity
 
 #### Scenario: Finding before the current position stays
-- **WHEN** the axis current position is `M0` and a bound node's `trigger` is `CB`
+- **WHEN** the pathway current position is `M0` and a bound node's `trigger` is `CB`
 - **THEN** the finding keeps its declared severity
 
 #### Scenario: Finding after the current position is demoted
-- **WHEN** the axis current position is `M0` and a bound node's `trigger` is `M4`
+- **WHEN** the pathway current position is `M0` and a bound node's `trigger` is `M4`
 - **THEN** the finding's severity becomes `info`
 
-#### Scenario: Position value not on the axis is demoted
+#### Scenario: Position value not on the pathway is demoted
 - **WHEN** a bound node's `trigger` is `subscribe DbD (precedes M0 wiring)`, which is not
-  a member of the axis order
+  a member of the pathway order
 - **THEN** the finding's severity becomes `info`
 
 #### Scenario: Non-string position value leaves severity unchanged
@@ -279,14 +313,14 @@ Verified by: `cargo test --test validation axis`
   `ORPHAN_NODE`
 - **THEN** the `ORPHAN_NODE` findings keep their declared severity
 
-### Requirement: Findings the axis pass cannot resolve
+### Requirement: Findings the pathway pass cannot resolve
 The severity-resolution pass SHALL leave a finding untouched when it cannot be resolved,
 and SHALL NOT raise. A finding with no `node_id`, or whose `node_id` names no explicitly
 added node, SHALL keep its declared severity.
 
-Where a profile binds a code to an axis the graph does not carry, core SHALL emit one
-`AXIS_UNRESOLVED` finding **per bound code**, however many findings that code produced, and
-SHALL leave every severity as declared. One finding for the axis would name only one of the
+Where a profile binds a code to a pathway the graph does not carry, core SHALL emit one
+`PATHWAY_UNRESOLVED` finding **per bound code**, however many findings that code produced, and
+SHALL leave every severity as declared. One finding for the pathway would name only one of the
 codes bound to it. This SHALL NOT be treated as a setup failure: the profile loaded and the
 adapter honoured its contract, so the mismatch is a finding about the pairing, not a
 lattice that could not run.
@@ -294,29 +328,29 @@ lattice that could not run.
 The finding SHALL name the profile rather than a register file and line, as configuration
 findings already do — no line of the register is responsible for it.
 
-Verified by: `cargo test --test validation two_codes_bound_to_one_missing_axis_each_report`
-and `cargo test --test cli axis`
+Verified by: `cargo test --test validation two_codes_bound_to_one_missing_pathway_each_report`
+and `cargo test --test cli pathway`
 
 #### Scenario: Finding without a node
 - **WHEN** a bound code's finding carries no `node_id`
 - **THEN** the finding keeps its declared severity and no error is raised
 
-#### Scenario: Profile binds an axis the graph lacks
-- **WHEN** the profile binds `OBLIGATION_UNBACKED` to axis `phase` and the graph carries
-  no `phase` axis
-- **THEN** one `AXIS_UNRESOLVED` finding is emitted, naming the profile rather than a
+#### Scenario: Profile binds a pathway the graph lacks
+- **WHEN** the profile binds `OBLIGATION_UNBACKED` to pathway `phase` and the graph carries
+  no `phase` pathway
+- **THEN** one `PATHWAY_UNRESOLVED` finding is emitted, naming the profile rather than a
   register file, and every other severity is as declared
 
-#### Scenario: Two codes bound to one missing axis each report
-- **WHEN** two codes bind to axis `phase` and the graph carries no `phase` axis
-- **THEN** two `AXIS_UNRESOLVED` findings are emitted, one naming each bound code
+#### Scenario: Two codes bound to one missing pathway each report
+- **WHEN** two codes bind to pathway `phase` and the graph carries no `phase` pathway
+- **THEN** two `PATHWAY_UNRESOLVED` findings are emitted, one naming each bound code
 
 #### Scenario: An unresolved binding does not produce exit 2
-- **WHEN** the CLI runs against a profile binding an axis the graph lacks
+- **WHEN** the CLI runs against a profile binding a pathway the graph lacks
 - **THEN** the exit code reflects the findings' severities and is never 2
 
 ### Requirement: Severity resolution is shared by every command
-Core SHALL expose severity resolution — profile overrides followed by axis demotion — as
+Core SHALL expose severity resolution — profile overrides followed by pathway demotion — as
 one operation, and every command that reports or exits on adapter issues SHALL apply it.
 Two commands run against the same graph and profile SHALL NOT report different severities
 for the same finding.
@@ -327,15 +361,17 @@ requirement is on the observable outcome, not on any particular internal arrange
 Verified by: `cargo test --test cli severity`
 
 #### Scenario: Two commands agree on an adapter issue's severity
-- **WHEN** the profile demotes an adapter issue via an axis binding, and both `validate`
+- **WHEN** the profile demotes an adapter issue via a pathway binding, and both `validate`
   and `summary` are run against the same graph
 - **THEN** both report that issue at the same severity
 
 ### Requirement: Native message vocabulary
-Finding messages that name a value's type SHALL use the profile's own attr-type
-vocabulary — `string`, `int`, `float`, `bool`, `list` — extended with `null` for
-an explicit null and `object` for a mapping. Finding messages that quote a list
-of allowed values SHALL render it as a JSON array. Python-dialect renderings
+Finding messages that name a value's runtime type SHALL use the JSON vocabulary —
+`string`, `int`, `float`, `bool`, `list`, `null`, and `object`. The declared attr-type
+vocabulary additionally includes `date`; an invalid date SHALL therefore be reported as
+expected `date (YYYY-MM-DD)`, got `string`, because it has no distinct JSON type.
+Finding messages that quote a list of allowed values SHALL render it as a JSON array.
+Python-dialect renderings
 (`NoneType`, `str`, `dict`, `repr` quoting) SHALL NOT appear in core-emitted
 messages. Message text SHALL NOT vary with which core produced it.
 
@@ -376,7 +412,7 @@ Verified by: `cargo test --test native_messages config_typing`
 #### Scenario: Non-string coverage config value
 - **WHEN** a `COVERAGE` config sets `target_kind: true`
 - **THEN** validation emits `CONFIG_ERROR` with message `COVERAGE config:
-  'target_kind' must be a string, got bool` and performs no coverage check for
+  'target_kind' must be a string, got bool` and performs no coverage validation for
   that config
 
 #### Scenario: Null coverage config value is wrong type, not missing
@@ -472,3 +508,153 @@ Verified by: `cargo test --test validation coverage_state`
 #### Scenario: The hint names the base population
 - **WHEN** one of three `test` nodes carries no outgoing `verifies` edge
 - **THEN** the `COVERAGE_UNKNOWN` message names `1 of 3` and the ratio `33.3%`
+
+### Requirement: CONSTRAINT evaluation
+Core SHALL evaluate each CONSTRAINT entry in the `validations:` list against every node
+whose kind matches the entry's `kind` key. Evaluation is stateless: each rule examines
+one node in isolation, carries no state between nodes, and never inspects another node.
+
+The entry declares up to three condition blocks — `when`, `expect`, `reject` — each a
+map of attr-name to condition operator:
+
+- `when` (optional): a guard. If any condition in `when` does not match, the rule is
+  skipped for that node — no finding is emitted.
+- `expect` (required if no `reject`): all conditions SHALL hold, or a `CONSTRAINT`
+  finding is emitted.
+- `reject` (required if no `expect`): no condition SHALL hold, or a `CONSTRAINT`
+  finding is emitted.
+- A rule declaring both `expect` and `reject` SHALL require both to pass.
+- A rule declaring neither `expect` nor `reject` SHALL be a load error
+  (`CONFIG_ERROR`).
+
+The finding SHALL carry `node_id` set to the failing node and `severity` from the
+entry's `severity` key (default `warning`). The `message` SHALL be the entry's
+`message` key if declared, or a generated message naming the first failing condition.
+
+Verified by: `cargo test --test validation constraint`
+
+#### Scenario: Constraint passes — no finding
+- **WHEN** a profile declares `CONSTRAINT` with `kind: req`, `expect: { status: { present: true } }` and a `req` node has attr `status: "approved"`
+- **THEN** validation emits no `CONSTRAINT` finding for that node
+
+#### Scenario: Expect condition fails
+- **WHEN** a profile declares `CONSTRAINT` with `kind: req`, `expect: { rationale: { present: true } }` and a `req` node has no `rationale` attr
+- **THEN** validation emits a `CONSTRAINT` finding for that node
+
+#### Scenario: Reject condition fires
+- **WHEN** a profile declares `CONSTRAINT` with `kind: req`, `reject: { priority: { eq: "" } }` and a `req` node has attr `priority: ""`
+- **THEN** validation emits a `CONSTRAINT` finding for that node
+
+#### Scenario: When guard skips non-matching nodes
+- **WHEN** a profile declares `CONSTRAINT` with `kind: req`, `when: { status: { eq: "approved" } }`, `expect: { rationale: { present: true } }` and a `req` node has `status: "draft"` and no `rationale`
+- **THEN** no `CONSTRAINT` finding is emitted for that node
+
+#### Scenario: When guard passes and expect fails
+- **WHEN** a profile declares `CONSTRAINT` with `kind: req`, `when: { status: { eq: "approved" } }`, `expect: { rationale: { present: true } }` and a `req` node has `status: "approved"` and no `rationale`
+- **THEN** validation emits a `CONSTRAINT` finding for that node
+
+#### Scenario: Both expect and reject required
+- **WHEN** a profile declares `CONSTRAINT` with `expect: { a: { present: true } }` and `reject: { b: { eq: "" } }`, and a node has attr `a: "yes"` and attr `b: ""`
+- **THEN** validation emits a `CONSTRAINT` finding (reject failed, even though expect passed)
+
+#### Scenario: Custom message
+- **WHEN** a profile declares `CONSTRAINT` with `message: "Approved items need rationale"` and the constraint fails
+- **THEN** the finding's message is "Approved items need rationale"
+
+#### Scenario: Generated message names failing condition
+- **WHEN** a profile declares `CONSTRAINT` with no `message` and `expect: { rationale: { present: true } }` fails
+- **THEN** the finding's message names `rationale` and the failing operator
+
+#### Scenario: Multiple CONSTRAINT entries honoured independently
+- **WHEN** a profile declares two CONSTRAINT entries, each with different conditions
+- **THEN** both are evaluated and each can independently emit findings
+
+#### Scenario: Kind mismatch skips silently
+- **WHEN** a profile declares `CONSTRAINT` with `kind: test` and a node of kind `req` is validated
+- **THEN** no CONSTRAINT evaluation runs for that node
+
+#### Scenario: Pathway demotion applies to CONSTRAINT
+- **WHEN** a profile binds `CONSTRAINT` to a pathway and a node's position is not yet due
+- **THEN** the finding is demoted to `info`
+
+### Requirement: CONSTRAINT condition operators
+The condition vocabulary is fixed at compile time. Core SHALL support these operators:
+
+- `eq: <value>` — the attr's value equals `<value>` (string or number comparison)
+- `not: <value>` — the attr's value does not equal `<value>`
+- `in: [v1, v2, ...]` — the attr's value is one of the listed values
+- `lt: <value>` — the attr's value is less than `<value>`
+- `gt: <value>` — the attr's value is greater than `<value>`
+- `lte: <value>` — the attr's value is less than or equal to `<value>`
+- `gte: <value>` — the attr's value is greater than or equal to `<value>`
+- `matches: <pattern>` — the attr's string value matches the regex `<pattern>`
+- `present: true` — the attr exists on the node
+- `present: false` — the attr does not exist on the node
+
+An operator key the core does not recognise SHALL be a load error (`CONFIG_ERROR`),
+not a silently inert condition.
+
+For `eq`, `not`, and `in`: comparison SHALL be type-aware — a string `"42"` does not
+match an integer `42`. For `lt`, `gt`, `lte`, and `gte`, two strings SHALL compare
+lexicographically and two integers SHALL compare numerically. This orders canonical
+`YYYY-MM-DD` dates chronologically. Missing attrs, mixed types, floats, and other JSON
+types SHALL not compare and the condition SHALL fail. For `matches`: the value SHALL be
+coerced to a string before matching; a non-string attr that cannot be represented as text
+SHALL not match.
+
+For `present`: only existence is checked, not the value. `present: true` on an attr
+whose value is an empty string or zero passes — the attr exists.
+
+Verified by: `cargo test --test validation constraint`
+
+#### Scenario: eq matches
+- **WHEN** `expect: { status: { eq: "approved" } }` and node attr `status` is `"approved"`
+- **THEN** the condition passes
+
+#### Scenario: eq does not match
+- **WHEN** `expect: { status: { eq: "approved" } }` and node attr `status` is `"draft"`
+- **THEN** the condition fails
+
+#### Scenario: not operator
+- **WHEN** `expect: { status: { not: "blocked" } }` and node attr `status` is `"approved"`
+- **THEN** the condition passes
+
+#### Scenario: in operator matches
+- **WHEN** `expect: { status: { in: ["approved", "accepted"] } }` and node attr `status` is `"accepted"`
+- **THEN** the condition passes
+
+#### Scenario: in operator does not match
+- **WHEN** `expect: { status: { in: ["approved", "accepted"] } }` and node attr `status` is `"draft"`
+- **THEN** the condition fails
+
+#### Scenario: matches operator
+- **WHEN** `expect: { id: { matches: "^REQ-\\d{4}$" } }` and node attr `id` is `"REQ-0042"`
+- **THEN** the condition passes
+
+#### Scenario: present true — attr exists
+- **WHEN** `expect: { rationale: { present: true } }` and the node has attr `rationale: ""`
+- **THEN** the condition passes (attr exists, even though empty)
+
+#### Scenario: present true — attr missing
+- **WHEN** `expect: { rationale: { present: true } }` and the node has no `rationale` attr
+- **THEN** the condition fails
+
+#### Scenario: present false — attr missing
+- **WHEN** `expect: { rationale: { present: false } }` and the node has no `rationale` attr
+- **THEN** the condition passes
+
+#### Scenario: Unknown operator rejected at load time
+- **WHEN** a profile declares `expect: { status: { between: [1, 5] } }`
+- **THEN** the loader emits a `CONFIG_ERROR` naming the unknown operator `between`
+
+#### Scenario: Date comparison
+- **WHEN** `expect: { expires: { lt: "2030-01-01" } }` and the date attr is `"2029-12-31"`
+- **THEN** the condition passes
+
+#### Scenario: Integer comparison
+- **WHEN** `expect: { count: { gte: 5 } }` and the int attr is `5`
+- **THEN** the condition passes
+
+#### Scenario: Type-aware comparison
+- **WHEN** `expect: { count: { eq: "42" } }` and node attr `count` is integer `42`
+- **THEN** the condition fails (string "42" does not match integer 42)

@@ -16,13 +16,14 @@ is a required argument containing at minimum `file` (string path) and `line` (in
 - **WHEN** an adapter calls `add_node` without provenance
 - **THEN** a TypeError is raised
 
-### Requirement: Add edge with provenance
-`graph.add_edge(src, tgt, kind, provenance)` SHALL add a directed edge. `provenance` is
+### Requirement: Add edge with attrs and provenance
+`graph.add_edge(src, tgt, kind, attrs, provenance)` SHALL add a directed edge. `attrs`
+is an arbitrary JSON object and defaults empty when the contract omits it. `provenance` is
 required.
 
 #### Scenario: Add a valid edge
-- **WHEN** an adapter calls `add_edge("test_fem", "REQ-0704", "verifies", Provenance("tests/test_fem.py", 9))`
-- **THEN** the graph contains a directed edge from "test_fem" to "REQ-0704" of kind "verifies"
+- **WHEN** an adapter calls `add_edge("test_fem", "REQ-0704", "verifies", {"confidence": 1}, Provenance("tests/test_fem.py", 9))`
+- **THEN** the graph contains a directed edge from "test_fem" to "REQ-0704" of kind "verifies" with that attr
 
 ### Requirement: Duplicate node semantics
 Each node ID SHALL be unique across all kinds. When a register declares an ID more than
@@ -63,7 +64,7 @@ Validation (not the graph builder) SHALL report dangling references. This allows
 to add edges before their targets exist, supporting any parse order.
 
 #### Scenario: Edge added before target node
-- **WHEN** `add_edge("test_x", "REQ-0701", "verifies", ...)` is called before "REQ-0701" is added
+- **WHEN** `add_edge("test_x", "REQ-0701", "verifies", {}, ...)` is called before "REQ-0701" is added
 - **THEN** the edge is stored; dangling-ref validation later reports it if the target is never added
 
 ### Requirement: Provenance on findings
@@ -93,64 +94,63 @@ read-only pass corrupt the register it is checking.
 
 ### Requirement: Parallel edges are distinct
 The graph SHALL be a directed multigraph: two `add_edge` calls with the same source,
-target, and kind SHALL produce two distinct edges, each retaining its own provenance.
+target, kind, and attrs SHALL produce two distinct edges, each retaining its own provenance.
 
 Two rows can legitimately assert the same relationship from different source lines, and
 collapsing them would discard one of the two provenances.
 
 #### Scenario: Repeated edge keeps both provenances
-- **WHEN** `add_edge("A", "B", "derives", p1)` and `add_edge("A", "B", "derives", p2)` are both called
+- **WHEN** `add_edge("A", "B", "derives", {}, p1)` and `add_edge("A", "B", "derives", {}, p2)` are both called
 - **THEN** iterating edges yields two `derives` edges from A to B
 
 #### Scenario: One pair carries several edge kinds
-- **WHEN** `add_edge("A", "B", "derives", p1)` and `add_edge("A", "B", "verifies", p2)` are both called
+- **WHEN** `add_edge("A", "B", "derives", {}, p1)` and `add_edge("A", "B", "verifies", {}, p2)` are both called
 - **THEN** iterating edges yields both edges, neither replacing the other
 
-### Requirement: Axis storage on the graph
-The graph SHALL accept an ordering axis: a name, an ordered sequence of position values,
-and the current position. It SHALL expose them for read, and SHALL report no axis when
+### Requirement: Pathway storage on the graph
+The graph SHALL accept an ordering pathway: a name, an ordered sequence of position values,
+and the current position. It SHALL expose them for read, and SHALL report no pathway when
 none was set.
 
 The graph carries these because they are *ingested* target data, on the same footing as
 nodes and edges — the register declares them and the adapter reads them. The graph SHALL
-NOT compute, default, or infer an axis: a target that declares none has none.
+NOT compute, default, or infer a pathway: a target that declares none has none.
 
-The graph SHALL reject an axis whose positions are not unique, or whose current position
+The graph SHALL reject a pathway whose positions are not unique, or whose current position
 is not among them, by raising. Callers convert that to a finding under their own contract.
 Repeated positions would make "before" and "after" depend on which occurrence was matched,
 so there is no correct resolution to fall back on.
 
-Verified by: `cargo test --test graph_model axis` for setting and reading, and
-`cargo test --test contract axis` for the rejections
+Verified by: `cargo test --test graph_model pathway` for setting and reading, and
+`cargo test --test contract pathway` for the rejections
 
-#### Scenario: Axis set and read
-- **WHEN** an adapter sets axis `phase` with order `[R0, CB, M0, M1]` and current `M0`
-- **THEN** reading axis `phase` yields that order and that current position
+#### Scenario: Pathway set and read
+- **WHEN** an adapter sets pathway `phase` with order `[R0, CB, M0, M1]` and current `M0`
+- **THEN** reading pathway `phase` yields that order and that current position
 
-#### Scenario: No axis set
-- **WHEN** no call sets an axis
-- **THEN** reading any axis name yields nothing, and no error is raised
+#### Scenario: No pathway set
+- **WHEN** no call sets a pathway
+- **THEN** reading any pathway name yields nothing, and no error is raised
 
 #### Scenario: Current position must be a member
-- **WHEN** an axis is set whose current position is not in its order
+- **WHEN** a pathway is set whose current position is not in its order
 - **THEN** the graph raises
 
 #### Scenario: Positions must be unique
-- **WHEN** an axis is set with order `[M0, M1, M0]`
+- **WHEN** a pathway is set with order `[M0, M1, M0]`
 - **THEN** the graph raises
 
-### Requirement: An axis read cannot mutate the graph
-A caller reading an axis SHALL NOT be able to change the graph through what it reads.
+### Requirement: A pathway read cannot mutate the graph
+A caller reading a pathway SHALL NOT be able to change the graph through what it reads.
 
-The severity-resolution pass reads the axis while inspecting findings, and a read-only
+The severity-resolution pass reads the pathway while inspecting findings, and a read-only
 pass must not be able to corrupt the register it is checking.
 
-Verified by inspection: `LatticeGraph::axis` returns `Option<&Axis>`, a shared borrow, so
+Verified by inspection: `LatticeGraph::pathway` returns `Option<&Pathway>`, a shared borrow, so
 the mutation this forbids does not compile. The requirement was previously discharged by
 a copy-on-read test, which the borrow makes unwritable rather than unnecessary — a future
 implementation that returns an owned value SHALL restore the test.
 
-#### Scenario: A read axis is not a mutable handle
-- **WHEN** a caller reads axis `phase`
+#### Scenario: A read pathway is not a mutable handle
+- **WHEN** a caller reads pathway `phase`
 - **THEN** it receives a value it cannot use to change the graph's copy
-

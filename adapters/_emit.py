@@ -1,4 +1,4 @@
-"""The writing half of the adapter contract, shared by both adapters.
+"""The writing half of the adapter interface, shared by both adapters.
 
 The reading half is the core's `document.rs`. They are deliberately separate
 implementations of one format — that independence is what the contract is for —
@@ -13,9 +13,9 @@ import sys
 from pathlib import Path
 
 from adapters._profile import load_profile
-from adapters._types import Axis, AxisError, Issue, Provenance
+from adapters._types import Pathway, PathwayError, Issue, Provenance
 
-CONTRACT_VERSION = "1.1"
+INTERFACE_VERSION = "1.2"
 
 
 class DocumentBuilder:
@@ -32,7 +32,7 @@ class DocumentBuilder:
         self._nodes: list[tuple[str, dict]] = []
         self._edges: list[tuple[str, str, str, dict]] = []
         self._issues: list[Issue] = []
-        self._axes: dict[str, Axis] = {}
+        self._pathways: dict[str, Pathway] = {}
         self._ids: set[str] = set()
 
     def add_node(self, id: str, kind: str, attrs: dict, provenance: Provenance) -> None:
@@ -62,23 +62,23 @@ class DocumentBuilder:
                 return dict(data)
         raise KeyError(id)
 
-    def set_axis(self, name: str, order: list[str], current: str) -> None:
-        """Attach an axis, raising `AxisError` if it is not internally valid.
+    def set_pathway(self, name: str, order: list[str], current: str) -> None:
+        """Attach a pathway, raising `PathwayError` if it is not internally valid.
 
         Validation is the adapter's, per the adapter-contract capability: it
         read the declaration and can name the file. The core refuses an invalid
-        axis outright rather than reporting it.
+        pathway outright rather than reporting it.
         """
         if len(set(order)) != len(order):
-            raise AxisError(f"axis '{name}': positions are not unique: {order}")
+            raise PathwayError(f"pathway '{name}': positions are not unique: {order}")
         if current not in order:
-            raise AxisError(
-                f"axis '{name}': current position '{current}' is not in {order}"
+            raise PathwayError(
+                f"pathway '{name}': current position '{current}' is not in {order}"
             )
-        self._axes[name] = Axis(name=name, order=list(order), current=current)
+        self._pathways[name] = Pathway(name=name, order=list(order), current=current)
 
-    def axis(self, name: str) -> Axis | None:
-        return self._axes.get(name)
+    def pathway(self, name: str) -> Pathway | None:
+        return self._pathways.get(name)
 
     @property
     def adapter_issues(self) -> list[Issue]:
@@ -91,8 +91,8 @@ class DocumentBuilder:
         for src, tgt, kind, data in self._edges:
             yield src, tgt, kind, data
 
-    def iter_axes(self):
-        yield from self._axes.values()
+    def iter_pathways(self):
+        yield from self._pathways.values()
 
 
 def _provenance(prov: Provenance, root: Path) -> dict:
@@ -111,7 +111,7 @@ def _provenance(prov: Provenance, root: Path) -> dict:
 
 
 def serialize_graph(graph: DocumentBuilder, root: Path) -> dict:
-    """Render a built graph as a contract document, rooted at the target.
+    """Render a built graph as an interface document, rooted at the target.
 
     Nodes, edges and issues keep the graph's own order: node order is what
     decides the surviving duplicate on ingest, and issue order is the adapter's
@@ -119,7 +119,7 @@ def serialize_graph(graph: DocumentBuilder, root: Path) -> dict:
     """
     root = Path(root).resolve()
     return {
-        "contract_version": CONTRACT_VERSION,
+        "interface_version": INTERFACE_VERSION,
         "nodes": [
             {
                 "id": nid,
@@ -138,11 +138,11 @@ def serialize_graph(graph: DocumentBuilder, root: Path) -> dict:
             }
             for src, tgt, kind, data in graph.iter_edges()
         ],
-        "axes": [
+        "pathways": [
             {"name": a.name, "order": list(a.order), "current": a.current}
-            for a in graph.iter_axes()
+            for a in graph.iter_pathways()
         ],
-        "issues": [
+        "findings": [
             {
                 "severity": i.severity.value,
                 "code": i.code,
@@ -156,7 +156,7 @@ def serialize_graph(graph: DocumentBuilder, root: Path) -> dict:
 
 
 def run_main(build_graph, argv: list[str] | None = None) -> int:
-    """Run an adapter as a contract program: paths in, document on stdout.
+    """Run an adapter as an interface program: paths in, document on stdout.
 
     Exits non-zero only when the adapter could not run at all. A register it
     could not read is a document of issues and still exits 0, because the core

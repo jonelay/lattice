@@ -16,9 +16,9 @@ use serde_norway::Value;
 use crate::types::Severity;
 
 /// The attribute types a profile may declare, in the order error messages list them.
-pub const VALID_ATTR_TYPES: &[&str] = &["bool", "enum", "int", "list", "string"];
+pub const VALID_ATTR_TYPES: &[&str] = &["bool", "date", "enum", "int", "list", "string"];
 /// The element types a `list` attribute may declare.
-pub const VALID_LIST_ITEM_TYPES: &[&str] = &["bool", "int", "string"];
+pub const VALID_LIST_ITEM_TYPES: &[&str] = &["bool", "date", "int", "string"];
 /// The highest `profile_version` major this core will load.
 pub const SUPPORTED_MAJOR_VERSION: u64 = 1;
 
@@ -26,8 +26,9 @@ pub const SUPPORTED_MAJOR_VERSION: u64 = 1;
 /// rather than a silently ignored line.
 fn config_keys(code: &str) -> &'static [&'static str] {
     match code {
-        "COVERAGE" => &["edge_kind", "severity", "target_kind"],
-        "COVERAGE_DEEP" => &["evidence", "severity", "target_kind", "via"],
+        "COVERAGE" => &["edge_kind", "severity", "target_kind", "where"],
+        "COVERAGE_DEEP" => &["evidence", "severity", "target_kind", "via", "where"],
+        "CONSTRAINT" => &["expect", "kind", "message", "reject", "severity", "when"],
         "SUMMARY" => &["group_by_attr", "node_kind", "severity", "status_attr"],
         _ => &["severity"],
     }
@@ -35,7 +36,7 @@ fn config_keys(code: &str) -> &'static [&'static str] {
 
 /// Available on every validation entry, for a code the core implements or one it
 /// does not: the binding is orthogonal to what the code means.
-const AXIS_BINDING_KEYS: &[&str] = &["axis", "position_attr"];
+const PATHWAY_BINDING_KEYS: &[&str] = &["pathway", "position_attr"];
 
 #[derive(Debug)]
 pub struct ProfileError(pub String);
@@ -52,9 +53,9 @@ fn err<T>(message: impl Into<String>) -> Result<T, ProfileError> {
     Err(ProfileError(message.into()))
 }
 
-/// The YAML value's type in the profile's own attr-type vocabulary — `string`,
-/// `int`, `float`, `bool`, `list` — extended with `null` and `object`, so a
-/// profile error names types in the same words its author writes.
+/// The YAML value's runtime type — `string`, `int`, `float`, `bool`, `list`,
+/// `null`, or `object`. Declared semantic types such as `date` remain strings
+/// at this layer and are named separately when an expected schema type is known.
 pub(crate) fn name(value: &Value) -> &'static str {
     match value {
         Value::Null => "null",
@@ -131,13 +132,45 @@ impl EdgeKind {
     }
 }
 
-/// Ties a finding code's severity to a node attr's position on an axis.
+/// Ties a finding code's severity to a node attr's position on an pathway.
 ///
 /// Carries no demotion target: a demoted finding becomes `info`, always.
 #[derive(Clone, Debug)]
-pub struct AxisBinding {
-    pub axis: String,
+pub struct PathwayBinding {
+    pub pathway: String,
     pub position_attr: String,
+}
+
+/// A single condition operator parsed from a CONSTRAINT entry.
+#[derive(Clone, Debug)]
+pub enum ConditionOp {
+    Eq(serde_json::Value),
+    Not(serde_json::Value),
+    In(Vec<serde_json::Value>),
+    Lt(serde_json::Value),
+    Gt(serde_json::Value),
+    Lte(serde_json::Value),
+    Gte(serde_json::Value),
+    Matches(Regex),
+    Present(bool),
+}
+
+/// One attr-name → operator pair in a when/expect/reject block.
+#[derive(Clone, Debug)]
+pub struct Condition {
+    pub attr: String,
+    pub op: ConditionOp,
+}
+
+/// A parsed CONSTRAINT validation entry.
+#[derive(Clone, Debug)]
+pub struct ConstraintConfig {
+    pub kind: String,
+    pub when: Vec<Condition>,
+    pub expect: Vec<Condition>,
+    pub reject: Vec<Condition>,
+    pub message: Option<String>,
+    pub severity: Option<Severity>,
 }
 
 /// One validation entry's configuration, as declared.
@@ -152,8 +185,9 @@ pub struct Profile {
     edge_kinds: BTreeMap<String, EdgeKind>,
     validation_overrides: BTreeMap<String, Severity>,
     validation_configs: BTreeMap<String, Vec<ValidationConfig>>,
-    axes: Vec<String>,
-    axis_bindings: BTreeMap<String, AxisBinding>,
+    constraint_configs: Vec<ConstraintConfig>,
+    pathways: Vec<String>,
+    pathway_bindings: BTreeMap<String, PathwayBinding>,
     /// The profile after inheritance resolution (if `extends:` was declared) and
     /// parsing, kept so `resolved_document` can re-emit sections the core does
     /// not model (the `adapter:` namespace above all).
@@ -185,12 +219,16 @@ impl Profile {
         &self.validation_configs
     }
 
-    pub fn axes(&self) -> &[String] {
-        &self.axes
+    pub fn pathways(&self) -> &[String] {
+        &self.pathways
     }
 
-    pub fn axis_bindings(&self) -> &BTreeMap<String, AxisBinding> {
-        &self.axis_bindings
+    pub fn pathway_bindings(&self) -> &BTreeMap<String, PathwayBinding> {
+        &self.pathway_bindings
+    }
+
+    pub fn constraint_configs(&self) -> &[ConstraintConfig] {
+        &self.constraint_configs
     }
 }
 
@@ -492,7 +530,7 @@ fn parse_node_kind(
                 ));
             }
             // A kind offering no text has nothing to subdivide, so the key would
-            // sit in the profile doing nothing. The schema rejects a partial axis
+            // sit in the profile doing nothing. The schema rejects a partial pathway
             // binding on the same grounds.
             let has_text = match &text_attrs {
                 Some(names) => !names.is_empty(),
@@ -708,14 +746,104 @@ fn load_raw(path: &Path, visited: &mut Vec<std::path::PathBuf>) -> Result<Value,
     Ok(raw)
 }
 
+const VALID_CONDITION_OPS: &[&str] = &[
+    "eq", "gt", "gte", "in", "lt", "lte", "matches", "not", "present",
+];
+
+pub(crate) fn parse_condition_block(
+    value: Option<&Value>,
+    config_name: &str,
+    block_name: &str,
+) -> Result<Vec<Condition>, ProfileError> {
+    let Some(value) = value else {
+        return Ok(Vec::new());
+    };
+    let Value::Mapping(map) = value else {
+        return err(format!(
+            "{config_name} config: '{block_name}' must be a mapping, got {}",
+            name(value)
+        ));
+    };
+    let mut conditions = Vec::new();
+    for (attr_key, op_value) in map {
+        let attr = key_name(attr_key);
+        let Value::Mapping(op_map) = op_value else {
+            return err(format!(
+                "{config_name} config: '{block_name}.{attr}' must be a mapping, got {}",
+                name(op_value)
+            ));
+        };
+        if op_map.len() != 1 {
+            return err(format!(
+                "{config_name} config: '{block_name}.{attr}' must have exactly one operator"
+            ));
+        }
+        let (op_key, op_val) = op_map.iter().next().unwrap();
+        let op_name = key_name(op_key);
+        if !VALID_CONDITION_OPS.contains(&op_name.as_str()) {
+            return err(format!(
+                "{config_name} config: '{block_name}.{attr}' unknown operator '{op_name}' \
+                 (valid: {VALID_CONDITION_OPS:?})"
+            ));
+        }
+        let op = match op_name.as_str() {
+            "eq" => ConditionOp::Eq(to_json(op_val)?),
+            "not" => ConditionOp::Not(to_json(op_val)?),
+            "lt" => ConditionOp::Lt(to_json(op_val)?),
+            "gt" => ConditionOp::Gt(to_json(op_val)?),
+            "lte" => ConditionOp::Lte(to_json(op_val)?),
+            "gte" => ConditionOp::Gte(to_json(op_val)?),
+            "in" => {
+                let Value::Sequence(items) = op_val else {
+                    return err(format!(
+                        "{config_name} config: '{block_name}.{attr}.in' must be a list"
+                    ));
+                };
+                let json_items: Vec<serde_json::Value> =
+                    items.iter().map(to_json).collect::<Result<_, _>>()?;
+                ConditionOp::In(json_items)
+            }
+            "matches" => {
+                let Value::String(pattern) = op_val else {
+                    return err(format!(
+                        "{config_name} config: '{block_name}.{attr}.matches' must be a string"
+                    ));
+                };
+                let regex = Regex::new(pattern).map_err(|e| {
+                    ProfileError(format!(
+                        "{config_name} config: '{block_name}.{attr}.matches' \
+                         invalid regex '{pattern}': {e}"
+                    ))
+                })?;
+                ConditionOp::Matches(regex)
+            }
+            "present" => {
+                let Value::Bool(b) = op_val else {
+                    return err(format!(
+                        "{config_name} config: '{block_name}.{attr}.present' must be a bool"
+                    ));
+                };
+                ConditionOp::Present(*b)
+            }
+            _ => unreachable!(),
+        };
+        conditions.push(Condition { attr, op });
+    }
+    Ok(conditions)
+}
+
 /// Read and fully validate a profile YAML file.
 ///
 /// Fails on any malformed or unsupported input; a returned `Profile` is
 /// structurally sound, so callers need not re-check it.
 pub fn load_profile(path: &Path) -> Result<Profile, ProfileError> {
     let raw = load_raw(path, &mut Vec::new())?;
+    load_profile_value(raw, &format!("profile {}", path.display()))
+}
 
-    let where_ = format!("profile {}", path.display());
+/// Build a `Profile` from an already-parsed YAML `Value`.
+pub fn load_profile_value(raw: Value, where_: &str) -> Result<Profile, ProfileError> {
+    let where_ = where_.to_string();
     let Value::Mapping(top) = &raw else {
         return err(format!("{where_}: expected a YAML mapping at top level"));
     };
@@ -795,27 +923,27 @@ pub fn load_profile(path: &Path) -> Result<Profile, ProfileError> {
     // As with the document's arrays: absent means none, explicit null is
     // malformed. `validations` differs and accepts null, matching the reference
     // core rather than being made consistent with it.
-    let raw_axes = match top.get(Value::String("axes".into())) {
+    let raw_pathways = match top.get(Value::String("pathways".into())) {
         None => Vec::new(),
         Some(Value::Sequence(items)) => {
-            let mut axes = Vec::with_capacity(items.len());
+            let mut pathways = Vec::with_capacity(items.len());
             for item in items {
-                let Value::String(axis) = item else {
+                let Value::String(pathway) = item else {
                     return err(format!(
-                        "{where_}: 'axes' must be a list of axis names, got {}. \
-                         Axis values are target state and are read from the register, \
+                        "{where_}: 'pathways' must be a list of pathway names, got {}. \
+                         Pathway values are target state and are read from the register, \
                          never declared here",
                         name(item)
                     ));
                 };
-                axes.push(axis.clone());
+                pathways.push(pathway.clone());
             }
-            axes
+            pathways
         }
         Some(other) => {
             return err(format!(
-                "{where_}: 'axes' must be a list of axis names, got {}. \
-                 Axis values are target state and are read from the register, \
+                "{where_}: 'pathways' must be a list of pathway names, got {}. \
+                 Pathway values are target state and are read from the register, \
                  never declared here",
                 name(other)
             ));
@@ -824,7 +952,7 @@ pub fn load_profile(path: &Path) -> Result<Profile, ProfileError> {
 
     let mut validation_overrides: BTreeMap<String, Severity> = BTreeMap::new();
     let mut validation_configs: BTreeMap<String, Vec<ValidationConfig>> = BTreeMap::new();
-    let mut axis_bindings: BTreeMap<String, AxisBinding> = BTreeMap::new();
+    let mut pathway_bindings: BTreeMap<String, PathwayBinding> = BTreeMap::new();
 
     for entry in raw_validations {
         let Value::Mapping(entry) = entry else {
@@ -865,7 +993,7 @@ pub fn load_profile(path: &Path) -> Result<Profile, ProfileError> {
 
             let allowed: Vec<&str> = config_keys(&code)
                 .iter()
-                .chain(AXIS_BINDING_KEYS.iter())
+                .chain(PATHWAY_BINDING_KEYS.iter())
                 .copied()
                 .collect();
             let mut unknown: Vec<String> = config
@@ -883,6 +1011,10 @@ pub fn load_profile(path: &Path) -> Result<Profile, ProfileError> {
                 ));
             }
 
+            if matches!(code.as_str(), "COVERAGE" | "COVERAGE_DEEP") {
+                parse_condition_block(config.get(Value::String("where".into())), &code, "where")?;
+            }
+
             let stored: ValidationConfig = config
                 .iter()
                 .map(|(k, v)| (key_name(k), v.clone()))
@@ -892,7 +1024,7 @@ pub fn load_profile(path: &Path) -> Result<Profile, ProfileError> {
                 .or_default()
                 .push(stored);
 
-            let present: Vec<&str> = AXIS_BINDING_KEYS
+            let present: Vec<&str> = PATHWAY_BINDING_KEYS
                 .iter()
                 .copied()
                 .filter(|k| config.contains_key(Value::String((*k).into())))
@@ -900,33 +1032,33 @@ pub fn load_profile(path: &Path) -> Result<Profile, ProfileError> {
             if present.is_empty() {
                 continue;
             }
-            if present.len() != AXIS_BINDING_KEYS.len() {
-                let missing: Vec<&str> = AXIS_BINDING_KEYS
+            if present.len() != PATHWAY_BINDING_KEYS.len() {
+                let missing: Vec<&str> = PATHWAY_BINDING_KEYS
                     .iter()
                     .copied()
                     .filter(|k| !present.contains(k))
                     .collect();
                 return err(format!(
-                    "validation config for '{code}': axis binding needs both \
-                     {AXIS_BINDING_KEYS:?}, missing {missing:?}"
+                    "validation config for '{code}': pathway binding needs both \
+                     {PATHWAY_BINDING_KEYS:?}, missing {missing:?}"
                 ));
             }
-            let Value::String(axis) = &config[Value::String("axis".into())] else {
+            let Value::String(pathway) = &config[Value::String("pathway".into())] else {
                 return err(format!(
-                    "validation config for '{code}': 'axis' must be a string"
+                    "validation config for '{code}': 'pathway' must be a string"
                 ));
             };
-            if !raw_axes.contains(axis) {
-                let mut declared = raw_axes.clone();
+            if !raw_pathways.contains(pathway) {
+                let mut declared = raw_pathways.clone();
                 declared.sort();
                 return err(format!(
-                    "validation config for '{code}': undeclared axis '{axis}' \
+                    "validation config for '{code}': undeclared pathway '{pathway}' \
                      (declared: {declared:?})"
                 ));
             }
-            if axis_bindings.contains_key(&code) {
+            if pathway_bindings.contains_key(&code) {
                 return err(format!(
-                    "validation config for '{code}': a second axis binding. \
+                    "validation config for '{code}': a second pathway binding. \
                      Repeated configurations are honoured, but two bindings give \
                      severity resolution two answers for one finding"
                 ));
@@ -937,14 +1069,74 @@ pub fn load_profile(path: &Path) -> Result<Profile, ProfileError> {
                     "validation config for '{code}': 'position_attr' must be a string"
                 ));
             };
-            axis_bindings.insert(
+            pathway_bindings.insert(
                 code.clone(),
-                AxisBinding {
-                    axis: axis.clone(),
+                PathwayBinding {
+                    pathway: pathway.clone(),
                     position_attr: position_attr.clone(),
                 },
             );
         }
+    }
+
+    let mut constraint_configs: Vec<ConstraintConfig> = Vec::new();
+    for config in validation_configs.get("CONSTRAINT").unwrap_or(&Vec::new()) {
+        let kind = match config.get("kind") {
+            Some(Value::String(s)) => s.clone(),
+            Some(other) => {
+                return err(format!(
+                    "CONSTRAINT config: 'kind' must be a string, got {}",
+                    name(other)
+                ));
+            }
+            None => {
+                return err("CONSTRAINT config missing required key: kind".to_string());
+            }
+        };
+        if !node_kinds.contains_key(&kind) {
+            return err(format!(
+                "CONSTRAINT config: kind '{kind}' not in profile node kinds"
+            ));
+        }
+        let has_expect = config.contains_key("expect");
+        let has_reject = config.contains_key("reject");
+        if !has_expect && !has_reject {
+            return err(
+                "CONSTRAINT config: requires at least one of 'expect' or 'reject'".to_string(),
+            );
+        }
+        let when = parse_condition_block(config.get("when"), "CONSTRAINT", "when")?;
+        let expect = parse_condition_block(config.get("expect"), "CONSTRAINT", "expect")?;
+        let reject = parse_condition_block(config.get("reject"), "CONSTRAINT", "reject")?;
+        let message = config.get("message").and_then(|v| {
+            if let Value::String(s) = v {
+                Some(s.clone())
+            } else {
+                None
+            }
+        });
+        let severity = config
+            .get("severity")
+            .map(|v| {
+                let Value::String(s) = v else {
+                    return err(format!(
+                        "CONSTRAINT config: 'severity' must be a string, got {}",
+                        name(v)
+                    ));
+                };
+                Severity::parse(s).ok_or_else(|| {
+                    ProfileError(format!("CONSTRAINT config: invalid severity '{s}'"))
+                })
+            })
+            .transpose()?;
+        constraint_configs.push(ConstraintConfig {
+            kind,
+            when,
+            expect,
+            reject,
+            message,
+            severity,
+        });
     }
 
     Ok(Profile {
@@ -954,8 +1146,9 @@ pub fn load_profile(path: &Path) -> Result<Profile, ProfileError> {
         edge_kinds,
         validation_overrides,
         validation_configs,
-        axes: raw_axes,
-        axis_bindings,
+        constraint_configs,
+        pathways: raw_pathways,
+        pathway_bindings,
         raw,
     })
 }

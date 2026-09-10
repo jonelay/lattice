@@ -1,0 +1,81 @@
+name: synthetic
+profile_version: "1.11.0"
+
+adapter:
+  paths:
+    requirements: "docs/internal/REQUIREMENTS.md"
+    spec_dir: "docs/internal/spec"
+    tests_dir: "tests"
+  cited_path_prefixes: ["src/", "tests/"]
+
+node_kinds:
+  need:
+    id_pattern: "^(BN|UN)-\\d+$"
+    summary_attr: text
+    attrs:
+      text:       { type: string, required: true }
+      tier:       { type: enum, values: [business, user], required: true }
+      traces_to:  { type: list, items: string }
+
+  req:
+    id_pattern: "^REQ-\\d{4}$"
+    summary_attr: text
+    attrs:
+      text:       { type: string, required: true }
+      domain:     { type: string, required: true }
+      rationale:  { type: string }
+
+  spec-goal:
+    id_pattern: "^\\d{2}-\\d+\\.\\d+[a-z]?$"
+    summary_attr: title
+    attrs:
+      title:      { type: string, required: true }
+      status:     { type: enum, values: [done, partial, todo, blocked], required: true }
+      file:       { type: string, required: true }
+
+  test:
+    id_pattern: "^[^:]+\\.py::(Test.+::)?test_.+$"
+    summary_attr: function
+    text_attrs: [function, docstring]
+    orphan_ok: true
+    attrs:
+      file:       { type: string, required: true }
+      function:   { type: string, required: true }
+      docstring:  { type: string }
+
+  sc:
+    id_pattern: "^SC-\\d{3}$"
+    summary_attr: text
+    attrs:
+      text:        { type: string, required: true }
+      stakeholder: { type: string, required: true }
+      category:    { type: enum, values: [Must-have, Should-have, Nice-to-have], required: true }
+
+edge_kinds:
+  derives:
+    allowed:
+      - [need, need]
+      - [req, need]
+      - [req, req]
+      - [req, sc]
+  fulfills:
+    allowed:
+      - [spec-goal, req]
+  verifies:
+    allowed:
+      - [test, req]
+
+validations:
+  - COVERAGE_DEEP:
+      target_kind: req
+      via: derives
+      evidence: verifies
+      severity: warning
+  - COVERAGE:
+      target_kind: req
+      edge_kind: fulfills
+      severity: warning
+  - SUMMARY:
+      node_kind: spec-goal
+      status_attr: status
+      group_by_attr: file

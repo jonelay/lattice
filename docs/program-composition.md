@@ -1,31 +1,32 @@
-# Program composition
+# Fuse: multi-source composition
 
-Status: implemented as the `tools/lattice-compose` Python shim. The originating
-OpenSpec change is archived; `openspec/specs/program-composition/` is the
-normative contract.
+Status: implemented as `lattice fuse` (core subcommand). The normative
+contract is `openspec/specs/program-composition/`.
 
 ## Architecture
 
-Program composition layers cross-source validation over existing single-source
-Lattice runs. The interface is:
+Fuse layers cross-source validation over existing single-source lattice runs.
+The interface is:
 
 ```sh
-tools/lattice-compose <manifest.yaml>
+lattice fuse --manifest fuse.yaml [--format plain|json|rich] [--strict]
 ```
 
-The shim writes one JSON document to stdout. It leaves adapters and the native
-core single-source model unchanged.
+The subcommand runs `lattice trace --format json` per source, ingests the
+traces into one graph with source-qualified IDs and kinds, runs the standard
+validators on the composed graph, and outputs the fuse report through the
+standard tri-format dispatcher.
 
 ## Manifest
 
-The YAML manifest declares program identity, a program profile, and an ordered
-list of sources:
+The YAML manifest declares fuse identity, a fuse profile, and an ordered list
+of sources:
 
 ```yaml
 manifest_version: "1.0.0"
-program: example-program
-program_version: "1.0.0"
-program_profile: program-profile.yaml
+name: example-fuse
+version: "1.0.0"
+fuse_profile: fuse-profile.yaml
 sources:
   - name: product
     profile: profiles/product.yaml
@@ -37,43 +38,48 @@ sources:
     target: repos/compliance
 ```
 
-`manifest_version`, `program`, `program_version`, `program_profile`, and a
-non-empty `sources` list are required. Each source has a unique `name` plus its
-`profile`, `adapter`, and `target`. Paths are relative to the manifest.
+`manifest_version`, `name`, `version`, `fuse_profile`, and a non-empty
+`sources` list are required. Each source has a unique `name` (must not contain
+`:`) plus its `profile`, `adapter`, and `target`. Paths are relative to the
+manifest.
 
-The program profile declares `edge_kinds`. Each edge kind contains `allowed`
-pairs of source-qualified kinds such as
-`[compliance/clause, product/requirement]`. It may also declare program-level
-`validations`; source node kinds remain owned by their source profiles.
+The fuse profile declares `edge_kinds`. Each edge kind contains `allowed` pairs
+of source-qualified kinds using colon syntax: `[compliance:clause,
+product:requirement]`. It may also declare fuse-level `validations`; source
+node kinds remain owned by their source profiles.
+
+## Qualification
+
+Source qualification uses the colon separator: a node with raw ID `REQ-1` in
+source `product` becomes `product:REQ-1`; its kind `requirement` becomes
+`product:requirement`. Pathways are qualified the same way:
+`product:stage_name`. The colon distinguishes source qualification from the
+`file_stem/raw_id` pattern used by `id_prefix` in source profiles.
 
 ## Validation pipeline
 
 Validation runs in three phases:
 
-1. **Source runs.** The shim invokes `lattice trace --format json` for every
-   source, preserving its source-local findings.
+1. **Source runs.** Fuse invokes `lattice trace --format json` for every source,
+   preserving its source-local findings with source attribution.
 2. **Merge.** Healthy trace payloads are combined in manifest order. Node IDs
-   remain unchanged, while kinds are qualified as `<source>/<kind>` and
-   cross-source duplicate IDs are reported.
-3. **Cross-source resolution.** Edges declared by the program profile are
-   resolved using their allowed source-qualified endpoint pairs. Missing or
-   ambiguous targets and optional program-level validations produce findings in
-   the composed output.
+   and kinds are source-qualified with `:`. Cross-source duplicate raw IDs are
+   reported as `CROSS_SOURCE_DUPLICATE_ID`.
+3. **Cross-source resolution.** Edges declared by the fuse profile are resolved
+   using their allowed source-qualified endpoint pairs. The standard validators
+   run on the composed graph. Missing or ambiguous targets and fuse-level
+   validations produce findings in the report.
 
-The output includes merged nodes, edges, findings from all three phases, and an
-empty `axes` collection.
+`--strict` promotes warnings to errors after collection, consistent with
+single-source runs.
 
 ## Exit codes
 
-The shim follows Lattice conventions:
+Fuse follows lattice's three-valued convention:
 
-- `0`: the program ran with no error-severity findings.
-- `1`: source or program validation produced an error-severity finding.
-- `2`: the program could not run, such as from an invalid manifest or program
-  profile, an unusable source result, or an adapter failure.
+- `0`: no error-severity findings in any phase.
+- `1`: error-severity findings in source or cross-source validation.
+- `2`: could not run: bad manifest, bad fuse profile, adapter failure, or
+  unparseable trace output.
 
-## Deferred work
 
-- forwarding strict-mode behavior to source runs
-- merging axes across sources
-- native composition integration in the Rust core and CLI

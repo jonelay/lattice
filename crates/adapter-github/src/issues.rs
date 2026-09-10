@@ -1,9 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use adapter_core::{Document, Edge, Node, Pathway, Provenance};
 use serde_json::{Map, Value};
 
 use crate::config::Config;
-use crate::document::{Axis, Document, Edge, Node, Provenance};
 
 #[derive(Debug)]
 struct GithubIssue {
@@ -23,7 +23,7 @@ struct Milestone {
     state: String,
 }
 
-/// Map GitHub API issues into nodes, edges, axes, and parse findings.
+/// Map GitHub API issues into nodes, edges, pathways, and parse findings.
 pub(crate) fn read<'a>(
     document: &mut Document<'a>,
     config: &'a Config,
@@ -44,11 +44,12 @@ pub(crate) fn read<'a>(
                 document.parse_error(
                     format!("issue response {}: {error}", index + 1),
                     format!("github:{repo}"),
+                    0,
                 );
                 continue;
             }
         };
-        let provenance = Provenance::new(format!("github:{repo}#{}", issue.number));
+        let provenance = Provenance::new_file(format!("github:{repo}#{}", issue.number));
         let kind = issue
             .labels
             .iter()
@@ -62,6 +63,7 @@ pub(crate) fn read<'a>(
                     issue.number
                 ),
                 provenance.file.clone(),
+                0,
             );
             continue;
         };
@@ -75,8 +77,8 @@ pub(crate) fn read<'a>(
             insert_attr(&mut attrs, declared_attrs, "assignee", assignee);
         }
         if let Some(milestone) = &issue.milestone {
-            for axis in &config.axes {
-                insert_attr(&mut attrs, declared_attrs, axis, milestone.title.clone());
+            for pathway in &config.pathways {
+                insert_attr(&mut attrs, declared_attrs, pathway, milestone.title.clone());
             }
             milestones.insert(
                 milestone.number,
@@ -104,6 +106,7 @@ pub(crate) fn read<'a>(
                             target.as_str()
                         ),
                         provenance.file.clone(),
+                        0,
                     );
                     continue;
                 };
@@ -111,6 +114,7 @@ pub(crate) fn read<'a>(
                     src: id.clone(),
                     tgt: format!("#{target}"),
                     kind: edge_kind,
+                    attrs: BTreeMap::new(),
                     provenance: provenance.clone(),
                 });
             }
@@ -147,8 +151,8 @@ fn add_axes(document: &mut Document, config: &Config, milestones: BTreeMap<u64, 
         .or_else(|| milestones.values().next_back())
         .map(|(title, _)| title.clone())
         .expect("nonempty milestones have a current value");
-    for name in &config.axes {
-        document.axes.push(Axis {
+    for name in &config.pathways {
+        document.pathways.push(Pathway {
             name: name.clone(),
             order: order.clone(),
             current: current.clone(),

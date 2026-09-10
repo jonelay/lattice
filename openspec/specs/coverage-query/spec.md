@@ -9,7 +9,7 @@ The validation SHALL report every `req` node that has no incoming `verifies` edg
 existing source node as a coverage warning. This is the "REQ with no test" query.
 
 An edge whose source node was never added does not count as coverage: it is a dangling
-reference, already reported as `DANGLING_REF`, and treating it as a test would let a
+reference, already reported as `VACANCY`, and treating it as a test would let a
 typo in a marker silently satisfy a requirement.
 
 Coverage — flat and deep alike — measures **declared evidence**: the presence of
@@ -66,7 +66,7 @@ profile's `SUMMARY` validation config; `lattice summary` SHALL exit 2 when the p
 declares no usable `SUMMARY` config, since it has nothing to roll up.
 
 #### Scenario: Summary matches spec file counts
-- **WHEN** `lattice summary` runs against a consumer repo with the RM profile and adapter
+- **WHEN** `lattice summary` runs against phase-sweep with the RM profile and adapter
 - **THEN** the output contains per-file counts matching the actual spec heading markers
 
 #### Scenario: Summary JSON format
@@ -93,12 +93,12 @@ affect the exit code.
 
 ### Requirement: Orphan detection
 The existing ORPHAN_NODE validator SHALL flag IDs that appear in edges but not as nodes
-(via DANGLING_REF) and nodes with no connections (via ORPHAN_NODE). No new validator
+(via VACANCY) and nodes with no connections (via ORPHAN_NODE). No new validator
 needed — the built-in validators cover this when the adapter builds the graph correctly.
 
 #### Scenario: Cited REQ absent from REQUIREMENTS.md
 - **WHEN** a spec heading cites `[REQ-9999]` but REQ-9999 is not in REQUIREMENTS.md
-- **THEN** validation reports a DANGLING_REF finding
+- **THEN** validation reports a VACANCY finding
 
 ### Requirement: Deep coverage rollup
 A profile MAY declare a `COVERAGE_DEEP` validation entry with config keys
@@ -107,7 +107,7 @@ A profile MAY declare a `COVERAGE_DEEP` validation entry with config keys
 parent), and `evidence` (a declared edge kind — e.g. `verifies`).
 
 The validation SHALL compute, per run and storing nothing, the **least fixed
-point** of the coverage rule over the nodes of `target_kind`:
+point** of the coverage validation over the nodes of `target_kind`:
 
 - A target's *children* are the existing nodes of `target_kind` that are
   sources of a `via` edge whose target is that node. `via` edges whose source

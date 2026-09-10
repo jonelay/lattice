@@ -11,9 +11,11 @@ from conftest import resolve_profile
 
 REPO_ROOT = Path(__file__).parent.parent
 PROFILE_PATH = REPO_ROOT / "profiles" / "toml.yaml"
+DIRECTORY_PROFILE_PATH = REPO_ROOT / "profiles" / "toml-directory.yaml"
 ADAPTER_PATH = REPO_ROOT / "adapters" / "toml"
 CORE_BIN = REPO_ROOT / "target" / "debug" / "lattice"
 FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "mini-toml"
+DIRECTORY_FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "mini-toml-directory"
 
 needs_core = pytest.mark.skipif(
     not CORE_BIN.exists(), reason="core not built; run: cargo build"
@@ -35,13 +37,21 @@ def _run_adapter_with_profile(target: Path, profile: Path) -> dict:
     return json.loads(result.stdout)
 
 
+def _directory_profile(tmp_path: Path, **adapter_updates: object) -> Path:
+    resolved = resolve_profile(DIRECTORY_PROFILE_PATH, tmp_path)
+    profile = json.loads(resolved.read_text())
+    profile["adapter"].update(adapter_updates)
+    resolved.write_text(json.dumps(profile))
+    return resolved
+
+
 @pytest.fixture
 def document(tmp_path: Path) -> dict:
     return _run_adapter(FIXTURE_PATH, tmp_path)
 
 
 def test_contract_and_gate_build_nodes_and_edges(document: dict) -> None:
-    assert document["contract_version"] == "1.1"
+    assert document["interface_version"] == "1.2"
     assert document["nodes"], "the gate proves nothing over an empty graph"
     assert document["edges"], "no cross-reference was checked"
 
@@ -83,8 +93,8 @@ def test_string_and_array_edge_keys_expand(document: dict) -> None:
     assert ("dangling/overdue", "alpha/absent", "references") in edges
 
 
-def test_axis_is_read_from_configured_dot_paths(document: dict) -> None:
-    assert document["axes"] == [
+def test_pathway_is_read_from_configured_dot_paths(document: dict) -> None:
+    assert document["pathways"] == [
         {"name": "stage", "order": ["s1", "s2", "s3"], "current": "s2"}
     ]
 
@@ -92,7 +102,7 @@ def test_axis_is_read_from_configured_dot_paths(document: dict) -> None:
 def test_parse_error_locations_cover_each_bad_fixture(document: dict) -> None:
     locations = {
         issue["provenance"]["file"]
-        for issue in document["issues"]
+        for issue in document["findings"]
         if issue["code"] == "PARSE_ERROR"
     }
     assert locations == {
@@ -105,7 +115,7 @@ def test_parse_error_locations_cover_each_bad_fixture(document: dict) -> None:
 
 
 def test_row_error_names_index_and_unread_table(document: dict) -> None:
-    messages = [issue["message"] for issue in document["issues"]]
+    messages = [issue["message"] for issue in document["findings"]]
     assert any("baditem.toml" in message and "row 1" in message for message in messages)
     assert any("unread.toml" in message and "'note'" in message for message in messages)
 
@@ -113,7 +123,7 @@ def test_row_error_names_index_and_unread_table(document: dict) -> None:
 def test_wrong_edge_shape_has_node_context(document: dict) -> None:
     errors = [
         issue
-        for issue in document["issues"]
+        for issue in document["findings"]
         if issue["node_id"] == "wrongshape/numeric_register"
     ]
     assert len(errors) == 1
@@ -123,7 +133,7 @@ def test_wrong_edge_shape_has_node_context(document: dict) -> None:
 def test_missing_target_is_reported_with_exit_zero(tmp_path: Path) -> None:
     document = _run_adapter(tmp_path / "missing", tmp_path)
     assert document["nodes"] == []
-    assert [issue["code"] for issue in document["issues"]] == ["PARSE_ERROR"]
+    assert [issue["code"] for issue in document["findings"]] == ["PARSE_ERROR"]
 
 
 def test_malformed_file_does_not_stop_later_files(document: dict) -> None:
@@ -142,18 +152,18 @@ def test_header_can_use_a_key_based_id(tmp_path: Path) -> None:
     assert "reg.alpha" in {node["id"] for node in document["nodes"]}
 
 
-def test_invalid_and_partial_axes_are_reported(tmp_path: Path) -> None:
+def test_invalid_and_partial_pathways_are_reported(tmp_path: Path) -> None:
     target = tmp_path / "target"
     shutil.copytree(FIXTURE_PATH, target)
     index = target / "registers" / "index.toml"
     index.write_text(index.read_text().replace('current_stage = "s2"', 'current_stage = "s9"'))
     invalid = _run_adapter(target, tmp_path)
-    assert invalid["axes"] == []
-    assert len([issue for issue in invalid["issues"] if issue["code"] == "AXIS_INVALID"]) == 1
+    assert invalid["pathways"] == []
+    assert len([issue for issue in invalid["findings"] if issue["code"] == "PATHWAY_INVALID"]) == 1
 
     index.write_text(index.read_text().replace('current_stage = "s9"', ""))
     partial = _run_adapter(target, tmp_path)
-    errors = [issue for issue in partial["issues"] if issue["code"] == "AXIS_INVALID"]
+    errors = [issue for issue in partial["findings"] if issue["code"] == "PATHWAY_INVALID"]
     assert len(errors) == 1
     assert "current_stage" in errors[0]["message"]
 
@@ -201,7 +211,7 @@ def test_multiple_tables_dispatch_and_prefix_can_be_absent(tmp_path: Path) -> No
     profile["adapter"]["paths"]["files"] = ["*.toml"]
     profile["adapter"].pop("id_prefix")
     profile["adapter"].pop("header")
-    profile["adapter"].pop("axis")
+    profile["adapter"].pop("pathway")
     profile["adapter"]["tables"]["note"] = {
         "kind": "note",
         "id_key": "id",
@@ -215,7 +225,7 @@ def test_multiple_tables_dispatch_and_prefix_can_be_absent(tmp_path: Path) -> No
     assert nodes["one"]["kind"] == "item"
     assert nodes["N1"]["kind"] == "note"
     assert nodes["N1"]["attrs"] == {"text": "remember"}
-    assert document["issues"] == []
+    assert document["findings"] == []
 
 
 def test_scalar_mapping_preserves_types_and_rejects_nested_values(tmp_path: Path) -> None:
@@ -230,7 +240,7 @@ def test_scalar_mapping_preserves_types_and_rejects_nested_values(tmp_path: Path
     profile = json.loads(resolved.read_text())
     profile["adapter"]["paths"]["files"] = ["*.toml"]
     profile["adapter"].pop("header")
-    profile["adapter"].pop("axis")
+    profile["adapter"].pop("pathway")
     profile["adapter"]["tables"]["item"]["key_map"] = {
         "active": "active",
         "score": "score",
@@ -246,9 +256,99 @@ def test_scalar_mapping_preserves_types_and_rejects_nested_values(tmp_path: Path
         "score": 1.5,
         "when": "1979-05-27T07:32:00Z",
     }
-    errors = [issue for issue in document["issues"] if issue["code"] == "PARSE_ERROR"]
+    errors = [issue for issue in document["findings"] if issue["code"] == "PARSE_ERROR"]
     assert len(errors) == 2
     assert {issue["node_id"] for issue in errors} == {"types/typed"}
+
+
+def test_directory_mode_reads_each_file_as_one_record(tmp_path: Path) -> None:
+    document = _run_adapter_with_profile(
+        DIRECTORY_FIXTURE_PATH, _directory_profile(tmp_path)
+    )
+    nodes = {node["id"]: node for node in document["nodes"]}
+    assert set(nodes) == {"DEV-001", "DEV-002", "DEV-003"}
+    assert nodes["DEV-001"]["kind"] == "device"
+    assert nodes["DEV-001"]["attrs"] == {"name": "Sensor A"}
+    assert nodes["DEV-001"]["provenance"]["file"] == "records/device-001.toml"
+
+
+def test_directory_mode_emits_edges(tmp_path: Path) -> None:
+    document = _run_adapter_with_profile(
+        DIRECTORY_FIXTURE_PATH, _directory_profile(tmp_path)
+    )
+    edges = {
+        (edge["src"], edge["tgt"], edge["kind"])
+        for edge in document["edges"]
+    }
+    assert edges == {
+        ("DEV-001", "DEV-002", "references"),
+        ("DEV-003", "DEV-001", "references"),
+        ("DEV-003", "DEV-002", "references"),
+    }
+
+
+def test_directory_mode_with_id_prefix(tmp_path: Path) -> None:
+    profile = _directory_profile(
+        tmp_path,
+        id_prefix="file_stem",
+        paths={"files": ["records/device-001.toml"]},
+    )
+    document = _run_adapter_with_profile(DIRECTORY_FIXTURE_PATH, profile)
+    assert [node["id"] for node in document["nodes"]] == ["device-001/DEV-001"]
+
+
+def test_directory_mode_zero_files_emits_info_issue(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    target.mkdir()
+    document = _run_adapter_with_profile(target, _directory_profile(tmp_path))
+    assert document["nodes"] == []
+    assert [
+        (issue["code"], issue["severity"])
+        for issue in document["findings"]
+    ] == [("NO_MATCHING_FILES", "info")]
+
+
+def test_directory_mode_malformed_file_continues(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    shutil.copytree(DIRECTORY_FIXTURE_PATH, target)
+    (target / "records" / "device-broken.toml").write_text('id = "unterminated')
+    document = _run_adapter_with_profile(target, _directory_profile(tmp_path))
+    assert {node["id"] for node in document["nodes"]} == {
+        "DEV-001",
+        "DEV-002",
+        "DEV-003",
+    }
+    errors = [
+        issue for issue in document["findings"] if issue["code"] == "PARSE_ERROR"
+    ]
+    assert len(errors) == 1
+    assert errors[0]["provenance"]["file"] == "records/device-broken.toml"
+
+
+def test_directory_mode_rejects_header_config(tmp_path: Path) -> None:
+    profile = _directory_profile(
+        tmp_path,
+        header={
+            "table": "metadata",
+            "kind": "device",
+            "id": "file_stem",
+            "key_map": {},
+        },
+    )
+    result = subprocess.run(
+        [
+            str(ADAPTER_PATH),
+            "--profile",
+            str(profile),
+            "--target",
+            str(DIRECTORY_FIXTURE_PATH),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2
+    assert "adapter.header" in result.stderr
+    assert "directory" in result.stderr
 
 
 @needs_core
@@ -284,7 +384,7 @@ def test_gate_runs_through_core_with_expected_findings() -> None:
     dangling = {
         finding["message"].split("'")[1]: finding["severity"]
         for finding in findings
-        if finding["code"] == "DANGLING_REF"
+        if finding["code"] == "VACANCY"
     }
     assert dangling["dangling/not_yet"] == "info"
     assert dangling["dangling/overdue"] == "error"

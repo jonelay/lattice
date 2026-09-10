@@ -2,10 +2,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
 
+use adapter_core::{Document, Edge, Node, Provenance};
 use serde_json::{Value, json};
 
 use crate::config::Config;
-use crate::document::{Document, Edge, Node, Provenance};
 use crate::glab::{GitLabIssue, IssueLink};
 
 const MAX_LINK_WORKERS: usize = 8;
@@ -60,6 +60,7 @@ fn add_text_edges<'a>(
                         pattern.regex.as_str()
                     ),
                     issue_file(project, issue.iid),
+                    0,
                 );
                 continue;
             };
@@ -71,6 +72,7 @@ fn add_text_edges<'a>(
                         target.as_str()
                     ),
                     issue_file(project, issue.iid),
+                    0,
                 );
                 continue;
             };
@@ -78,7 +80,8 @@ fn add_text_edges<'a>(
                 src: format!("#{}", issue.iid),
                 tgt: format!("#{target_iid}"),
                 kind: &pattern.kind,
-                provenance: Provenance::new(issue_file(project, issue.iid)),
+                attrs: BTreeMap::new(),
+                provenance: Provenance::new_file(issue_file(project, issue.iid)),
             });
         }
     }
@@ -102,6 +105,7 @@ fn add_link_edges<'a>(
                     issue.iid, link.iid
                 ),
                 issue_file(project, issue.iid),
+                0,
             );
             continue;
         };
@@ -123,6 +127,7 @@ fn add_link_edges<'a>(
                     issue.iid, link.link_type
                 ),
                 issue_file(project, issue.iid),
+                0,
             );
             continue;
         };
@@ -137,12 +142,13 @@ fn add_link_edges<'a>(
             src,
             tgt,
             kind: &mapping.edge_kind,
-            provenance: Provenance::new(issue_file(project, issue.iid)),
+            attrs: BTreeMap::new(),
+            provenance: Provenance::new_file(issue_file(project, issue.iid)),
         });
     }
 }
 
-/// Map GitLab's issue and link API shapes into a lattice contract document.
+/// Map GitLab's issue and link API shapes into a lattice interface document.
 pub(crate) fn read<'a>(
     document: &mut Document<'a>,
     project: &str,
@@ -157,6 +163,7 @@ pub(crate) fn read<'a>(
             Err(error) => document.parse_error(
                 format!("issue response {}: {error}", index + 1),
                 format!("gitlab:{project}"),
+                0,
             ),
         }
     }
@@ -197,7 +204,7 @@ pub(crate) fn read<'a>(
     }
 
     for (index, issue) in issues.into_iter().enumerate() {
-        let provenance = Provenance::new(issue_file(project, issue.iid));
+        let provenance = Provenance::new_file(issue_file(project, issue.iid));
         let kind = node_kind(&issue, config);
         document.nodes.push(Node {
             id: format!("#{}", issue.iid),
@@ -211,7 +218,7 @@ pub(crate) fn read<'a>(
             .unwrap_or_else(|| Err(format!("failed to fetch links for issue #{}", issue.iid)))
         {
             Ok(links) => add_link_edges(document, project, &issue, &links, &local_iids, config),
-            Err(error) => document.parse_error(error, issue_file(project, issue.iid)),
+            Err(error) => document.parse_error(error, issue_file(project, issue.iid), 0),
         }
     }
 }
@@ -331,8 +338,8 @@ mod tests {
 
         assert_eq!(document.nodes.len(), 1);
         assert_eq!(document.nodes[0].id, "#2");
-        assert_eq!(document.issues.len(), 1);
-        assert_eq!(document.issues[0].code, "PARSE_ERROR");
+        assert_eq!(document.findings.len(), 1);
+        assert_eq!(document.findings[0].code, "PARSE_ERROR");
     }
 
     #[test]
@@ -376,9 +383,9 @@ mod tests {
         });
 
         assert!(document.edges.is_empty());
-        assert_eq!(document.issues.len(), 1);
-        assert_eq!(document.issues[0].severity, "info");
-        assert_eq!(document.issues[0].code, "EXTERNAL_REF");
+        assert_eq!(document.findings.len(), 1);
+        assert_eq!(document.findings[0].severity, "info");
+        assert_eq!(document.findings[0].code, "EXTERNAL_REF");
     }
 
     #[test]
@@ -424,8 +431,8 @@ mod tests {
             });
 
             assert!(document.edges.is_empty());
-            assert_eq!(document.issues.len(), 1);
-            assert_eq!(document.issues[0].code, "PARSE_ERROR");
+            assert_eq!(document.findings.len(), 1);
+            assert_eq!(document.findings[0].code, "PARSE_ERROR");
         }
     }
 
@@ -476,9 +483,12 @@ mod tests {
 
         assert_eq!(document.nodes.len(), 16);
         assert_eq!(peak.load(Ordering::SeqCst), MAX_LINK_WORKERS);
-        assert_eq!(document.issues.len(), 1);
-        assert_eq!(document.issues[0].code, "PARSE_ERROR");
-        assert_eq!(document.issues[0].provenance.file, "gitlab:group/project#7");
-        assert!(document.issues[0].message.contains("issue #7"));
+        assert_eq!(document.findings.len(), 1);
+        assert_eq!(document.findings[0].code, "PARSE_ERROR");
+        assert_eq!(
+            document.findings[0].provenance.file,
+            "gitlab:group/project#7"
+        );
+        assert!(document.findings[0].message.contains("issue #7"));
     }
 }

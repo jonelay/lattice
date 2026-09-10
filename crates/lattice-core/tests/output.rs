@@ -2,7 +2,7 @@
 //!
 //! `trace_baseline.rs` pins the whole trace path to the Python core's bytes on
 //! one real register. It cannot show that the *specified* order is what produced
-//! them: the fixture happens to declare its nodes in an order the sort agrees
+//! them: phase-sweep happens to declare its nodes in an order the sort agrees
 //! with. These cases construct the disagreements.
 
 mod common;
@@ -56,7 +56,7 @@ fn trace_of(document: Value) -> TraceReport {
 fn entries_group_by_declared_kind_then_by_id() {
     // Declared last in the document, and `need` is declared first in the profile.
     let report = trace_of(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [node("REQ-2", "req", 1), node("REQ-1", "req", 2), node("UN-1", "need", 3)],
     }));
     let ids: Vec<&str> = report.entries.iter().map(|e| e.id.as_str()).collect();
@@ -66,7 +66,7 @@ fn entries_group_by_declared_kind_then_by_id() {
 #[test]
 fn edge_targets_are_ordered_lexicographically_within_a_kind() {
     let report = trace_of(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [node("REQ-1", "req", 1), node("UN-1", "need", 2),
                   node("UN-2", "need", 3), node("UN-3", "need", 4)],
         "edges": [edge("REQ-1", "UN-3", "derives", 5),
@@ -74,19 +74,20 @@ fn edge_targets_are_ordered_lexicographically_within_a_kind() {
                   edge("REQ-1", "UN-2", "derives", 7)],
     }));
     let entry = report.entries.iter().find(|e| e.id == "REQ-1").unwrap();
-    assert_eq!(entry.edges["derives"], ["UN-1", "UN-2", "UN-3"]);
+    let targets: Vec<&str> = entry.edges.iter().map(|edge| edge.tgt.as_str()).collect();
+    assert_eq!(targets, ["UN-1", "UN-2", "UN-3"]);
 }
 
 #[test]
 fn edge_kinds_are_ordered_lexicographically_not_by_declaration() {
     let report = trace_of(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [node("REQ-1", "req", 1), node("UN-1", "need", 2)],
         "edges": [edge("REQ-1", "UN-1", "verifies", 3),
                   edge("REQ-1", "UN-1", "derives", 4)],
     }));
     let entry = report.entries.iter().find(|e| e.id == "REQ-1").unwrap();
-    let kinds: Vec<&str> = entry.edges.keys().map(String::as_str).collect();
+    let kinds: Vec<&str> = entry.edges.iter().map(|edge| edge.kind.as_str()).collect();
     assert_eq!(
         kinds,
         ["derives", "verifies"],
@@ -97,24 +98,25 @@ fn edge_kinds_are_ordered_lexicographically_not_by_declaration() {
 #[test]
 fn repeated_targets_are_preserved_and_ordered_by_the_referencing_line() {
     let report = trace_of(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [node("REQ-1", "req", 1), node("UN-1", "need", 2)],
         "edges": [edge("REQ-1", "UN-1", "derives", 9),
                   edge("REQ-1", "UN-1", "derives", 4)],
     }));
     let entry = report.entries.iter().find(|e| e.id == "REQ-1").unwrap();
-    assert_eq!(entry.edges["derives"], ["UN-1", "UN-1"], "not deduplicated");
+    let targets: Vec<&str> = entry.edges.iter().map(|edge| edge.tgt.as_str()).collect();
+    assert_eq!(targets, ["UN-1", "UN-1"], "not deduplicated");
 }
 
 #[test]
 fn ordering_is_independent_of_build_order() {
     let forwards = json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [node("REQ-1", "req", 1), node("UN-1", "need", 2), node("UN-2", "need", 3)],
         "edges": [edge("REQ-1", "UN-1", "derives", 4), edge("REQ-1", "UN-2", "verifies", 5)],
     });
     let backwards = json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [node("UN-2", "need", 3), node("UN-1", "need", 2), node("REQ-1", "req", 1)],
         "edges": [edge("REQ-1", "UN-2", "verifies", 5), edge("REQ-1", "UN-1", "derives", 4)],
     });
@@ -133,7 +135,7 @@ fn ordering_is_independent_of_build_order() {
 fn a_finding_on_a_ghost_node_is_unattachable_and_invents_no_entry() {
     let profile = profile_from(ORDER_PROFILE).unwrap();
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [node("REQ-1", "req", 1)],
         "edges": [edge("REQ-1", "UN-9", "derives", 2)],
     }));
@@ -144,12 +146,12 @@ fn a_finding_on_a_ghost_node_is_unattachable_and_invents_no_entry() {
         .unattachable_findings
         .iter()
         .chain(report.entries.iter().flat_map(|e| &e.findings))
-        .filter(|f| f.code == "DANGLING_REF")
+        .filter(|f| f.code == "VACANCY")
         .count();
     assert_eq!(dangling, 1, "the finding appears exactly once");
     // It names REQ-1, which does exist, so it attaches rather than going to the footer.
     let req = report.entries.iter().find(|e| e.id == "REQ-1").unwrap();
-    assert!(req.findings.iter().any(|f| f.code == "DANGLING_REF"));
+    assert!(req.findings.iter().any(|f| f.code == "VACANCY"));
     assert!(!report.entries.iter().any(|e| e.id == "UN-9"));
 }
 
@@ -157,7 +159,7 @@ fn a_finding_on_a_ghost_node_is_unattachable_and_invents_no_entry() {
 fn a_finding_with_no_node_id_goes_to_the_footer() {
     let profile = profile_from(ORDER_PROFILE).unwrap();
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [node("REQ-1", "req", 1)],
         "issues": [{"severity": "warning", "code": "PARSE_ERROR", "message": "m",
                     "provenance": {"file": "r.md", "line": 3}, "node_id": null}],
@@ -176,20 +178,52 @@ fn a_finding_with_no_node_id_goes_to_the_footer() {
 
 #[test]
 fn the_header_carries_both_version_axes_and_the_profile_name() {
-    let report = trace_of(json!({"contract_version": "1.0"}));
+    let report = trace_of(json!({"interface_version": "1.0"}));
     assert_eq!(report.header["profile"], "ordering");
     assert_eq!(report.header["profile_version"], "1.0.0");
     assert_eq!(report.header["lattice_version"], "0.0.0");
+    assert_eq!(report.header["trace_version"], "2");
 
     let json: Value = serde_json::from_str(&output_result(&report, "json").unwrap()).unwrap();
-    for key in ["header", "entries", "unattachable_findings"] {
+    for key in ["header", "entries", "unattachable_findings", "pathways"] {
         assert!(json.get(key).is_some(), "{key} is a public top-level field");
     }
 }
 
+#[test]
+fn trace_json_carries_pathways() {
+    let report = trace_of(json!({
+        "interface_version": "1.2",
+        "pathways": [{"name": "stage", "order": ["one", "two"], "current": "one"}],
+    }));
+    let json: Value = serde_json::from_str(&output_result(&report, "json").unwrap()).unwrap();
+    assert_eq!(
+        json["pathways"],
+        json!([{"name": "stage", "order": ["one", "two"], "current": "one"}])
+    );
+}
+
+#[test]
+fn trace_edges_carry_kind_attrs_and_provenance_as_objects() {
+    let report = trace_of(json!({
+        "interface_version": "1.2",
+        "nodes": [node("REQ-1", "req", 1), node("UN-1", "need", 2)],
+        "edges": [{"src": "REQ-1", "tgt": "UN-1", "kind": "derives",
+                   "attrs": {"confidence": 0.75},
+                   "provenance": {"file": "r.md", "line": 9}}],
+    }));
+    let rendered = output_result(&report, "json").unwrap();
+    let json: Value = serde_json::from_str(&rendered).unwrap();
+    assert_eq!(json["entries"][1]["edges"][0]["tgt"], "UN-1");
+    assert_eq!(json["entries"][1]["edges"][0]["kind"], "derives");
+    assert_eq!(json["entries"][1]["edges"][0]["attrs"]["confidence"], 0.75);
+    assert_eq!(json["entries"][1]["edges"][0]["provenance"]["file"], "r.md");
+    assert_eq!(json["entries"][1]["edges"][0]["provenance"]["line"], 9);
+}
+
 // Requirement: Trace report plain format
 
-/// A profile with non-a consumer repo vocabulary proves the column is data-driven.
+/// A profile with non-phase-sweep vocabulary proves the column is data-driven.
 const SUMMARY_ATTR_PROFILE: &str = r#"
 name: custom
 profile_version: "1.0.0"
@@ -210,7 +244,7 @@ edge_kinds:
 fn trace_key_attr_column_is_filled_from_the_profiles_summary_attr() {
     let profile = profile_from(SUMMARY_ATTR_PROFILE).unwrap();
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [
             {"id": "W-1", "kind": "widget",
              "attrs": {"label": "Gizmo"},
@@ -293,7 +327,7 @@ fn path_report_accepts_self_loop() {
 fn summary_attr_renders_blank_when_the_node_omits_the_configured_attr() {
     let profile = profile_from(SUMMARY_ATTR_PROFILE).unwrap();
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [
             {"id": "W-1", "kind": "widget",
              "attrs": {},
@@ -330,7 +364,7 @@ edge_kinds: {}
 "#;
     let profile = profile_from(yaml).unwrap();
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [
             {"id": "I-1", "kind": "item",
              "attrs": {"count": 42},
@@ -383,7 +417,7 @@ fn a_finding_in_json_carries_every_documented_field() {
 
 #[test]
 fn an_unknown_format_is_rejected_for_every_payload() {
-    let report = trace_of(json!({"contract_version": "1.0"}));
+    let report = trace_of(json!({"interface_version": "1.0"}));
     assert!(output_result(&report, "yaml").is_err());
     assert!(output_result(&summary(), "yaml").is_err());
     assert!(output_result(&Vec::<Issue>::new(), "yaml").is_err());

@@ -2,13 +2,13 @@
 
 Validate and query typed node/edge registers — requirements, the specs that satisfy
 them, the tests that verify them — held as plain text in the repo that owns them. A
-Rust core runs validation (dangling references, orphans, coverage, ID format) and
+Rust core runs validation (vacancies, orphans, coverage, ID format) and
 traversal queries (reachability, path, diff between two git revisions), in three
 output formats, with three-valued exit codes. Domain vocabulary lives in YAML
 **profiles**: node kinds, edge kinds, ID patterns, validations — see
 [docs/profiles.md](docs/profiles.md) for how to write one. **Adapters**
 are standalone programs that read a register's own format and emit a serialized graph
-over a versioned contract. Derived state — coverage, status rollups, orphans — is
+over a versioned interface. Derived state — coverage, status rollups, orphans — is
 computed on demand and never stored.
 
 grep will find a string, but not that REQ-0042 has no test covering it, or that a
@@ -29,6 +29,7 @@ exchange, the review surface is `git diff` and the authority is the file you edi
 The problem it exists for: every in-house requirements system surveyed drifted at the
 same point — hand-maintained derived state. See [PROPOSAL.md](PROPOSAL.md) for
 architecture, profiles, sequencing and the three scope tests.
+[docs/glossary.md](docs/glossary.md) defines every term lattice uses.
 
 ## Usage
 
@@ -39,7 +40,7 @@ target/release/lattice validate --profile profiles/openspec.yaml \
 ```
 
 The core is a Rust binary; an adapter is any program that takes `--profile` and
-`--target` and writes a contract document to stdout. Five adapters are Rust
+`--target` and writes an interface document to stdout. Five adapters are Rust
 binaries (`crates/adapter-*/`); two are stdlib-only Python behind entry-point
 scripts in `adapters/`. `uv pip install -e '.[test]'` is only for the Python
 adapter test suite.
@@ -47,11 +48,13 @@ adapter test suite.
 `validate` reports findings, `summary` the configured status rollup, `trace` the full
 per-node report with edges and attached findings, `query` the traversals —
 `reaches`, `reached-by`, `path`, `orphans`, `counts`, and `diff` between two
-revisions, with the adapter run live at each — and `resolve` prints the resolved
-profile document an adapter or sidecar reads. All take
-`--format=plain|json|rich` (default: rich on a TTY, plain otherwise) and share the
-exit-code contract: 0 clean, 1 error-severity findings, 2 lattice could not run at
-all. `validate` and `trace` take `--strict`, promoting warnings to errors.
+revisions, with the adapter run live at each — `fuse` composes multiple source
+traces into a unified graph with source-qualified IDs and cross-source edge
+resolution — and `resolve` prints the resolved profile document an adapter or
+sidecar reads. All take `--format=plain|json|rich` (default: rich on a TTY, plain
+otherwise) and share the exit-code contract: 0 clean, 1 error-severity findings,
+2 lattice could not run at all. `validate` and `trace` take `--strict`, promoting
+warnings to errors.
 
 Six adapters ship here: `openspec` (Python — this repo's self-audit),
 `entomologist` (Rust — a git-backed issue tracker whose register lives on an

@@ -21,4 +21,4 @@ test = ["pytest>=8.0", "pyyaml>=6.0"]
 packages = ["adapters"]
 
 [tool.pytest.ini_options]
-norecursedirs = ["tests/fixtures/mini-repo", "tests/fixtures/mini-toml", "tests/fixtures/mini-openspec", "tests/fixtures/mini-ent", "tests/fixtures/mini-md", "tests/fixtures/mini-md-multi", "tests/fixtures/mini-github", "tests/fixtures/mini-gitlab", "tests/fixtures/mini-program"]
+norecursedirs = ["tests/fixtures/mini-repo", "tests/fixtures/mini-toml", "tests/fixtures/mini-openspec", "tests/fixtures/mini-ent", "tests/fixtures/mini-md", "tests/fixtures/mini-md-multi", "tests/fixtures/mini-github", "tests/fixtures/mini-gitlab", "tests/fixtures/mini-fuse"]

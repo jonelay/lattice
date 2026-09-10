@@ -50,7 +50,7 @@ fn edge(src: &str, tgt: &str, kind: &str) -> Value {
 }
 
 fn graph(nodes: Vec<Value>, edges: Vec<Value>) -> LatticeGraph {
-    ingest(json!({"contract_version": "1.0", "nodes": nodes, "edges": edges}))
+    ingest(json!({"interface_version": "1.0", "nodes": nodes, "edges": edges}))
 }
 
 fn deep_findings(issues: &[Issue]) -> Vec<&Issue> {
@@ -139,6 +139,30 @@ fn direct_evidence_covers_a_parent_regardless_of_its_children() {
     );
     assert!(deep_for(&issues, "R-1").is_empty());
     assert_eq!(deep_for(&issues, "R-2").len(), 1);
+}
+
+#[test]
+fn deep_coverage_where_filters_findings_but_not_intermediate_targets() {
+    let profile_yaml = DEEP_PROFILE.replace(
+        "      evidence: verifies",
+        "      evidence: verifies\n      where:\n        status: {eq: active}",
+    );
+    let profile = profile_from(&profile_yaml).unwrap();
+    let graph = graph(
+        vec![
+            json!({"id": "R-1", "kind": "req", "attrs": {"status": "active"},
+                   "provenance": {"file": "r.md", "line": 1}}),
+            json!({"id": "R-2", "kind": "req", "attrs": {"status": "deferred"},
+                   "provenance": {"file": "r.md", "line": 2}}),
+            node("T-1", "test"),
+        ],
+        vec![
+            edge("R-2", "R-1", "derives"),
+            edge("T-1", "R-2", "verifies"),
+        ],
+    );
+
+    assert!(deep_findings(&validate(&graph, &profile, false)).is_empty());
 }
 
 // Scenario: Childless target without evidence is uncovered

@@ -1,0 +1,6 @@
+name: src
+profile_version: '1.0.0'
+node_kinds:
+  test: {id_pattern: '.*', orphan_ok: true}
+edge_kinds:
+  verifies: {allowed: [[test, test]]}

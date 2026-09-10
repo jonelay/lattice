@@ -2,7 +2,7 @@
 
 ## Purpose
 Reads an entomologist ("ent") issue register — one directory per issue, one plain
-file per field, stored on a git orphan branch — into a contract document, so
+file per field, stored on a git orphan branch — into an interface document, so
 lattice can answer questions over a register that has no files in the target's
 worktree at all.
 
@@ -140,7 +140,7 @@ Verified by: `.venv/bin/python -m pytest tests/test_adapter_entomologist.py -k s
 The adapter SHALL emit one `depends_on` edge per file under an issue's
 `dependencies/` directory, from that issue to the issue named by the file name.
 The adapter SHALL NOT check that the target exists: an unresolvable dependency is
-a `DANGLING_REF` finding at validation, and an adapter that dropped the edge
+a `VACANCY` finding at validation, and an adapter that dropped the edge
 would hide it.
 
 Verified by: `.venv/bin/python -m pytest tests/test_adapter_entomologist.py -k edge`
@@ -154,7 +154,7 @@ Verified by: `.venv/bin/python -m pytest tests/test_adapter_entomologist.py -k e
 
 - **WHEN** a `dependencies/` file names an id no issue directory declares
 - **THEN** the adapter still emits the edge, and `lattice validate` reports
-  `DANGLING_REF` for it
+  `VACANCY` for it
 
 ### Requirement: Recognized-but-unrepresented content is deliberate, unrecognized content is reported
 
@@ -213,7 +213,7 @@ Verified by: `.venv/bin/python -m pytest tests/test_adapter_entomologist.py -k u
 
 `lattice validate` run with the entomologist profile and adapter against the
 builder-constructed mini-ent fixture repository SHALL exit 1 — the fixture's
-malformed shapes make that deterministic — and the contract document SHALL carry
+malformed shapes make that deterministic — and the interface document SHALL carry
 exactly the node set, edge set, and finding code+path multiset the fixture
 declares. The exactness is normative in both directions: a missing node or edge
 is a partial read the batch framing hid, and a finding outside the multiset is a
@@ -229,12 +229,12 @@ Verified by: `.venv/bin/python -m pytest tests/test_adapter_entomologist.py -k g
 
 - **WHEN** `lattice validate` runs with the entomologist profile and adapter
   against the fixture repository the test builder constructs
-- **THEN** it exits 1, and the contract document carries exactly the fixture's
+- **THEN** it exits 1, and the interface document carries exactly the fixture's
   declared nodes, edges, and finding multiset — nothing missing, nothing extra
 
 #### Scenario: Adapter is a program that exits 0
 
 - **WHEN** the adapter is invoked directly with `--profile` and `--target`
   against a fixture containing an issue with unreadable content
-- **THEN** it writes a contract document to stdout and exits 0, carrying the
-  unreadable content as issues rather than as a non-zero exit
+- **THEN** it writes an interface document to stdout and exits 0, carrying the
+  unreadable content as findings rather than as a non-zero exit

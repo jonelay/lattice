@@ -27,9 +27,9 @@ outgoing edge targets grouped by edge kind, and a list of findings attached to t
 The trace report payload SHALL contain: a header with profile name, `profile_version`,
 and lattice version; an ordered list of trace entries (one per node); and a list of
 unattachable findings (issues whose `node_id` is null or names no node in the
-graph). Every validation issue SHALL appear in exactly one of the two places —
-a finding that affects the exit code but appears nowhere in the report would be
-silently dropped output.
+graph); and an array of ordering pathways from the graph. Every validation issue SHALL
+appear in exactly one of the two places — a finding that affects the exit code but
+appears nowhere in the report would be silently dropped output.
 
 #### Scenario: Header fields present in JSON
 - **WHEN** `lattice trace --format=json` runs
@@ -43,10 +43,19 @@ silently dropped output.
   trace entry
 
 #### Scenario: Finding attributed to a ghost node
-- **WHEN** validation produces a `DANGLING_REF` issue whose `node_id` is an edge
+- **WHEN** validation produces a `VACANCY` issue whose `node_id` is an edge
   source that was never added as a node
 - **THEN** the issue appears in the unattachable findings list, and no trace entry
   exists for that ID
+
+#### Scenario: Pathways are preserved in JSON
+- **WHEN** the graph contains pathway `stage` with an order and current position
+- **THEN** trace JSON includes `{"name":"stage","order":[...],"current":"..."}` in
+  its `pathways` array
+
+#### Scenario: No pathways are present
+- **WHEN** the graph contains no pathways
+- **THEN** trace JSON includes `"pathways": []`
 
 ### Requirement: Trace entry ordering
 Trace entries SHALL be ordered by kind (in profile declaration order), then by node ID
@@ -96,7 +105,7 @@ lattice could not run. `--strict` promotes warnings to errors before the exit-co
 decision.
 
 #### Scenario: Trace with errors exits 1
-- **WHEN** trace runs and the graph has a `DANGLING_REF` error
+- **WHEN** trace runs and the graph has a `VACANCY` error
 - **THEN** exit code is 1
 
 #### Scenario: Trace clean exits 0
@@ -122,7 +131,8 @@ The following fields are public surfaces — changing their names or types is a
 versioned change carrying a changelog line:
 - Header: `profile`, `profile_version`, `lattice_version`.
 - Entry: `id`, `kind`, `attrs`, `edges`, `provenance`, `findings`.
-- Top-level: `header`, `entries`, `unattachable_findings`.
+- Pathway: `name`, `order`, `current`.
+- Top-level: `header`, `entries`, `unattachable_findings`, `pathways`.
 
 The ordering contract is a public surface, and covers both entry order (kind-order then
 lexicographic ID) and within-entry edge order (lexicographic kind, then lexicographic
@@ -156,4 +166,3 @@ same demonstration.
   same profile
 - **THEN** their trace output is byte-identical apart from the `lattice_version` header
   field
-

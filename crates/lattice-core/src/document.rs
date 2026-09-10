@@ -1,4 +1,4 @@
-//! Ingest: an adapter's contract document becomes a `LatticeGraph`.
+//! Ingest: an adapter's interface document becomes a `LatticeGraph`.
 
 use std::collections::hash_map::RandomState;
 use std::fs::{File, OpenOptions};
@@ -14,17 +14,17 @@ use serde_json::Value;
 use crate::graph::{EdgeSpec, LatticeGraph};
 use crate::types::{Issue, Provenance, Severity};
 
-/// The contract version this core emits and prefers.
+/// The interface version this core emits and prefers.
 ///
-/// Deliberately defined on both sides of the contract — the adapters carry their
-/// own copy. That is the contract being agreed, not drift.
-pub const CONTRACT_VERSION: &str = "1.1";
+/// Deliberately defined on both sides of the interface — the adapters carry their
+/// own copy. That is the interface being agreed, not drift.
+pub const INTERFACE_VERSION: &str = "1.2";
 
-/// Every contract version this core can ingest. A document outside this set is
+/// Every interface version this core can ingest. A document outside this set is
 /// exit 2, not a finding: the core has no trustworthy view of the register.
-/// 1.1 extends 1.0's severity vocabulary with `hint` and is otherwise
-/// identical, so one parser serves both.
-pub const SUPPORTED_CONTRACT_VERSIONS: &[&str] = &["1.0", CONTRACT_VERSION];
+/// 1.1 extends 1.0's severity vocabulary with `hint`; 1.2 renames the adapter
+/// issue channel to findings and adds optional edge attrs.
+pub const SUPPORTED_INTERFACE_VERSIONS: &[&str] = &["1.0", "1.1", INTERFACE_VERSION];
 
 /// A document the core cannot ingest: unparseable, wrong version, or off-schema.
 ///
@@ -46,9 +46,9 @@ pub(crate) fn err<T>(message: impl Into<String>) -> Result<T, ContractError> {
     Err(ContractError(message.into()))
 }
 
-/// The value's type in the profile's own attr-type vocabulary — `string`,
-/// `int`, `float`, `bool`, `list` — extended with `null` and `object`, so a
-/// schema failure names types in the same words a profile author writes.
+/// The JSON value's runtime type — `string`, `int`, `float`, `bool`, `list`,
+/// `null`, or `object`. Declared semantic types such as `date` remain strings
+/// at this layer and are named separately when an expected schema type is known.
 pub(crate) fn type_name(value: &Value) -> &'static str {
     match value {
         Value::Null => "null",
@@ -136,11 +136,17 @@ fn take_provenance(entry: &mut Value, where_: &str) -> Result<Provenance, Contra
 }
 
 fn check_version(document: &Value) -> Result<(), ContractError> {
-    let version = require_str(document, "contract_version", "document")?;
-    if !SUPPORTED_CONTRACT_VERSIONS.contains(&version) {
-        let supported = SUPPORTED_CONTRACT_VERSIONS.join(", ");
+    let version = match document.get("interface_version") {
+        Some(_) => require_str(document, "interface_version", "document")?,
+        None if document.get("contract_version").is_some() => {
+            require_str(document, "contract_version", "document")?
+        }
+        None => require_str(document, "interface_version", "document")?,
+    };
+    if !SUPPORTED_INTERFACE_VERSIONS.contains(&version) {
+        let supported = SUPPORTED_INTERFACE_VERSIONS.join(", ");
         return err(format!(
-            "unsupported contract version '{version}'; this lattice supports {supported}"
+            "unsupported interface version '{version}'; this lattice supports {supported}"
         ));
     }
     Ok(())
@@ -222,11 +228,26 @@ fn ingest_nodes(graph: &mut LatticeGraph, document: &mut Value) -> Result<(), Co
 fn ingest_edges(graph: &mut LatticeGraph, document: &mut Value) -> Result<(), ContractError> {
     for (index, mut entry) in take_entries(document, "edges")?.into_iter().enumerate() {
         let where_ = format!("edge {index}");
+        let entry_type = type_name(&entry);
+        let Value::Object(object) = &mut entry else {
+            return err(format!("{where_}: expected an object, got {entry_type}"));
+        };
+        let attrs = match object.remove("attrs") {
+            None => serde_json::Map::new(),
+            Some(Value::Object(object)) => object,
+            Some(other) => {
+                return err(format!(
+                    "{where_}: 'attrs' must be an object, got {}",
+                    type_name(&other)
+                ));
+            }
+        };
         graph.add_edge(
             EdgeSpec {
                 src: take_string(&mut entry, "src", &where_)?,
                 tgt: take_string(&mut entry, "tgt", &where_)?,
                 kind: take_string(&mut entry, "kind", &where_)?,
+                attrs,
             },
             take_provenance(&mut entry, &where_)?,
         );
@@ -234,20 +255,20 @@ fn ingest_edges(graph: &mut LatticeGraph, document: &mut Value) -> Result<(), Co
     Ok(())
 }
 
-/// Attach each axis, refusing an invalid one rather than reporting it.
+/// Attach each pathway, refusing an invalid one rather than reporting it.
 ///
 /// Validity is the adapter's job — it read the declaration and can name the file.
-/// An invalid axis arriving here means the adapter is broken, and an axis whose
+/// An invalid pathway arriving here means the adapter is broken, and an pathway whose
 /// `current` is outside its order would place every bound finding both before and
 /// after it.
 fn ingest_axes(graph: &mut LatticeGraph, document: &mut Value) -> Result<(), ContractError> {
-    for (index, mut entry) in take_entries(document, "axes")?.into_iter().enumerate() {
-        let where_ = format!("axis {index}");
-        let axis_name = take_string(&mut entry, "name", &where_)?;
+    for (index, mut entry) in take_entries(document, "pathways")?.into_iter().enumerate() {
+        let where_ = format!("pathway {index}");
+        let pathway_name = take_string(&mut entry, "name", &where_)?;
         let raw = take(&mut entry, "order", &where_)?;
         let Value::Array(items) = raw else {
             return err(format!(
-                "{where_} '{axis_name}': 'order' must be a list of strings"
+                "{where_} '{pathway_name}': 'order' must be a list of strings"
             ));
         };
         let mut order = Vec::with_capacity(items.len());
@@ -256,22 +277,32 @@ fn ingest_axes(graph: &mut LatticeGraph, document: &mut Value) -> Result<(), Con
                 Value::String(text) => order.push(text),
                 _ => {
                     return err(format!(
-                        "{where_} '{axis_name}': 'order' must be a list of strings"
+                        "{where_} '{pathway_name}': 'order' must be a list of strings"
                     ));
                 }
             }
         }
         let current = take_string(&mut entry, "current", &where_)?;
-        if let Err(axis_error) = graph.set_axis(axis_name, order, current) {
-            return err(format!("{where_}: {axis_error}"));
+        if let Err(pathway_error) = graph.set_pathway(pathway_name, order, current) {
+            return err(format!("{where_}: {pathway_error}"));
         }
     }
     Ok(())
 }
 
 fn ingest_issues(graph: &mut LatticeGraph, document: &mut Value) -> Result<(), ContractError> {
-    for (index, mut entry) in take_entries(document, "issues")?.into_iter().enumerate() {
-        let where_ = format!("issue {index}");
+    let key = match document {
+        Value::Object(object) if object.contains_key("findings") => "findings",
+        Value::Object(_) => "issues",
+        other => {
+            return err(format!(
+                "document: expected an object, got {}",
+                type_name(other)
+            ));
+        }
+    };
+    for (index, mut entry) in take_entries(document, key)?.into_iter().enumerate() {
+        let where_ = format!("finding {index}");
         let raw_severity = take_string(&mut entry, "severity", &where_)?;
         let Some(severity) = Severity::parse(&raw_severity) else {
             return err(format!("{where_}: unknown severity '{raw_severity}'"));
@@ -285,13 +316,24 @@ fn ingest_issues(graph: &mut LatticeGraph, document: &mut Value) -> Result<(), C
             Some(Value::String(text)) => Some(text),
             Some(_) => return err(format!("{where_}: 'node_id' must be a string or null")),
         };
-        graph.add_issue(Issue::new(
+        let state = match entry
+            .as_object_mut()
+            .expect("severity extraction established an object")
+            .remove("state")
+        {
+            None | Some(Value::Null) => None,
+            Some(Value::String(text)) => Some(text),
+            Some(_) => return err(format!("{where_}: 'state' must be a string or null")),
+        };
+        let mut issue = Issue::new(
             severity,
             take_string(&mut entry, "code", &where_)?,
             take_string(&mut entry, "message", &where_)?,
             take_provenance(&mut entry, &where_)?,
             node_id,
-        ));
+        );
+        issue.state = state;
+        graph.add_issue(issue);
     }
     Ok(())
 }
@@ -417,7 +459,7 @@ pub fn run_adapter(
     ingest_document(parse_document(&stdout)?)
 }
 
-/// Build a graph from an adapter's contract document.
+/// Build a graph from an adapter's interface document.
 ///
 /// Fails for anything off-schema. Adapter-collected issues are ingested before
 /// duplicate findings so the adapter's own account of the register reads first.

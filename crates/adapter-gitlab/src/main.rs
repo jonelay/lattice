@@ -1,17 +1,15 @@
 mod config;
-mod document;
 mod glab;
 mod issues;
 
 use std::io::{self, Write};
 use std::path::PathBuf;
 
+use adapter_core::Document;
 use clap::Parser;
 
-use document::Document;
-
 #[derive(Debug, Parser)]
-#[command(about = "Read GitLab issues into a lattice contract document")]
+#[command(about = "Read GitLab issues into a lattice interface document")]
 struct Args {
     #[arg(long)]
     profile: PathBuf,
@@ -37,7 +35,7 @@ fn run(args: Args) -> Result<(), String> {
         None => match glab::discover_project(&target) {
             Ok(project) => Some(project),
             Err(error) => {
-                document.parse_error(error, ".");
+                document.parse_error(error, ".", 0);
                 None
             }
         },
@@ -50,15 +48,15 @@ fn run(args: Args) -> Result<(), String> {
                     glab::links(&project, iid)
                 })
             }
-            Err(error) => document.parse_error(error, format!("gitlab:{project}")),
+            Err(error) => document.parse_error(error, format!("gitlab:{project}"), 0),
         }
     }
 
     let stdout = io::stdout();
     let mut writer = stdout.lock();
     serde_json::to_writer(&mut writer, &document)
-        .map_err(|error| format!("could not serialize contract document: {error}"))?;
-    writeln!(writer).map_err(|error| format!("could not write contract document: {error}"))?;
+        .map_err(|error| format!("could not serialize interface document: {error}"))?;
+    writeln!(writer).map_err(|error| format!("could not write interface document: {error}"))?;
     Ok(())
 }
 

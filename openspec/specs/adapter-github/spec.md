@@ -1,7 +1,7 @@
 # adapter-github Specification
 
 ## Purpose
-Reads a GitHub repository's issues through `gh api` into a contract document, so
+Reads a GitHub repository's issues through `gh api` into an interface document, so
 lattice can validate and query a hosted issue register without copying GitHub's
 labels, body references, or milestones into repository files.
 
@@ -98,7 +98,7 @@ profile data, so a kind such as `bug` can deliberately carry fewer fields than a
 
 An issue with no assignee SHALL omit `assignee`. When an issue has a milestone,
 the adapter SHALL also offer the milestone title under every profile-declared
-axis name, again only when that node kind declares an attr of that name.
+pathway name, again only when that node kind declares an attr of that name.
 
 Verified by: `.venv/bin/python -m pytest tests/test_adapter_github.py -k attrs_are_populated_and_filtered_by_kind`
 
@@ -130,7 +130,7 @@ is the target because the surrounding words explain the relationship while the
 captured issue number is the join key.
 
 A missing or null body SHALL be treated as empty text. The adapter SHALL NOT
-check that a captured endpoint exists: an absent issue is a `DANGLING_REF`
+check that a captured endpoint exists: an absent issue is a `VACANCY`
 finding at validation, and dropping the edge would hide it. A capture group that does not participate in the match SHALL be silently
 skipped. A capture that is present but is not an unsigned integer SHALL
 instead produce a `PARSE_ERROR` at the source issue and no edge for that
@@ -154,18 +154,18 @@ Verified by: `.venv/bin/python -m pytest tests/test_adapter_github.py -k body_re
 - **WHEN** an issue's body is missing or null
 - **THEN** the adapter emits the node and no body-derived edges for it
 
-### Requirement: Derive ordering axes from milestones
+### Requirement: Derive ordering pathways from milestones
 
 The adapter SHALL collect milestones from the well-formed issues it emits,
 ordered by positive milestone number, and SHALL use their titles as the order
-for every axis named by the resolved profile. Repeated milestone titles SHALL
+for every pathway named by the resolved profile. Repeated milestone titles SHALL
 appear once in that order. Milestones are the hosted register's ordering state;
 the adapter SHALL NOT maintain a second hand-written order in its own code.
 
-For every emitted axis, `current` SHALL be the title of the lowest-numbered open
+For every emitted pathway, `current` SHALL be the title of the lowest-numbered open
 milestone. If none is open, it SHALL be the title of the highest-numbered
 milestone. If no emitted issue has a milestone, the adapter SHALL attach no
-axis. A profile declaring no axes likewise yields no axes, even when issues have
+pathway. A profile declaring no pathways likewise yields no pathways, even when issues have
 milestones.
 
 Verified by: `.venv/bin/python -m pytest tests/test_adapter_github.py`
@@ -173,19 +173,19 @@ Verified by: `.venv/bin/python -m pytest tests/test_adapter_github.py`
 #### Scenario: Open milestone selects current
 
 - **WHEN** emitted issues contribute closed milestone `v0.9` number 1 and open
-  milestone `v1.0` number 2, and the profile names an axis
-- **THEN** that axis has order `[v0.9, v1.0]` and current `v1.0`
+  milestone `v1.0` number 2, and the profile names a pathway
+- **THEN** that pathway has order `[v0.9, v1.0]` and current `v1.0`
 
 #### Scenario: Every milestone is closed
 
 - **WHEN** all collected milestones are closed
-- **THEN** each configured axis uses the highest-numbered milestone's title as
+- **THEN** each configured pathway uses the highest-numbered milestone's title as
   current
 
 #### Scenario: No milestones are collected
 
 - **WHEN** no emitted issue has a milestone
-- **THEN** the graph carries no axes
+- **THEN** the graph carries no pathways
 
 ### Requirement: Reject malformed issue responses without losing sound issues
 
@@ -244,11 +244,11 @@ These checks happen before GitHub is read, because an invalid mapping is a
 broken adapter setup rather than a finding about the target register.
 
 An unreadable, unparseable, unresolved, or internally inconsistent profile
-SHALL make the adapter exit 2 rather than emit a contract document. For a valid
-profile, the adapter SHALL write a version `1.1` contract document and exit 0,
+SHALL make the adapter exit 2 rather than emit an interface document. For a valid
+profile, the adapter SHALL write a version `1.2` interface document and exit 0,
 including when GitHub input produced `PARSE_ERROR` issues.
 
-Verified by: `cargo test -p adapter-github`, and `.venv/bin/python -m pytest tests/test_adapter_github.py -k "contract_version_is_1_1 or missing_gh_is_parse_error_with_zero_exit"`
+Verified by: `cargo test -p adapter-github`, and `.venv/bin/python -m pytest tests/test_adapter_github.py -k "interface_version_is_1_2 or missing_gh_is_parse_error_with_zero_exit"`
 
 #### Scenario: Edge pattern has no capture group
 
@@ -262,10 +262,10 @@ Verified by: `cargo test -p adapter-github`, and `.venv/bin/python -m pytest tes
   corresponding profile kind declarations
 - **THEN** the adapter rejects the profile and exits 2
 
-#### Scenario: Malformed input still yields a contract
+#### Scenario: Malformed input still yields an interface document
 
 - **WHEN** the profile is valid but GitHub input is malformed
-- **THEN** the adapter writes a version `1.1` contract document carrying the
+- **THEN** the adapter writes a version `1.2` interface document carrying the
   `PARSE_ERROR` and exits 0
 
 ### Requirement: Serve as the GitHub adapter gate

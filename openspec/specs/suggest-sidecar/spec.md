@@ -7,26 +7,26 @@ This capability covers its inputs, its offline default, and the embedding baseli
 later ranker is measured against.
 ## Requirements
 ### Requirement: The sidecar is a program emitting a suggestion document
-`lattice-suggest` SHALL be an executable program. Given the resolved profile and a contract
+`lattice-suggest` SHALL be an executable program. Given the resolved profile and an interface
 document, it SHALL write a single suggestion document to stdout and exit 0. A malformed or
 unreadable *input* SHALL become an issue reported on stderr with a still-valid document on
 stdout, or an explicit non-zero exit; it SHALL NOT be dropped in silence.
 
 A non-zero exit means the sidecar itself broke, not that a suggestion was rejected — the same
-division the adapter contract draws.
+division the adapter interface draws.
 
-It takes the resolved profile because the contract document alone does not carry
+It takes the resolved profile because the interface document alone does not carry
 `summary_attr` or the profile's allowed endpoint pairs, and both are needed to know what text
 to compare and which pairings are legal.
 
 Verified by: `.venv/bin/python -m pytest tests/test_suggest.py -k program`
 
 #### Scenario: Emits a document on stdout
-- **WHEN** the sidecar is run with a resolved profile and a contract document
+- **WHEN** the sidecar is run with a resolved profile and an interface document
 - **THEN** it writes one suggestion document to stdout and exits 0
 
 #### Scenario: Unreadable input is reported, not dropped
-- **WHEN** the contract document contains a node the sidecar cannot read
+- **WHEN** the interface document contains a node the sidecar cannot read
 - **THEN** the sidecar reports it and still emits a document for the nodes it could read
 
 ### Requirement: Candidates are constrained to profile-legal pairings
@@ -206,7 +206,7 @@ Verified by: `.venv/bin/python -m pytest tests/test_suggest.py -k text`
 
 ### Requirement: Duplicate node IDs rank as one candidate
 
-When the contract document carries several nodes under one ID, the sidecar SHALL rank
+When the interface document carries several nodes under one ID, the sidecar SHALL rank
 that ID once, over the union of the occurrences' text: source occurrence texts are
 concatenated in occurrence order, and target occurrences' chunk lists are concatenated,
 so the best-block score covers every occurrence. Exactly one suggestion SHALL be
@@ -214,7 +214,7 @@ emitted per (src, tgt, kind) triple. The merge SHALL be reported on stderr with 
 of merged occurrences; the node identity carried in suggestions is the first
 occurrence's, matching the core's ingest rule for which occurrence becomes the node.
 
-The contract retains every occurrence by design and the core reports the duplicate as
+The interface document retains every occurrence by design and the core reports the duplicate as
 a finding; the sidecar neither repeats that finding nor resolves it. It unions rather
 than keeping one occurrence because a suggestion list is a recall surface: an
 occurrence never scored is a candidate no reviewer can rescue, which is the one failure
@@ -240,4 +240,3 @@ Verified by: `.venv/bin/python -m pytest tests/test_suggest.py -k duplicat`
 
 - **WHEN** any ID occurs more than once among the candidates
 - **THEN** stderr reports how many occurrences were merged
-

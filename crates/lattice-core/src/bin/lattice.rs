@@ -9,7 +9,7 @@ use clap::{Args, Parser, Subcommand};
 use lattice_core::document::run_adapter;
 use lattice_core::graph::LatticeGraph;
 use lattice_core::output::{Payload, output_result, strip_ansi};
-use lattice_core::profile::{Profile, load_profile, resolved_document};
+use lattice_core::profile::{Condition, Profile, load_profile, resolved_document};
 use lattice_core::query::{self, Direction};
 use lattice_core::suggest::render_suggestions;
 use lattice_core::summary::build_summary;
@@ -43,6 +43,18 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Compose source registers and validate cross-source references.
+    Fuse {
+        /// Path to fuse manifest YAML.
+        #[arg(long)]
+        manifest: PathBuf,
+        /// Output format (default: auto-detect).
+        #[arg(long, value_parser = ["plain", "json", "rich"])]
+        format: Option<String>,
+        /// Promote collected warnings to errors.
+        #[arg(long)]
+        strict: bool,
+    },
     /// Validate a register against a profile.
     Validate {
         #[command(flatten)]
@@ -95,6 +107,9 @@ enum QueryCommand {
         /// Restrict traversal to this edge kind (repeatable; default: all).
         #[arg(long = "edge-kind")]
         edge_kinds: Vec<String>,
+        /// Restrict returned nodes by an attribute condition (repeatable).
+        #[arg(long = "filter", value_parser = query::parse_filter)]
+        filters: Vec<Condition>,
     },
     /// Nodes that transitively reach a node along incoming edges.
     ReachedBy {
@@ -105,6 +120,9 @@ enum QueryCommand {
         /// Restrict traversal to this edge kind (repeatable; default: all).
         #[arg(long = "edge-kind")]
         edge_kinds: Vec<String>,
+        /// Restrict returned nodes by an attribute condition (repeatable).
+        #[arg(long = "filter", value_parser = query::parse_filter)]
+        filters: Vec<Condition>,
     },
     /// One shortest path between two nodes, if evidence connects them.
     Path {
@@ -125,11 +143,17 @@ enum QueryCommand {
         /// Restrict the answer to this node kind.
         #[arg(long)]
         kind: Option<String>,
+        /// Restrict returned nodes by an attribute condition (repeatable).
+        #[arg(long = "filter", value_parser = query::parse_filter)]
+        filters: Vec<Condition>,
     },
     /// Per-kind node and edge tallies, declared kinds shown even at zero.
     Counts {
         #[command(flatten)]
         common: Common,
+        /// Restrict counted nodes by an attribute condition (repeatable).
+        #[arg(long = "filter", value_parser = query::parse_filter)]
+        filters: Vec<Condition>,
     },
     /// Register entries and findings originating at a source path. Findings
     /// are answer content here, not a verdict — the exit code stays 0.
@@ -139,6 +163,9 @@ enum QueryCommand {
         /// Source path, absolute or target-relative; a directory matches
         /// everything beneath it.
         path: String,
+        /// Restrict returned entries by a node attribute condition (repeatable).
+        #[arg(long = "filter", value_parser = query::parse_filter)]
+        filters: Vec<Condition>,
     },
     /// What changed between two revisions of the target: the adapter runs
     /// live at each, and the two registers are compared — never a snapshot.
@@ -159,7 +186,7 @@ impl QueryCommand {
             | QueryCommand::ReachedBy { common, .. }
             | QueryCommand::Path { common, .. }
             | QueryCommand::Orphans { common, .. }
-            | QueryCommand::Counts { common }
+            | QueryCommand::Counts { common, .. }
             | QueryCommand::At { common, .. }
             | QueryCommand::Diff { common, .. } => common,
         }
@@ -171,7 +198,7 @@ struct Common {
     /// Path to profile YAML file.
     #[arg(long)]
     profile: PathBuf,
-    /// Executable adapter program emitting a contract document.
+    /// Executable adapter program emitting an interface document.
     #[arg(long)]
     adapter: PathBuf,
     /// Path to the target repo.
@@ -294,12 +321,40 @@ fn main() -> ExitCode {
         };
     }
 
+    if let Command::Fuse {
+        manifest,
+        format,
+        strict,
+    } = &command
+    {
+        let format = format.clone().unwrap_or_else(auto_format);
+        let result = std::env::current_exe()
+            .map_err(|e| e.to_string())
+            .and_then(|binary| lattice_core::fuse::fuse(manifest, &binary, *strict));
+        let report = result.unwrap_or_else(|message| lattice_core::types::FuseReport {
+            findings: vec![lattice_core::types::FuseFinding {
+                issue: Issue::new(
+                    Severity::Error,
+                    "FUSE_ERROR",
+                    message,
+                    lattice_core::types::Provenance::new(manifest.display().to_string(), 0),
+                    None,
+                ),
+                source: None,
+                locations: Vec::new(),
+            }],
+            ..Default::default()
+        });
+        echo(&render(&report, &format), Stream::Stdout);
+        return ExitCode::from(report.exit_code());
+    }
+
     let common = match &command {
         Command::Validate { common, .. }
         | Command::Summary { common }
         | Command::Trace { common, .. } => common,
         Command::Query(query) => query.common(),
-        Command::Resolve { .. } => unreachable!("handled above"),
+        Command::Resolve { .. } | Command::Fuse { .. } => unreachable!("handled above"),
     };
     let format = common.format();
 
@@ -375,7 +430,9 @@ fn main() -> ExitCode {
 
         Command::Query(command) => run_query(&command, &profile, &graph, &format),
 
-        Command::Resolve { .. } => unreachable!("answered before the shared load"),
+        Command::Resolve { .. } | Command::Fuse { .. } => {
+            unreachable!("answered before the shared load")
+        }
     }
 }
 
@@ -390,29 +447,63 @@ fn run_query(
 ) -> ExitCode {
     let kinds = |edge_kinds: &[String]| edge_kinds.iter().cloned().collect();
     let rendered = match command {
-        QueryCommand::Reaches { id, edge_kinds, .. } => {
-            query::reach(graph, profile, id, &kinds(edge_kinds), Direction::Forward)
-                .map(|r| render(&r, format))
-        }
-        QueryCommand::ReachedBy { id, edge_kinds, .. } => {
-            query::reach(graph, profile, id, &kinds(edge_kinds), Direction::Reverse)
-                .map(|r| render(&r, format))
-        }
+        QueryCommand::Reaches {
+            id,
+            edge_kinds,
+            filters,
+            ..
+        } => query::reach(
+            graph,
+            profile,
+            id,
+            &kinds(edge_kinds),
+            Direction::Forward,
+            filters,
+        )
+        .map(|r| render(&r, format)),
+        QueryCommand::ReachedBy {
+            id,
+            edge_kinds,
+            filters,
+            ..
+        } => query::reach(
+            graph,
+            profile,
+            id,
+            &kinds(edge_kinds),
+            Direction::Reverse,
+            filters,
+        )
+        .map(|r| render(&r, format)),
         QueryCommand::Path {
             src,
             tgt,
             edge_kinds,
             ..
         } => query::path(graph, profile, src, tgt, &kinds(edge_kinds)).map(|r| render(&r, format)),
-        QueryCommand::Orphans { kind, .. } => {
-            query::orphans(graph, profile, kind.as_deref()).map(|r| render(&r, format))
+        QueryCommand::Orphans { kind, filters, .. } => {
+            query::orphans(graph, profile, kind.as_deref(), filters).map(|r| render(&r, format))
         }
-        QueryCommand::Counts { .. } => Ok(render(&query::counts(graph, profile), format)),
-        QueryCommand::At { common, path } => {
+        QueryCommand::Counts { filters, .. } => {
+            Ok(render(&query::counts(graph, profile, filters), format))
+        }
+        QueryCommand::At {
+            common,
+            path,
+            filters,
+        } => {
             // Never strict: findings here are answer content, not a verdict.
             let issues = validate(graph, profile, false);
-            query::at(graph, profile, issues, &common.target, path, VERSION)
-                .map(|r| render(&r, format))
+            query::at(
+                graph,
+                profile,
+                issues,
+                &common.target,
+                path,
+                VERSION,
+                filters,
+            )
+            .map(|r| render(&r, format))
         }
         // Handled in main before the shared load; reaching here is a wiring bug.
         QueryCommand::Diff { .. } => unreachable!("diff branches off before the shared load"),

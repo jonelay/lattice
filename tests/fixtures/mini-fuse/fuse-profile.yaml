@@ -1,0 +1,15 @@
+name: mini-fuse
+profile_version: "1.0.0"
+
+edge_kinds:
+  traces_to:
+    allowed:
+      - [markdown:requirement, toml:item]
+
+validations:
+  - VACANCY:
+      severity: error
+  - COVERAGE:
+      target_kind: toml:item
+      edge_kind: traces_to
+      severity: hint

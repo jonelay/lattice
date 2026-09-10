@@ -1,0 +1,6 @@
+edge_kinds:
+  traces:
+    allowed: [[src:test, dst:req]]
+validations:
+  - VACANCY: {severity: warning}
+  - COVERAGE: {target_kind: 'dst:req', edge_kind: traces}

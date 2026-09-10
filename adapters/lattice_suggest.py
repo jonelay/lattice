@@ -1,6 +1,6 @@
 """Rank candidate edges the register does not yet declare.
 
-A suggestion producer, not a decider. It reads a contract document and the
+A suggestion producer, not a decider. It reads an interface document and the
 core-resolved profile, ranks candidate pairings by similarity of the text each
 node carries, and writes a suggestion document to stdout. The core renders that
 document as hints; a human decides whether any of it becomes a marker edit.
@@ -210,7 +210,7 @@ def rank(
     """
     allowed = set(profile.edge_kinds[edge_kind].allowed)
     # A duplicated ID ranks once, over the union of its occurrences' text.
-    # The contract retains every occurrence and the core reports the defect;
+    # The interface document retains every occurrence and the core reports the defect;
     # here, keying by ID must not silently keep one occurrence — a matching
     # occurrence never scored is a candidate no reviewer can rescue.
     src_pieces: dict[str, list[str]] = {}
@@ -346,7 +346,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--profile", required=True, help="resolved profile document")
     parser.add_argument(
-        "--contract", default="-", help="contract document, or - for stdin"
+        "--interface", default="-", help="interface document, or - for stdin"
     )
     parser.add_argument("--edge-kind", required=True)
     parser.add_argument("--backend", default="none", choices=["none", "ollama"])
@@ -359,8 +359,8 @@ def main(argv: list[str] | None = None) -> int:
         profile = load_profile(args.profile)
         text = (
             sys.stdin.read()
-            if args.contract == "-"
-            else Path(args.contract).read_text(encoding="utf-8")
+            if args.interface == "-"
+            else Path(args.interface).read_text(encoding="utf-8")
         )
         document = json.loads(text)
         sources, targets = candidates(document, profile, args.edge_kind)
@@ -389,7 +389,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"lattice-suggest: {e}", file=sys.stderr)
         return 2
     except (OSError, json.JSONDecodeError) as e:
-        print(f"lattice-suggest: could not read the contract document: {e}", file=sys.stderr)
+        print(f"lattice-suggest: could not read the interface document: {e}", file=sys.stderr)
         return 2
 
     json.dump(build_document(suggestions), sys.stdout)

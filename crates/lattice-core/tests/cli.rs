@@ -13,12 +13,12 @@ use common::{Case, MINIMAL_PROFILE, binary, code, stderr, stdout};
 
 /// A well-formed document with one node that has no edges: one `ORPHAN_NODE`
 /// warning, so the register is clean at the default severities.
-const CLEAN_DOCUMENT: &str = r#"{"contract_version": "1.0",
+const CLEAN_DOCUMENT: &str = r#"{"interface_version": "1.0",
   "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {},
              "provenance": {"file": "r.md", "line": 1}}]}"#;
 
 /// The same register with a dangling edge, which is an error-severity finding.
-const ERROR_DOCUMENT: &str = r#"{"contract_version": "1.0",
+const ERROR_DOCUMENT: &str = r#"{"interface_version": "1.0",
   "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {},
              "provenance": {"file": "r.md", "line": 1}}],
   "edges": [{"src": "REQ-1", "tgt": "REQ-9", "kind": "derives",
@@ -39,7 +39,7 @@ fn error_severity_findings_exit_one() {
     let case = Case::emitting(ERROR_DOCUMENT);
     let output = case.run(&["validate", "--format", "plain"]);
     assert_eq!(code(&output), 1);
-    assert!(stdout(&output).contains("ERROR DANGLING_REF"));
+    assert!(stdout(&output).contains("ERROR VACANCY"));
 }
 
 #[test]
@@ -128,7 +128,7 @@ fn an_adapter_that_emits_nothing_exits_two_rather_than_reporting_an_empty_regist
 
 #[test]
 fn an_off_schema_document_exits_two_and_names_the_failure() {
-    let case = Case::emitting(r#"{"contract_version": "1.0", "nodes": [{"kind": "req"}]}"#);
+    let case = Case::emitting(r#"{"interface_version": "1.0", "nodes": [{"kind": "req"}]}"#);
     let output = case.run(&["validate", "--format", "plain"]);
 
     assert_eq!(code(&output), 2);
@@ -140,13 +140,13 @@ fn an_off_schema_document_exits_two_and_names_the_failure() {
 }
 
 #[test]
-fn an_unsupported_contract_version_exits_two() {
-    let case = Case::emitting(r#"{"contract_version": "9.9", "nodes": []}"#);
+fn an_unsupported_interface_version_exits_two() {
+    let case = Case::emitting(r#"{"interface_version": "9.9", "nodes": []}"#);
     let output = case.run(&["validate", "--format", "plain"]);
 
     assert_eq!(code(&output), 2);
     assert!(
-        stderr(&output).contains("unsupported contract version"),
+        stderr(&output).contains("unsupported interface version"),
         "{}",
         stderr(&output)
     );
@@ -172,7 +172,7 @@ fn summary_profile(extra: &str) -> String {
 
 #[test]
 fn summary_writes_its_rollup_to_stdout_and_adapter_issues_to_stderr() {
-    let document = r#"{"contract_version": "1.0",
+    let document = r#"{"interface_version": "1.0",
       "nodes": [{"id": "REQ-1", "kind": "req",
                  "attrs": {"status": "done", "file": "a.md"},
                  "provenance": {"file": "a.md", "line": 1}}],
@@ -198,7 +198,7 @@ fn summary_writes_its_rollup_to_stdout_and_adapter_issues_to_stderr() {
 
 #[test]
 fn summary_exits_on_an_error_severity_adapter_issue() {
-    let document = r#"{"contract_version": "1.0",
+    let document = r#"{"interface_version": "1.0",
       "nodes": [],
       "issues": [{"severity": "error", "code": "PARSE_ERROR", "message": "m",
                   "provenance": {"file": "a.md", "line": 9}, "node_id": null}]}"#;
@@ -236,7 +236,7 @@ fn summary_config_wrong_type_is_exit_2_not_an_empty_rollup() {
 
 #[test]
 fn summary_honours_a_profile_override_on_an_adapter_code() {
-    let document = r#"{"contract_version": "1.0",
+    let document = r#"{"interface_version": "1.0",
       "nodes": [],
       "issues": [{"severity": "error", "code": "PARSE_ERROR", "message": "m",
                   "provenance": {"file": "a.md", "line": 9}, "node_id": null}]}"#;
@@ -375,7 +375,7 @@ fn trace_exits_one_on_an_error_severity_finding() {
     assert_eq!(code(&output), 1);
     // The finding names REQ-1, which exists, so it hangs under that entry.
     assert!(
-        stdout(&output).contains("ERROR DANGLING_REF"),
+        stdout(&output).contains("ERROR VACANCY"),
         "{}",
         stdout(&output)
     );
@@ -385,7 +385,7 @@ fn trace_exits_one_on_an_error_severity_finding() {
 
 #[test]
 fn trace_puts_a_finding_naming_no_declared_node_in_the_footer() {
-    let document = r#"{"contract_version": "1.0",
+    let document = r#"{"interface_version": "1.0",
       "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {},
                  "provenance": {"file": "r.md", "line": 1}}],
       "issues": [{"severity": "warning", "code": "PARSE_ERROR", "message": "ghost",
@@ -404,7 +404,7 @@ fn trace_puts_a_finding_naming_no_declared_node_in_the_footer() {
 
 #[test]
 fn rich_output_carries_no_ansi_when_the_stream_is_not_a_terminal() {
-    let document = r#"{"contract_version": "1.0",
+    let document = r#"{"interface_version": "1.0",
       "nodes": [],
       "issues": [{"severity": "warning", "code": "PARSE_ERROR", "message": "m",
                   "provenance": {"file": "a.md", "line": 9}, "node_id": null}]}"#;
@@ -430,16 +430,16 @@ fn rich_output_carries_no_ansi_when_the_stream_is_not_a_terminal() {
 // Requirement: Severity resolution is shared by every command
 
 /// A profile binding `phase` to `PARSE_ERROR`, plus the rollup summary needs.
-fn axis_summary_profile() -> String {
+fn pathway_summary_profile() -> String {
     let base =
-        summary_profile("  - PARSE_ERROR:\n      axis: phase\n      position_attr: trigger\n");
-    // `axes:` is a top-level key, so it goes above the list rather than into it.
-    base.replace("validations:", "axes: [phase]\nvalidations:")
+        summary_profile("  - PARSE_ERROR:\n      pathway: phase\n      position_attr: trigger\n");
+    // `pathways:` is a top-level key, so it goes above the list rather than into it.
+    base.replace("validations:", "pathways: [phase]\nvalidations:")
 }
 
-/// One node not yet due on the axis, carrying one error-severity adapter issue.
-const DEMOTABLE_DOCUMENT: &str = r#"{"contract_version": "1.0",
-  "axes": [{"name": "phase", "order": ["CB", "M0", "M4"], "current": "M0"}],
+/// One node not yet due on the pathway, carrying one error-severity adapter issue.
+const DEMOTABLE_DOCUMENT: &str = r#"{"interface_version": "1.0",
+  "pathways": [{"name": "phase", "order": ["CB", "M0", "M4"], "current": "M0"}],
   "nodes": [{"id": "REQ-1", "kind": "req",
              "attrs": {"status": "todo", "file": "a.md", "trigger": "M4"},
              "provenance": {"file": "a.md", "line": 1}}],
@@ -447,9 +447,9 @@ const DEMOTABLE_DOCUMENT: &str = r#"{"contract_version": "1.0",
               "provenance": {"file": "a.md", "line": 9}, "node_id": "REQ-1"}]}"#;
 
 #[test]
-fn an_axis_demotion_drops_the_exit_code_for_validate_and_summary_alike() {
+fn a_pathway_demotion_drops_the_exit_code_for_validate_and_summary_alike() {
     let case = Case::with_profile(
-        &axis_summary_profile(),
+        &pathway_summary_profile(),
         &format!("cat <<'DOC'\n{DEMOTABLE_DOCUMENT}\nDOC"),
     );
 
@@ -486,21 +486,21 @@ fn the_same_issue_unbound_still_errors() {
     assert_eq!(code(&case.run(&["summary", "--format", "plain"])), 1);
 }
 
-// Requirement: Findings the axis pass cannot resolve
+// Requirement: Findings the pathway pass cannot resolve
 
 #[test]
 fn a_binding_the_register_cannot_satisfy_is_a_finding_and_never_exit_two() {
-    // Same profile and a bound finding, but a document with no axis at all. The
+    // Same profile and a bound finding, but a document with no pathway at all. The
     // finding is what the pass tries to resolve, so without one there is nothing
     // to report the mismatch about.
-    let document = r#"{"contract_version": "1.0",
+    let document = r#"{"interface_version": "1.0",
       "nodes": [{"id": "REQ-1", "kind": "req",
                  "attrs": {"status": "todo", "file": "a.md"},
                  "provenance": {"file": "a.md", "line": 1}}],
       "issues": [{"severity": "warning", "code": "PARSE_ERROR", "message": "m",
                   "provenance": {"file": "a.md", "line": 9}, "node_id": "REQ-1"}]}"#;
     let case = Case::with_profile(
-        &axis_summary_profile(),
+        &pathway_summary_profile(),
         &format!("cat <<'DOC'\n{document}\nDOC"),
     );
     let output = case.run(&["validate", "--format", "plain"]);
@@ -511,7 +511,7 @@ fn a_binding_the_register_cannot_satisfy_is_a_finding_and_never_exit_two() {
         "the profile loaded and the adapter honoured its contract"
     );
     assert!(
-        stdout(&output).contains("WARNING AXIS_UNRESOLVED <profile>:0"),
+        stdout(&output).contains("WARNING PATHWAY_UNRESOLVED <profile>:0"),
         "{}",
         stdout(&output)
     );
@@ -526,7 +526,7 @@ fn the_rollup_carries_a_column_for_every_declared_status() {
          \x20     status: {type: enum, values: [blocked, done, todo]}\n\
          edge_kinds: {}\nvalidations:\n  - SUMMARY:\n      node_kind: req\n\
          \x20     status_attr: status\n      group_by_attr: file\n";
-    let document = r#"{"contract_version": "1.0",
+    let document = r#"{"interface_version": "1.0",
       "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {"status": "done", "file": "a.md"},
                  "provenance": {"file": "a.md", "line": 1}}]}"#;
     let case = Case::with_profile(profile, &format!("cat <<'DOC'\n{document}\nDOC"));
@@ -545,7 +545,7 @@ fn the_rollup_carries_a_column_for_every_declared_status() {
 #[test]
 fn a_duplicate_in_the_document_is_a_finding_rather_than_exit_two() {
     // Ingest resolves it, so the core still has a view of the register.
-    let document = r#"{"contract_version": "1.0",
+    let document = r#"{"interface_version": "1.0",
       "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {},
                  "provenance": {"file": "r.md", "line": 1}},
                 {"id": "REQ-1", "kind": "req", "attrs": {},
@@ -583,7 +583,7 @@ fn the_adapter_receives_the_profile_and_target_it_was_given() {
     // reaches it is observable in what comes back. The profile path is the
     // core's resolved document, not the user's file.
     let case = Case::running(
-        r#"printf '{"contract_version": "1.0", "issues": [{"severity": "warning",
+        r#"printf '{"interface_version": "1.0", "issues": [{"severity": "warning",
              "code": "ARGV", "message": "%s", "provenance": {"file": "r.md", "line": 1},
              "node_id": null}]}' "$*""#,
     );
@@ -603,7 +603,7 @@ fn the_profile_path_names_the_resolved_document() {
     // The adapter counts `resolved_schema` occurrences in the file behind the
     // profile path it received ($2), so the handoff content is observable.
     let case = Case::running(
-        r#"printf '{"contract_version": "1.0", "issues": [{"severity": "warning",
+        r#"printf '{"interface_version": "1.0", "issues": [{"severity": "warning",
              "code": "SEEN", "message": "schema markers: %s", "provenance": {"file": "r.md", "line": 1},
              "node_id": null}]}' "$(grep -c resolved_schema "$2")""#,
     );

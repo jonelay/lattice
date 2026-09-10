@@ -1,0 +1,5 @@
+name: dst
+profile_version: '1.0.0'
+node_kinds:
+  req: {id_pattern: '.*', orphan_ok: true}
+edge_kinds: {}

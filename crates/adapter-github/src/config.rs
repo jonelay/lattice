@@ -11,7 +11,7 @@ pub(crate) struct Config {
     pub(crate) default_kind: Option<String>,
     pub(crate) edge_patterns: Vec<(Regex, String)>,
     pub(crate) attrs_by_kind: BTreeMap<String, BTreeSet<String>>,
-    pub(crate) axes: Vec<String>,
+    pub(crate) pathways: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -22,7 +22,7 @@ struct ResolvedProfile {
     #[serde(default)]
     edge_kinds: BTreeMap<String, serde_json::Value>,
     #[serde(default)]
-    axes: Vec<String>,
+    pathways: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -114,7 +114,7 @@ impl Config {
             default_kind: profile.adapter.default_kind,
             edge_patterns,
             attrs_by_kind,
-            axes: profile.axes,
+            pathways: profile.pathways,
         })
     }
 }

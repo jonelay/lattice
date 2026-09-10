@@ -14,7 +14,7 @@ from pathlib import Path
 
 SUPPORTED_RESOLVED_SCHEMA = "1"
 
-_AXIS_BINDING_KEYS = frozenset({"axis", "position_attr"})
+_PATHWAY_BINDING_KEYS = frozenset({"pathway", "position_attr"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,15 +46,15 @@ class EdgeKind:
 
 
 @dataclass(frozen=True, slots=True)
-class AxisBinding:
-    """Ties a finding code's severity to a node attr's position on an axis.
+class PathwayBinding:
+    """Ties a finding code's severity to a node attr's position on a pathway.
 
     Carries no demotion target: a demoted finding becomes `info`, always. The
     only useful target is the quietest severity, and a configurable one would
     admit both promotion and a `warning` that `--strict` promotes straight back.
     """
 
-    axis: str
+    pathway: str
     position_attr: str
 
 
@@ -72,8 +72,8 @@ class Profile:
     edge_kinds: dict[str, EdgeKind]
     validation_overrides: dict[str, str] = field(default_factory=dict)
     validation_configs: dict[str, list[dict]] = field(default_factory=dict)
-    axes: tuple[str, ...] = ()
-    axis_bindings: dict[str, AxisBinding] = field(default_factory=dict)
+    pathways: tuple[str, ...] = ()
+    pathway_bindings: dict[str, PathwayBinding] = field(default_factory=dict)
     extra: dict = field(default_factory=dict)
 
 
@@ -142,20 +142,20 @@ def load_profile(path: str | Path) -> Profile:
 
     validation_overrides: dict[str, str] = {}
     validation_configs: dict[str, list[dict]] = {}
-    axis_bindings: dict[str, AxisBinding] = {}
+    pathway_bindings: dict[str, PathwayBinding] = {}
     for entry in raw.get("validations") or []:
         for code, config in entry.items():
             severity = config.get("severity")
             if severity is not None:
                 validation_overrides[code] = severity
             validation_configs.setdefault(code, []).append(dict(config))
-            if _AXIS_BINDING_KEYS & set(config):
-                axis_bindings[code] = AxisBinding(
-                    axis=config["axis"], position_attr=config["position_attr"],
+            if _PATHWAY_BINDING_KEYS & set(config):
+                pathway_bindings[code] = PathwayBinding(
+                    pathway=config["pathway"], position_attr=config["position_attr"],
                 )
 
     known_keys = {"resolved_schema", "name", "profile_version", "node_kinds",
-                  "edge_kinds", "validations", "axes"}
+                  "edge_kinds", "validations", "pathways"}
 
     return Profile(
         name=raw["name"],
@@ -166,7 +166,7 @@ def load_profile(path: str | Path) -> Profile:
                     for k, v in raw["edge_kinds"].items()},
         validation_overrides=validation_overrides,
         validation_configs=validation_configs,
-        axes=tuple(raw.get("axes") or ()),
-        axis_bindings=axis_bindings,
+        pathways=tuple(raw.get("pathways") or ()),
+        pathway_bindings=pathway_bindings,
         extra={k: v for k, v in raw.items() if k not in known_keys},
     )

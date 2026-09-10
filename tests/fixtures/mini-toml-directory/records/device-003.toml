@@ -1,0 +1,3 @@
+id = "DEV-003"
+name = "Gateway C"
+refs = ["DEV-001", "DEV-002"]

@@ -13,7 +13,7 @@ error-severity adapter issues affect its exit code; `query` produces no findings
 at all, so no severity affects its exit code (see the `query` capability).
 
 The adapter issues `summary` reports and exits on SHALL carry resolved severities —
-profile overrides, then axis demotion — the same severities `validate` would report for
+profile overrides, then pathway demotion — the same severities `validate` would report for
 the same graph. Running no validation pass means `summary` computes no findings of its
 own; it does not mean it reports an adapter issue at a severity the profile has already
 said is wrong.
@@ -38,8 +38,8 @@ said is wrong.
 - **WHEN** the profile overrides an error-severity adapter code to `info` and `summary` runs
 - **THEN** `summary` reports that issue at `info` and exits 0
 
-#### Scenario: Summary honours an axis demotion
-- **WHEN** an axis binding demotes an error-severity adapter issue to `info` and `summary`
+#### Scenario: Summary honours a pathway demotion
+- **WHEN** a pathway binding demotes an error-severity adapter issue to `info` and `summary`
   runs
 - **THEN** `summary` reports that issue at `info` and exits 0, agreeing with `validate`
 
@@ -68,8 +68,8 @@ All subcommands SHALL accept `--format=plain|json|rich` (default: `rich` when TT
 Lattice SHALL use three exit codes: 0 when the command succeeded with no errors, 1 when
 the register produced error-severity findings, and 2 when lattice could not run the
 command at all (unreadable profile, adapter program that cannot be run, adapter that
-exits non-zero, adapter output that cannot be parsed or does not satisfy the contract
-schema, or a contract version the core does not support). With `--strict` (on the
+exits non-zero, adapter output that cannot be parsed or does not satisfy the interface
+schema, or an interface version the core does not support). With `--strict` (on the
 commands that take it), warnings are promoted to errors before the exit code decision.
 
 Exit 2 distinguishes "lattice is misconfigured" from "the register has errors", so a
@@ -95,7 +95,7 @@ Verified by: `cargo test --test cli exit` and `cargo test --test query exit`
 
 #### Scenario: Adapter process failure
 - **WHEN** the adapter program exits non-zero, or writes output that does not satisfy the
-  contract
+  interface
 - **THEN** exit code is 2, not 1, and no findings are reported
 
 #### Scenario: Query never exits 1
@@ -107,7 +107,7 @@ The `--adapter` flag SHALL name an executable program. Core SHALL run it with th
 and target path, read a serialized graph document from its stdout, and ingest that
 document. Core SHALL NOT import adapter code into its own process.
 
-Core SHALL reject output that does not satisfy the contract schema rather than attempting
+Core SHALL reject output that does not satisfy the interface schema rather than attempting
 to validate a partial graph. See the `adapter-contract` capability for the document's
 shape and failure modes.
 
@@ -126,7 +126,7 @@ Verified by: `cargo test --test cli adapter`
 - **THEN** lattice exits 2 rather than reporting an empty register
 
 #### Scenario: Adapter output is the wrong shape
-- **WHEN** the adapter writes a document that does not satisfy the contract schema
+- **WHEN** the adapter writes a document that does not satisfy the interface schema
 - **THEN** lattice exits 2 with an error naming the schema failure
 
 ### Requirement: Summary rejects a mistyped config
@@ -219,7 +219,7 @@ no `--target`: it reads no register and runs no adapter.
 The document is the same handoff the core already writes to a scratch file when it runs an
 adapter. Exposing it is what makes a register-consuming program runnable by hand — an adapter
 invoked directly, or a suggestion producer, which needs `summary_attr` and the profile's
-allowed endpoint pairs and cannot get either from a contract document. Without it, profile
+allowed endpoint pairs and cannot get either from an interface document. Without it, profile
 resolution would have to be reimplemented outside the core, which is the duplication the
 resolved-document handoff exists to prevent.
 
@@ -237,7 +237,7 @@ Verified by: `cargo test --test cli resolve`
 #### Scenario: An adapter runs on what resolve printed
 - **WHEN** `lattice resolve` output is saved and passed to an adapter program as its
   `--profile` argument
-- **THEN** the adapter emits a contract document, the same one the core would have ingested
+- **THEN** the adapter emits an interface document, the same one the core would have ingested
 
 #### Scenario: A bad profile is exit 2
 - **WHEN** the named profile does not load

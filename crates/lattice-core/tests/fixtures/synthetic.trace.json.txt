@@ -6,7 +6,7 @@
         "tier": "business",
         "traces_to": []
       },
-      "edges": {},
+      "edges": [],
       "findings": [],
       "id": "BN-1",
       "kind": "need",
@@ -21,7 +21,7 @@
         "tier": "business",
         "traces_to": []
       },
-      "edges": {},
+      "edges": [],
       "findings": [
         {
           "code": "ORPHAN_NODE",
@@ -46,11 +46,17 @@
           "BN-1"
         ]
       },
-      "edges": {
-        "derives": [
-          "BN-1"
-        ]
-      },
+      "edges": [
+        {
+          "tgt": "BN-1",
+          "kind": "derives",
+          "attrs": {},
+          "provenance": {
+            "file": "docs/register.md",
+            "line": 21
+          }
+        }
+      ],
       "findings": [],
       "id": "UN-1",
       "kind": "need",
@@ -67,11 +73,17 @@
           "BN-1"
         ]
       },
-      "edges": {
-        "derives": [
-          "BN-1"
-        ]
-      },
+      "edges": [
+        {
+          "tgt": "BN-1",
+          "kind": "derives",
+          "attrs": {},
+          "provenance": {
+            "file": "docs/register.md",
+            "line": 25
+          }
+        }
+      ],
       "findings": [],
       "id": "UN-2",
       "kind": "need",
@@ -86,11 +98,17 @@
         "rationale": "The baseline is a serialization compatibility surface.",
         "text": "The trace gate shall render every declared node and outgoing edge."
       },
-      "edges": {
-        "derives": [
-          "SC-001"
-        ]
-      },
+      "edges": [
+        {
+          "tgt": "SC-001",
+          "kind": "derives",
+          "attrs": {},
+          "provenance": {
+            "file": "docs/register.md",
+            "line": 52
+          }
+        }
+      ],
       "findings": [
         {
           "code": "REGISTER_CONFLICT",
@@ -113,7 +131,7 @@
         "rationale": "A parent need not duplicate its children's direct evidence.",
         "text": "The report shall treat a parent as covered through all covered children."
       },
-      "edges": {},
+      "edges": [],
       "findings": [
         {
           "code": "EDITORIAL_WARNING",
@@ -136,11 +154,17 @@
         "rationale": "The child is directly evidenced and the parent is not.",
         "text": "A deriving child shall contribute coverage to its parent."
       },
-      "edges": {
-        "derives": [
-          "REQ-0002"
-        ]
-      },
+      "edges": [
+        {
+          "tgt": "REQ-0002",
+          "kind": "derives",
+          "attrs": {},
+          "provenance": {
+            "file": "docs/register.md",
+            "line": 66
+          }
+        }
+      ],
       "findings": [],
       "id": "REQ-0003",
       "kind": "req",
@@ -155,7 +179,7 @@
         "rationale": "The empty-child case must not pass by vacuous truth.",
         "text": "The report shall expose a childless requirement with no test evidence."
       },
-      "edges": {},
+      "edges": [],
       "findings": [
         {
           "code": "COVERAGE",
@@ -194,7 +218,7 @@
         "rationale": "The finding must name the immediate uncovered child.",
         "text": "The report shall identify a parent whose child remains uncovered."
       },
-      "edges": {},
+      "edges": [],
       "findings": [
         {
           "code": "COVERAGE_DEEP",
@@ -218,11 +242,17 @@
         "rationale": "Specification edges do not substitute for test evidence.",
         "text": "An uncovered child shall remain visible even when its parent is specified."
       },
-      "edges": {
-        "derives": [
-          "REQ-0005"
-        ]
-      },
+      "edges": [
+        {
+          "tgt": "REQ-0005",
+          "kind": "derives",
+          "attrs": {},
+          "provenance": {
+            "file": "docs/register.md",
+            "line": 87
+          }
+        }
+      ],
       "findings": [
         {
           "code": "COVERAGE_DEEP",
@@ -246,7 +276,7 @@
         "rationale": "This is the positive recursive rollup case.",
         "text": "A parent requirement shall become deep-covered when every child is covered."
       },
-      "edges": {},
+      "edges": [],
       "findings": [],
       "id": "REQ-0007",
       "kind": "req",
@@ -261,11 +291,17 @@
         "rationale": "This child anchors the second positive rollup.",
         "text": "The covered child shall carry direct evidence used by its parent."
       },
-      "edges": {
-        "derives": [
-          "REQ-0007"
-        ]
-      },
+      "edges": [
+        {
+          "tgt": "REQ-0007",
+          "kind": "derives",
+          "attrs": {},
+          "provenance": {
+            "file": "docs/register.md",
+            "line": 101
+          }
+        }
+      ],
       "findings": [],
       "id": "REQ-0008",
       "kind": "req",
@@ -280,7 +316,7 @@
         "rationale": "Multiple rollups make accidental single-node special cases visible.",
         "text": "A second parent shall demonstrate that deep rollup is repeatable."
       },
-      "edges": {},
+      "edges": [],
       "findings": [],
       "id": "REQ-0009",
       "kind": "req",
@@ -294,11 +330,17 @@
         "rationale": "Severity is part of the adapter contract.",
         "text": "The report shall preserve adapter findings at their declared severity."
       },
-      "edges": {
-        "derives": [
-          "REQ-0009"
-        ]
-      },
+      "edges": [
+        {
+          "tgt": "REQ-0009",
+          "kind": "derives",
+          "attrs": {},
+          "provenance": {
+            "file": "docs/register.md",
+            "line": 121
+          }
+        }
+      ],
       "findings": [
         {
           "code": "ATTR_REQUIRED",
@@ -321,11 +363,17 @@
         "rationale": "Attached findings are easier to interpret than a global list.",
         "text": "The report shall attach diagnostics to the node that gives them context."
       },
-      "edges": {
-        "derives": [
-          "SC-002"
-        ]
-      },
+      "edges": [
+        {
+          "tgt": "SC-002",
+          "kind": "derives",
+          "attrs": {},
+          "provenance": {
+            "file": "docs/register.md",
+            "line": 128
+          }
+        }
+      ],
       "findings": [
         {
           "code": "COVERAGE_DEEP",
@@ -349,13 +397,35 @@
         "status": "done",
         "title": "Ingest a synthetic requirements register with deliberately long display text"
       },
-      "edges": {
-        "fulfills": [
-          "REQ-0001",
-          "REQ-0002",
-          "REQ-0003"
-        ]
-      },
+      "edges": [
+        {
+          "tgt": "REQ-0001",
+          "kind": "fulfills",
+          "attrs": {},
+          "provenance": {
+            "file": "docs/spec/01-coverage.md",
+            "line": 8
+          }
+        },
+        {
+          "tgt": "REQ-0002",
+          "kind": "fulfills",
+          "attrs": {},
+          "provenance": {
+            "file": "docs/spec/01-coverage.md",
+            "line": 7
+          }
+        },
+        {
+          "tgt": "REQ-0003",
+          "kind": "fulfills",
+          "attrs": {},
+          "provenance": {
+            "file": "docs/spec/01-coverage.md",
+            "line": 9
+          }
+        }
+      ],
       "findings": [],
       "id": "01-1.1",
       "kind": "spec-goal",
@@ -370,13 +440,35 @@
         "status": "done",
         "title": "Render direct and rolled-up coverage without storing derived state"
       },
-      "edges": {
-        "fulfills": [
-          "REQ-0007",
-          "REQ-0008",
-          "REQ-0011"
-        ]
-      },
+      "edges": [
+        {
+          "tgt": "REQ-0007",
+          "kind": "fulfills",
+          "attrs": {},
+          "provenance": {
+            "file": "docs/spec/01-coverage.md",
+            "line": 31
+          }
+        },
+        {
+          "tgt": "REQ-0008",
+          "kind": "fulfills",
+          "attrs": {},
+          "provenance": {
+            "file": "docs/spec/01-coverage.md",
+            "line": 32
+          }
+        },
+        {
+          "tgt": "REQ-0011",
+          "kind": "fulfills",
+          "attrs": {},
+          "provenance": {
+            "file": "docs/spec/01-coverage.md",
+            "line": 33
+          }
+        }
+      ],
       "findings": [],
       "id": "01-1.2",
       "kind": "spec-goal",
@@ -391,12 +483,26 @@
         "status": "done",
         "title": "Report childless and child-caused deep coverage gaps"
       },
-      "edges": {
-        "fulfills": [
-          "REQ-0005",
-          "REQ-0006"
-        ]
-      },
+      "edges": [
+        {
+          "tgt": "REQ-0005",
+          "kind": "fulfills",
+          "attrs": {},
+          "provenance": {
+            "file": "docs/spec/01-coverage.md",
+            "line": 54
+          }
+        },
+        {
+          "tgt": "REQ-0006",
+          "kind": "fulfills",
+          "attrs": {},
+          "provenance": {
+            "file": "docs/spec/01-coverage.md",
+            "line": 55
+          }
+        }
+      ],
       "findings": [],
       "id": "01-1.3",
       "kind": "spec-goal",
@@ -411,14 +517,26 @@
         "status": "blocked",
         "title": "Exercise edge grouping with a deliberately invalid cross-kind edge"
       },
-      "edges": {
-        "derives": [
-          "REQ-0002"
-        ],
-        "fulfills": [
-          "REQ-0009"
-        ]
-      },
+      "edges": [
+        {
+          "tgt": "REQ-0002",
+          "kind": "derives",
+          "attrs": {},
+          "provenance": {
+            "file": "docs/spec/01-coverage.md",
+            "line": 75
+          }
+        },
+        {
+          "tgt": "REQ-0009",
+          "kind": "fulfills",
+          "attrs": {},
+          "provenance": {
+            "file": "docs/spec/01-coverage.md",
+            "line": 77
+          }
+        }
+      ],
       "findings": [
         {
           "code": "EDGE_CONSTRAINT",
@@ -441,12 +559,26 @@
         "status": "partial",
         "title": "Keep findings visible in every supported output format"
       },
-      "edges": {
-        "fulfills": [
-          "REQ-0010",
-          "REQ-0011"
-        ]
-      },
+      "edges": [
+        {
+          "tgt": "REQ-0010",
+          "kind": "fulfills",
+          "attrs": {},
+          "provenance": {
+            "file": "docs/spec/02-reporting.md",
+            "line": 17
+          }
+        },
+        {
+          "tgt": "REQ-0011",
+          "kind": "fulfills",
+          "attrs": {},
+          "provenance": {
+            "file": "docs/spec/02-reporting.md",
+            "line": 18
+          }
+        }
+      ],
       "findings": [
         {
           "code": "DESIGN_NOTE",
@@ -469,7 +601,7 @@
         "status": "todo",
         "title": "Leave one specification goal deliberately unattributed"
       },
-      "edges": {},
+      "edges": [],
       "findings": [
         {
           "code": "ORPHAN_NODE",
@@ -492,15 +624,29 @@
         "file": "tests/test_register.py",
         "function": "test_long_identifier_and_summary_columns"
       },
-      "edges": {
-        "verifies": [
-          "REQ-0008",
-          "REQ-9999"
-        ]
-      },
+      "edges": [
+        {
+          "tgt": "REQ-0008",
+          "kind": "verifies",
+          "attrs": {},
+          "provenance": {
+            "file": "tests/test_register.py",
+            "line": 35
+          }
+        },
+        {
+          "tgt": "REQ-9999",
+          "kind": "verifies",
+          "attrs": {},
+          "provenance": {
+            "file": "tests/test_register.py",
+            "line": 36
+          }
+        }
+      ],
       "findings": [
         {
-          "code": "DANGLING_REF",
+          "code": "VACANCY",
           "file": "tests/test_register.py",
           "line": 36,
           "message": "edge 'tests/test_register.py::TestRendering::test_long_identifier_and_summary_columns'->'REQ-9999' (kind 'verifies'): target 'REQ-9999' does not exist",
@@ -520,11 +666,17 @@
         "file": "tests/test_register.py",
         "function": "test_direct_evidence"
       },
-      "edges": {
-        "verifies": [
-          "REQ-0001"
-        ]
-      },
+      "edges": [
+        {
+          "tgt": "REQ-0001",
+          "kind": "verifies",
+          "attrs": {},
+          "provenance": {
+            "file": "tests/test_register.py",
+            "line": 13
+          }
+        }
+      ],
       "findings": [
         {
           "code": "REVIEW_SUGGESTION",
@@ -547,11 +699,17 @@
         "file": "tests/test_register.py",
         "function": "test_duplicate_evidence_path"
       },
-      "edges": {
-        "verifies": [
-          "REQ-0001"
-        ]
-      },
+      "edges": [
+        {
+          "tgt": "REQ-0001",
+          "kind": "verifies",
+          "attrs": {},
+          "provenance": {
+            "file": "tests/test_register.py",
+            "line": 46
+          }
+        }
+      ],
       "findings": [],
       "id": "tests/test_register.py::test_duplicate_evidence_path",
       "kind": "test",
@@ -566,11 +724,17 @@
         "file": "tests/test_register.py",
         "function": "test_first_rollup_child"
       },
-      "edges": {
-        "verifies": [
-          "REQ-0003"
-        ]
-      },
+      "edges": [
+        {
+          "tgt": "REQ-0003",
+          "kind": "verifies",
+          "attrs": {},
+          "provenance": {
+            "file": "tests/test_register.py",
+            "line": 24
+          }
+        }
+      ],
       "findings": [],
       "id": "tests/test_register.py::test_first_rollup_child",
       "kind": "test",
@@ -585,11 +749,17 @@
         "file": "tests/test_register.py",
         "function": "test_long_summary_truncation"
       },
-      "edges": {
-        "verifies": [
-          "REQ-0010"
-        ]
-      },
+      "edges": [
+        {
+          "tgt": "REQ-0010",
+          "kind": "verifies",
+          "attrs": {},
+          "provenance": {
+            "file": "tests/test_register.py",
+            "line": 57
+          }
+        }
+      ],
       "findings": [],
       "id": "tests/test_register.py::test_long_summary_truncation",
       "kind": "test",
@@ -604,11 +774,17 @@
         "file": "tests/test_register.py",
         "function": "test_second_rollup_child"
       },
-      "edges": {
-        "verifies": [
-          "REQ-0010"
-        ]
-      },
+      "edges": [
+        {
+          "tgt": "REQ-0010",
+          "kind": "verifies",
+          "attrs": {},
+          "provenance": {
+            "file": "tests/test_register.py",
+            "line": 68
+          }
+        }
+      ],
       "findings": [],
       "id": "tests/test_register.py::test_second_rollup_child",
       "kind": "test",
@@ -623,7 +799,7 @@
         "file": "tests/test_register.py",
         "function": "test_unattributed_candidate_keeps_coverage_unknown"
       },
-      "edges": {},
+      "edges": [],
       "findings": [],
       "id": "tests/test_register.py::test_unattributed_candidate_keeps_coverage_unknown",
       "kind": "test",
@@ -638,7 +814,7 @@
         "stakeholder": "maintainer",
         "text": "A maintainer can review a compact but behaviorally broad baseline diff."
       },
-      "edges": {},
+      "edges": [],
       "findings": [],
       "id": "SC-001",
       "kind": "sc",
@@ -653,7 +829,7 @@
         "stakeholder": "release-engineer",
         "text": "A release gate detects byte-level changes in plain, JSON, and rich trace output."
       },
-      "edges": {},
+      "edges": [],
       "findings": [],
       "id": "SC-002",
       "kind": "sc",
@@ -668,7 +844,7 @@
         "stakeholder": "reviewer",
         "text": "A reviewer can distinguish unsupported claims from incomplete attribution."
       },
-      "edges": {},
+      "edges": [],
       "findings": [
         {
           "code": "ORPHAN_NODE",
@@ -688,9 +864,11 @@
   ],
   "header": {
     "lattice_version": "0.2.0",
-    "profile": "requirements-rm",
-    "profile_version": "1.11.0"
+    "profile": "synthetic",
+    "profile_version": "1.11.0",
+    "trace_version": "2"
   },
+  "pathways": [],
   "unattachable_findings": [
     {
       "code": "COVERAGE_UNKNOWN",

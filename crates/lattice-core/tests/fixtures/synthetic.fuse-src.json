@@ -1,0 +1,38 @@
+{
+  "header": {"trace_version": "2"},
+  "entries": [
+    {
+      "id": "T1",
+      "kind": "test",
+      "attrs": {"title": "first test"},
+      "provenance": {"file": "tests.md", "line": 1},
+      "edges": [
+        {"tgt": "R1", "kind": "traces", "attrs": {}, "provenance": {"file": "tests.md", "line": 1}},
+        {"tgt": "R-absent", "kind": "traces", "attrs": {}, "provenance": {"file": "tests.md", "line": 1}}
+      ],
+      "findings": []
+    },
+    {
+      "id": "T2",
+      "kind": "test",
+      "attrs": {"title": "second test"},
+      "provenance": {"file": "tests.md", "line": 2},
+      "edges": [
+        {"tgt": "DUP", "kind": "traces", "attrs": {}, "provenance": {"file": "tests.md", "line": 2}}
+      ],
+      "findings": []
+    },
+    {
+      "id": "DUP",
+      "kind": "test",
+      "attrs": {"title": "duplicate id"},
+      "provenance": {"file": "tests.md", "line": 3},
+      "edges": [],
+      "findings": []
+    }
+  ],
+  "unattachable_findings": [],
+  "pathways": [
+    {"name": "phase", "order": ["alpha", "beta"], "current": "alpha"}
+  ]
+}

@@ -30,8 +30,7 @@ fn baselines() -> PathBuf {
 
 #[test]
 fn trace_reproduces_the_synthetic_baselines_in_all_three_formats() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let profile = load_profile(&root.join("profiles/requirements-rm.yaml")).expect("profile loads");
+    let profile = load_profile(&baselines().join("synthetic.profile.yaml")).expect("profile loads");
     let text = std::fs::read_to_string(baselines().join("synthetic.document.json"))
         .expect("the stored document is committed beside the baselines");
     let graph = ingest_document(parse_document(&text).unwrap()).expect("document ingests");

@@ -2,9 +2,9 @@
 # cannot run.
 #
 # HONEST LABEL: green here is NOT the real-data gate. The only real-data check is
-# `lattice validate` against a consumer target, which lives in another repo that CI
+# `lattice validate` against phase-sweep-live, which lives in another repo that CI
 # cannot clone; it stays a by-hand step, and the Python suite skips its
-# consumer-adapter tests when that repo is absent. A green pipeline says the core, the
+# phase-sweep tests when that repo is absent. A green pipeline says the core, the
 # adapters against their fixtures, and the specs are consistent — nothing about
 # live data.
 
@@ -51,7 +51,7 @@ jobs:
           python-version: "3.12"
       - run: python -m venv .venv
       - run: .venv/bin/pip install --quiet -e ".[test]"
-      # Expect ~18 skips: the consumer-adapter tests skip when that repo is absent,
+      # Expect ~18 skips: the phase-sweep tests skip when that repo is absent,
       # and it always is here. A green run is a weaker result than a green local one.
       - run: .venv/bin/python -m pytest -q
 

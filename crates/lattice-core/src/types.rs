@@ -75,7 +75,7 @@ impl Severity {
 
 /// One finding, from either an adapter's parse or a validation check.
 ///
-/// `code` is the stable machine-readable name (PARSE_ERROR, DANGLING_REF);
+/// `code` is the stable machine-readable name (PARSE_ERROR, VACANCY);
 /// `message` is prose for a human and is not a contract.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Issue {
@@ -291,7 +291,7 @@ pub struct DiffReport {
     pub edges_added: Vec<EdgeRef>,
     pub edges_removed: Vec<EdgeRef>,
     /// Axes added, removed, or with a different order or current position.
-    pub axes_changed: Vec<String>,
+    pub pathways_changed: Vec<String>,
 }
 
 impl DiffReport {
@@ -303,8 +303,17 @@ impl DiffReport {
             && self.nodes_changed.is_empty()
             && self.edges_added.is_empty()
             && self.edges_removed.is_empty()
-            && self.axes_changed.is_empty()
+            && self.pathways_changed.is_empty()
     }
+}
+
+/// One outgoing edge in a trace report, retaining attrs and provenance.
+#[derive(Debug)]
+pub struct TraceEdge {
+    pub tgt: String,
+    pub kind: String,
+    pub attrs: serde_json::Map<String, serde_json::Value>,
+    pub provenance: Provenance,
 }
 
 /// One node in a trace report, carrying its edges and attached findings.
@@ -316,17 +325,17 @@ pub struct TraceEntry {
     pub provenance: Provenance,
     /// The attr to show in the trace row's summary column, resolved from the profile.
     pub summary_attr: Option<String>,
-    /// Outgoing targets by edge kind, each list already in its specified order.
-    pub edges: BTreeMap<String, Vec<String>>,
+    /// Outgoing edges, already ordered by kind, target, and provenance.
+    pub edges: Vec<TraceEdge>,
     pub findings: Vec<Issue>,
 }
 
 impl TraceEntry {
-    /// Targets across every edge kind. Repeated targets count once each, because
-    /// the trace preserves rather than deduplicates them.
+    /// Repeated edges count once each, because the trace preserves rather than
+    /// deduplicates them.
     #[must_use]
     pub fn edge_count(&self) -> usize {
-        self.edges.values().map(Vec::len).sum()
+        self.edges.len()
     }
 }
 
@@ -342,7 +351,15 @@ pub struct AtReport {
     pub findings: Vec<Issue>,
 }
 
-/// Full trace-report payload: header, node entries, and unattachable findings.
+/// An ordering pathway carried through the trace payload.
+#[derive(Debug)]
+pub struct PathwayEntry {
+    pub name: String,
+    pub order: Vec<String>,
+    pub current: String,
+}
+
+/// Full trace-report payload: header, node entries, findings, and pathways.
 #[derive(Debug)]
 pub struct TraceReport {
     pub header: BTreeMap<String, String>,
@@ -351,4 +368,67 @@ pub struct TraceReport {
     /// belong to no entry, and dropping them would hide a finding that still
     /// moves the exit code.
     pub unattachable_findings: Vec<Issue>,
+    pub pathways: Vec<PathwayEntry>,
+}
+
+/// Source attribution kept separately from the original file and line.
+#[derive(Clone, Debug)]
+pub struct FuseProvenance {
+    pub source: String,
+    pub location: Provenance,
+}
+
+#[derive(Debug)]
+pub struct FuseNode {
+    pub id: String,
+    pub kind: String,
+    pub attrs: serde_json::Map<String, Value>,
+    pub provenance: FuseProvenance,
+}
+
+#[derive(Debug)]
+pub struct FuseEdge {
+    pub src: String,
+    pub tgt: String,
+    pub kind: String,
+    pub attrs: serde_json::Map<String, Value>,
+    pub provenance: FuseProvenance,
+    pub source_kind: String,
+    pub target_kind: Option<String>,
+    pub target_source: Option<String>,
+}
+
+#[derive(Debug)]
+pub struct FuseFinding {
+    pub issue: Issue,
+    pub source: Option<String>,
+    pub locations: Vec<FuseProvenance>,
+}
+
+/// Composed graph and findings, in manifest source order. A failed source leaves
+/// the graph empty; findings from healthy sources still remain visible.
+#[derive(Debug, Default)]
+pub struct FuseReport {
+    pub header: BTreeMap<String, String>,
+    pub nodes: Vec<FuseNode>,
+    pub edges: Vec<FuseEdge>,
+    pub pathways: Vec<PathwayEntry>,
+    pub findings: Vec<FuseFinding>,
+    pub could_run: bool,
+}
+
+impl FuseReport {
+    pub fn exit_code(&self) -> u8 {
+        if !self.could_run {
+            2
+        } else if self
+            .findings
+            .iter()
+            .any(|f| f.issue.severity == Severity::Error)
+        {
+            1
+        } else {
+            0
+        }
+    }
 }

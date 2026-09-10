@@ -8,7 +8,7 @@
 //!
 //! Three are settled by the language rather than by this code: "Provenance is
 //! required" asserts a `TypeError` from a missing Python argument, and "Mutating
-//! a read does not affect the graph" — once for nodes, once for axis order —
+//! a read does not affect the graph" — once for nodes, once for pathway order —
 //! asserts that a caller cannot write through what it reads. Provenance is a
 //! non-defaulted parameter here, and the readers hand out shared references that
 //! cannot be mutated at all, so a test would assert a property of Rust.
@@ -54,7 +54,7 @@ fn add_a_valid_node() {
     assert_eq!(node.provenance, prov("REQUIREMENTS.md", 47));
 }
 
-// Requirement: Add edge with provenance
+// Requirement: Add edge with attrs and provenance
 
 #[test]
 fn add_a_valid_edge() {
@@ -64,6 +64,7 @@ fn add_a_valid_edge() {
             src: "test_fem".into(),
             tgt: "REQ-0704".into(),
             kind: "verifies".into(),
+            attrs: attrs(&[("confidence", "high")]),
         },
         prov("tests/test_fem.py", 9),
     );
@@ -75,6 +76,7 @@ fn add_a_valid_edge() {
         ("test_fem", "REQ-0704")
     );
     assert_eq!(edges[0].kind, "verifies");
+    assert_eq!(edges[0].attrs["confidence"], "high");
 }
 
 // Requirement: Duplicate node semantics
@@ -98,7 +100,7 @@ fn add_node_reports_a_repeated_id() {
 #[test]
 fn duplicate_node_id_same_kind() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [
             {"id": "REQ-0701", "kind": "req", "attrs": {},
              "provenance": {"file": "a.md", "line": 1}},
@@ -125,7 +127,7 @@ fn duplicate_node_id_same_kind() {
 #[test]
 fn duplicate_node_id_different_kind() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [
             {"id": "X-1", "kind": "req", "attrs": {},
              "provenance": {"file": "a.md", "line": 1}},
@@ -145,7 +147,7 @@ fn duplicate_node_id_different_kind() {
 #[test]
 fn the_surviving_node_is_the_first_declared() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [
             {"id": "REQ-0701", "kind": "req", "attrs": {"text": "A"},
              "provenance": {"file": "a.md", "line": 1}},
@@ -169,6 +171,7 @@ fn edge_added_before_target_node() {
             src: "test_x".into(),
             tgt: "REQ-0701".into(),
             kind: "verifies".into(),
+            attrs: Map::new(),
         },
         prov("t.py", 1),
     );
@@ -192,6 +195,7 @@ fn repeated_edge_keeps_both_provenances() {
                 src: "A".into(),
                 tgt: "B".into(),
                 kind: "derives".into(),
+                attrs: Map::new(),
             },
             prov("a.md", line),
         );
@@ -201,36 +205,40 @@ fn repeated_edge_keeps_both_provenances() {
     assert_eq!(provs, vec![prov("a.md", 1), prov("a.md", 9)]);
 }
 
-// Requirement: Axis storage on the graph
+// Requirement: Pathway storage on the graph
 
 #[test]
-fn axis_set_and_read() {
+fn pathway_set_and_read() {
     let mut graph = LatticeGraph::new();
     graph
-        .set_axis("phase", order(&["R0", "CB", "M0", "M1"]), "M0")
+        .set_pathway("phase", order(&["R0", "CB", "M0", "M1"]), "M0")
         .unwrap();
 
-    let axis = graph.axis("phase").expect("axis was set");
-    assert_eq!(axis.order, order(&["R0", "CB", "M0", "M1"]));
-    assert_eq!(axis.current, "M0");
-    assert!(axis.is_member("CB"));
-    assert!(axis.is_after("M1"));
-    assert!(!axis.is_after("R0"));
+    let pathway = graph.pathway("phase").expect("pathway was set");
+    assert_eq!(pathway.order, order(&["R0", "CB", "M0", "M1"]));
+    assert_eq!(pathway.current, "M0");
+    assert!(pathway.is_member("CB"));
+    assert!(pathway.is_after("M1"));
+    assert!(!pathway.is_after("R0"));
     // A non-member is neither member nor after; the two answers are distinct.
-    assert!(!axis.is_member("ZZ"));
-    assert!(!axis.is_after("ZZ"));
+    assert!(!pathway.is_member("ZZ"));
+    assert!(!pathway.is_after("ZZ"));
 }
 
 #[test]
-fn no_axis_set() {
+fn no_pathway_set() {
     let graph = LatticeGraph::new();
-    assert!(graph.axis("phase").is_none());
+    assert!(graph.pathway("phase").is_none());
 }
 
 #[test]
 fn current_position_must_be_a_member() {
     let mut graph = LatticeGraph::new();
-    assert!(graph.set_axis("phase", order(&["M0", "M1"]), "M9").is_err());
+    assert!(
+        graph
+            .set_pathway("phase", order(&["M0", "M1"]), "M9")
+            .is_err()
+    );
 }
 
 #[test]
@@ -238,7 +246,7 @@ fn positions_must_be_unique() {
     let mut graph = LatticeGraph::new();
     assert!(
         graph
-            .set_axis("phase", order(&["M0", "M1", "M0"]), "M0")
+            .set_pathway("phase", order(&["M0", "M1", "M0"]), "M0")
             .is_err()
     );
 }
@@ -250,7 +258,7 @@ fn positions_must_be_unique() {
 #[test]
 fn nodes_and_edges_keep_document_order() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [
             {"id": "C", "kind": "req", "attrs": {}, "provenance": {"file": "a.md", "line": 3}},
             {"id": "A", "kind": "req", "attrs": {}, "provenance": {"file": "a.md", "line": 1}},
@@ -276,7 +284,7 @@ fn nodes_and_edges_keep_document_order() {
 #[test]
 fn an_edge_endpoint_is_not_a_node() {
     let graph = ingest(json!({
-        "contract_version": "1.0",
+        "interface_version": "1.0",
         "nodes": [
             {"id": "A", "kind": "req", "attrs": {}, "provenance": {"file": "a.md", "line": 1}},
         ],
@@ -316,6 +324,7 @@ fn one_pair_may_carry_several_edge_kinds() {
                 src: "REQ-1".into(),
                 tgt: "REQ-2".into(),
                 kind: kind.into(),
+                attrs: Map::new(),
             },
             Provenance::new("r.md", line),
         );
