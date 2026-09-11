@@ -11,6 +11,17 @@ Patch bumps (0.x.y) do not change public surfaces.**
 See `openspec/specs/trace-report/spec.md` for which trace-JSON fields are
 public and what each version axis governs.
 
+## [0.7.1] — 2026-09-11
+
+### Fixed
+- **GitHub CI**: adapter binaries now included in the artifact passed to
+  the Python test job, fixing all adapter test failures since 0.7.0.
+- **CLI help text**: clearer subcommand descriptions, fixed broken
+  `query orphans` summary.
+
+### Changed
+- **Docs rewritten for clarity.**
+
 ## [0.7.0] — 2026-09-10
 
 ### Added
@@ -45,7 +56,7 @@ public and what each version axis governs.
   an internal validation pass (never `--strict`). Suppressed findings are
   left out of the tallies. JSON carries `node_counts`, `edge_counts`, and
   `finding_counts`; the configured rollup's output is unchanged. Finding
-  severity in the tallies never affects the exit code — only adapter
+  severity in the tallies never affects the exit code; only adapter
   issues do, as before.
 - **Finding suppression.** A profile's `validations` list accepts
   `SUPPRESS: {code, node_ids?}` entries. A suppressed finding keeps its
@@ -71,7 +82,7 @@ public and what each version axis governs.
 ### Changed
 - **BREAKING: configured summary JSON key `files` renamed to `groups`.**
   The array of per-group rows in `lattice summary --format json` was named
-  after phase-sweep's grouping attr; rows are keyed by whatever
+  after a specific consumer's grouping attr; rows are keyed by whatever
   `group_by_attr` the profile names, and the payload key now says so.
   `totals` and the row shape are unchanged. Update consumers reading
   `.files` to read `.groups`.
@@ -82,10 +93,10 @@ public and what each version axis governs.
   direction (e.g. a root requirement with outgoing traces but no incoming
   edges) were "connected" under the old semantics and raised no finding;
   they now receive the appropriate directional finding. Registers relying
-  on `--strict` may see new exit-code failures for these nodes — add
+  on `--strict` may see new exit-code failures for these nodes. Add
   `orphan_ok` or a severity override to suppress. Profiles overriding
   `ORPHAN_NODE` severity should override both `UNREFERENCED` and `UNTRACED`
-  instead — an override naming `ORPHAN_NODE` becomes a silent no-op.
+  instead; an override naming `ORPHAN_NODE` becomes a silent no-op.
   `orphan_ok: true` suppresses both new codes.
 - **BREAKING: `axes` renamed to `pathways` throughout.** The profile key
   `axes:` is now `pathways:`, the per-validation binding key `axis:` is now
@@ -98,7 +109,7 @@ public and what each version axis governs.
 - **Ordering condition operators reject non-comparable values at load.**
   `lt`, `gt`, `lte`, `gte` in `CONSTRAINT` entries now require an integer
   or a string as the threshold. Arrays, objects, booleans, nulls, and floats
-  previously parsed without error but silently never matched at evaluation —
+  previously parsed without error but silently never matched at evaluation;
   the condition evaluated as unsatisfied with no diagnostic. A profile using
   such a value now fails to load with a `CONFIG_ERROR`. This is a load-time
   change only; evaluation behaviour for valid profiles is unchanged.
@@ -136,9 +147,7 @@ public and what each version axis governs.
   loop would match no nodes and emit no findings).
 - Fuse profile COVERAGE entries accept a `where:` condition block.
 - `load_profile_value` extracted from `load_profile` for in-memory profile
-  construction (removes temp-file round-trip from fuse).
-- Fixture `tests/fixtures/mini-program/` renamed to `mini-fuse/` with updated
-  manifest keys.
+  construction.
 
 ### Removed
 - **`tools/lattice-compose` retired.** The Python composition shim is fully
@@ -229,10 +238,9 @@ public and what each version axis governs.
   and rationale; test nodes carry the function body (brace-bounded for
   Rust, dedent-bounded for Python, `PARSE_ERROR` where bounds fail).
   Hit@1 0.265 → 0.507, MRR 0.372 → 0.615.
-- **Letter-suffix `spec-goal` IDs in the RM profile.** `3.6a` sits
-  between `3.6` and `3.7` without renumbering. One lowercase letter on
-  the last component only; a 27th insertion forces a decision. Profile-
-  only change, no code. `requirements-rm` 1.11.0.
+- **Letter-suffix `spec-goal` IDs.** `3.6a` sits between `3.6` and
+  `3.7` without renumbering. One lowercase letter on the last component
+  only; a 27th insertion forces a decision. Profile-only change, no code.
 - **Entomologist adapter.** Reads a git-backed issue tracker's register
   from its `entomologist-data` orphan branch. Fully-qualified refs pinned
   to one commit, repository-root identity check, fetch scoped to
@@ -264,7 +272,7 @@ public and what each version axis governs.
   profile data. `profiles/tomlreg.yaml`, `tests/fixtures/mini-tomlreg`.
 - **`summary_attr` on node kinds.** Moves the trace "Key Attr" column
   into the profile. The hardcoded `KEY_ATTRS` table is deleted.
-  `requirements-rm` 1.6.0 → 1.7.0.
+  Profile-only change.
 - Dual license: MIT or Apache-2.0 (`LICENSE-MIT`, `LICENSE-APACHE`).
 
 ### Changed
@@ -272,13 +280,13 @@ public and what each version axis governs.
   fixtures with `synthetic.*`: 31 nodes, 27 edges, findings spanning
   every severity. Finding-code coverage is a superset of the old
   baselines'.
-- `requirements-rm` declares `text_attrs: [function, docstring]` on its
-  `test` kind (1.10.0). Migration only — the sidecar already read both.
+- Example profile declares `text_attrs: [function, docstring]` on its
+  `test` kind. Migration only - the sidecar already read both.
 - `profiles/openspec.yaml` declares body attrs and `text_attrs` (1.2.0).
 - **BREAKING (provenance strings).** Registers read as UTF-8; provenance
   paths rendered relative to the target. Same findings multiset on live
   consumers, different rendered bytes.
-- Adapter file-walking deduplication: bipolaris `validate` 144 → 89 ms.
+- Adapter file-walking deduplication: TOML adapter `validate` 144 → 89 ms.
 
 ### Fixed
 - Suggestion sidecar ranks duplicated node IDs once, over the union of
@@ -287,11 +295,10 @@ public and what each version axis governs.
   (`string` or `enum`). No ranked profile affected.
 
 ### Removed
-- **BREAKING (bipolaris adapter consumers).** The bipolaris adapter,
-  profile, tests, fixture, and capability spec moved to
-  `bipolaris-world-runtime`. `--adapter ./adapters/bipolaris` no longer
-  exists; callers name the program at its path in the consumer repo.
-  Node IDs and the contract document are unchanged.
+- **BREAKING.** A consumer-specific TOML adapter, profile, tests, fixture,
+  and capability spec moved to the consumer repo. Callers name the adapter
+  at its path in the consumer repo. Node IDs and the contract document are
+  unchanged.
 
 ## [0.3.0] — 2026-08-29
 
@@ -316,7 +323,7 @@ Whole-command wall clock (best of seven):
 
 | | 0.2.0 | 0.3.0 |
 |---|---|---|
-| bipolaris `validate` | 375 ms | 138 ms |
+| TOML consumer `validate` | 375 ms | 138 ms |
 
 In-process core: 24.3 → 3.5 ms total, `validate` alone 11.3 → 0.39 ms.
 At 20× scale (18,360 nodes, 22,560 edges) the core is ~95 ms and grows
@@ -335,28 +342,25 @@ linearly.
   read from the register by the adapter, never declared in the profile.
   New codes: `AXIS_UNRESOLVED`, `AXIS_INVALID`, `TRIGGER_OFF_AXIS`.
 - `lattice --version`.
-- **Bipolaris adapter.** Reads TOML registries (`registry`/`entry`
-  nodes), the obligations ledger (`obligation`/`check`/`adr` nodes),
-  and cross-registry / discharge / citation edges. Profile
-  `bipolaris-runtime` 1.0.0 → 1.1.0.
+- **TOML consumer adapter.** Reads TOML registries (`registry`/`entry`
+  nodes), an obligations ledger (`obligation`/`check`/`adr` nodes),
+  and cross-registry / discharge / citation edges.
 - `SOURCE_MISSING` issue code: a `file` reference that does not resolve
   on disk. Warning, profile-overridable.
 - `adapter.exclude` in profiles: registry stems the reader skips.
 - `CHECK_UNRESOLVED`, `OBLIGATION_UNBACKED`,
   `GROUP_CHILDREN_DISCHARGED` issue codes. `GROUP_CHILDREN_DISCHARGED`
-  is **known unsound** — fix-or-drop slated for 0.3.0.
+  is **known unsound**; fix-or-drop slated for 0.3.0.
 - `SOURCE_MISSING` for backtick-delimited paths in spec files that do
   not resolve. Profile-declared prefixes (`adapter.cited_path_prefixes`).
 
 ### Changed
 - A profile may configure the same validation code more than once.
   Previously a second `COVERAGE` block silently replaced the first.
-- **BREAKING (profile)** — `requirements-rm` 1.5.0 → 1.6.0. Second
-  `COVERAGE` rule (req needs `fulfills` edge) and
-  `adapter.cited_path_prefixes`.
-- **BREAKING (profile)** — `requirements-rm` 1.4.0 → 1.5.0. Adapter
-  paths follow target register relocation to `docs/internal/`.
-  A target on the old layout needs a forked profile.
+- **BREAKING (profile).** Example profile adds a second `COVERAGE` rule
+  (req needs `fulfills` edge) and `adapter.cited_path_prefixes`.
+- **BREAKING (profile).** Example profile adapter paths follow target
+  register relocation. A target on the old layout needs a forked profile.
 
 ### Fixed
 - `summary --format json` tests no longer parse concatenated
@@ -376,9 +380,8 @@ linearly.
 - Tri-format output: `plain`, `json`, `rich` via `output_result`.
 - CLI commands: `validate`, `summary`, `trace`.
 - Exit codes: 0 clean, 1 findings, 2 broken setup.
-- Requirements-RM adapter and profile: parses REQUIREMENTS.md tables,
+- Example adapter and profile: parses markdown requirement tables,
   spec headings, pytest `@mark.req` markers, and success criteria.
-  BN/UN/REQ/spec-goal/test/SC kinds.
 - Profile-driven adapter paths (`adapter.paths` in profile YAML).
 - Trace report: per-node entries with kind, attrs, edges, provenance, findings.
 - Coverage query: REQ nodes missing a `verifies` edge.

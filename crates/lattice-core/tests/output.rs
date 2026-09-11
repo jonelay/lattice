@@ -2,8 +2,8 @@
 //!
 //! `trace_baseline.rs` pins the whole trace path to the Python core's bytes on
 //! one real register. It cannot show that the *specified* order is what produced
-//! them: phase-sweep happens to declare its nodes in an order the sort agrees
-//! with. These cases construct the disagreements.
+//! them: the standing fixture happens to declare its nodes in an order the sort
+//! agrees with. These cases construct the disagreements.
 
 mod common;
 
@@ -225,7 +225,7 @@ fn trace_edges_carry_kind_attrs_and_provenance_as_objects() {
 
 // Requirement: Trace report plain format
 
-/// A profile with non-phase-sweep vocabulary proves the column is data-driven.
+/// A profile with non-default vocabulary proves the column is data-driven.
 const SUMMARY_ATTR_PROFILE: &str = r#"
 name: custom
 profile_version: "1.0.0"
@@ -429,7 +429,7 @@ fn an_unknown_format_is_rejected_for_every_payload() {
 
 /// Two groups over three status columns, one of which no node carries.
 ///
-/// Every group carries every status key, which is how the rollup is built — a
+/// Every group carries every status key, which is how the rollup is built. A
 /// declared status with no nodes is a zero column, not an absent one.
 fn summary() -> SummaryReport {
     SummaryReport::Configured(StatusRollup {
@@ -556,7 +556,7 @@ fn a_stateless_finding_carries_no_state_key() {
 
 /// A suggestion is a finding like any other. It carries the source node's
 /// provenance, so acting on it sends the reviewer to the line they would edit,
-/// and it adds no field to the findings JSON — an optional, advisory overlay
+/// and it adds no field to the findings JSON. An optional, advisory overlay
 /// must not widen a schema every consumer reads.
 #[test]
 fn a_suggestion_renders_as_a_hint_in_all_three_formats() {

@@ -2,7 +2,7 @@
 
 Reads `<spec_dir>/<capability>/spec.md` files and the citation comments the
 target's test files carry. A `verifies` edge records that a test cites a
-requirement — never that it passed; the adapter reads only source text.
+requirement, never that it passed. The adapter reads only source text.
 """
 from __future__ import annotations
 
@@ -25,11 +25,11 @@ _BODY_TERMINATOR = re.compile(r"^#{1,3} ")
 
 # The register writes its verification pointer both ways. Matching one form
 # leaves the other in the body, where it names a test command whose `cargo test`
-# and `pytest` boilerplate is shared across most requirements — text that pulls
+# and `pytest` boilerplate is shared across most requirements. That text pulls
 # every requirement toward every test rather than toward the right one.
 _VERIFIED_BY = re.compile(r"^\*{0,2}Verified by:?\*{0,2}\s")
 
-# The citation prefix inside a comment. The whole remainder is one title —
+# The citation prefix inside a comment. The whole remainder is one title;
 # splitting on any separator would guess, so a compound citation resolves to
 # nothing and surfaces as VACANCY, which is the signal to split the line.
 _CITATION_PREFIX = "Requirement:"
@@ -70,7 +70,7 @@ def _rust_body(lines: list[str], fn_line: int) -> str | None:
 
     Depth, not a column-0 `}`: that rule does not recognise `fn a() {}` or an
     indented brace, so it runs on and attaches the *next* test's code to this
-    node — wrong text presented as the node's own, which no reviewer reading a
+    node. Wrong text presented as the node's own, which no reviewer reading a
     ranked list could see. Braces inside strings and comments do not count.
     """
     depth = 0
@@ -181,7 +181,7 @@ def _scan_python(
 
     Definitions come from the shared AST scanner; a file that does not parse
     is a reported PARSE_ERROR and yields no tests. Citations are comments,
-    which an AST cannot see, so they stay a line scan — the two streams merge
+    which an AST cannot see, so they stay a line scan. The two streams merge
     by line number, which is the order the old single pass saw them in. A
     method is qualified by its class (`TestX::test_y`): two classes in one
     file may reuse a method name, and an unqualified ID would conflate two
@@ -241,7 +241,7 @@ def _read_spec_file(graph: DocumentBuilder, path: Path, capability: str) -> None
     """Emit the file's capability node and one requirement node per heading.
 
     The capability's identity is its directory name, so the node is emitted
-    whether or not the file decodes — an unreadable register is a capability
+    whether or not the file decodes. An unreadable register is a capability
     whose contents are an issue, not an absent capability.
     """
     graph.add_node(capability, "capability", {}, Provenance(str(path), 0))

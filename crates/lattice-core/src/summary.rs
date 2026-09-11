@@ -3,7 +3,7 @@
 //! Both are computed from the register on every run and never stored. What the
 //! configured rollup counts is entirely the profile's business: which kind,
 //! which attr holds a status, which attr groups the rows. The structural report
-//! needs none of that — counts by kind and finding tallies come from the graph
+//! needs none of that; counts by kind and finding tallies come from the graph
 //! and the profile's kind declarations alone.
 
 use std::collections::{BTreeMap, BTreeSet};

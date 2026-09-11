@@ -122,7 +122,7 @@ def load_profile(path: str | Path) -> Profile:
     """Read a core-resolved profile document.
 
     Raises ProfileError when the file is not a resolved document this reader
-    supports — the one check that stays here, because it is what distinguishes
+    supports. This is the one check that stays here, because it is what tells
     core output from a stray file.
     """
     path = Path(path)

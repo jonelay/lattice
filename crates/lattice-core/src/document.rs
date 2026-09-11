@@ -16,8 +16,8 @@ use crate::types::{Issue, Provenance, Severity};
 
 /// The interface version this core emits and prefers.
 ///
-/// Deliberately defined on both sides of the interface — the adapters carry their
-/// own copy. That is the interface being agreed, not drift.
+/// Deliberately defined on both sides of the interface. The adapters carry their
+/// own copy; that is the interface being agreed, not drift.
 pub const INTERFACE_VERSION: &str = "1.2";
 
 /// Every interface version this core can ingest. A document outside this set is
@@ -46,7 +46,7 @@ pub(crate) fn err<T>(message: impl Into<String>) -> Result<T, ContractError> {
     Err(ContractError(message.into()))
 }
 
-/// The JSON value's runtime type — `string`, `int`, `float`, `bool`, `list`,
+/// The JSON value's runtime type: `string`, `int`, `float`, `bool`, `list`,
 /// `null`, or `object`. Declared semantic types such as `date` remain strings
 /// at this layer and are named separately when an expected schema type is known.
 pub(crate) fn type_name(value: &Value) -> &'static str {
@@ -180,10 +180,9 @@ pub(crate) fn entries<'a>(document: &'a Value, key: &str) -> Result<&'a [Value],
         ));
     };
     match object.get(key) {
-        // An absent key defaults to empty; an explicit null does not. The
-        // difference matters — a document that says `"nodes": null` is malformed,
-        // and reading it as "no nodes" would report an empty register as a clean
-        // one, which is the silence the invariants forbid.
+        // An absent key defaults to empty; an explicit null does not. A document
+        // that says `"nodes": null` is malformed, and reading it as "no nodes"
+        // would report an empty register as clean.
         None => Ok(&[]),
         Some(Value::Array(items)) => Ok(items),
         Some(other) => err(format!(
@@ -277,7 +276,7 @@ fn ingest_edges(graph: &mut LatticeGraph, document: &mut Value) -> Result<(), Co
 
 /// Attach each pathway, refusing an invalid one rather than reporting it.
 ///
-/// Validity is the adapter's job — it read the declaration and can name the file.
+/// Validity is the adapter's job; it read the declaration and can name the file.
 /// An invalid pathway arriving here means the adapter is broken, and a pathway whose
 /// `current` is outside its order would place every bound finding both before and
 /// after it.
@@ -352,7 +351,7 @@ pub fn parse_document(text: &str) -> Result<Value, ContractError> {
         .map_err(|e| ContractError(format!("could not parse adapter output as JSON: {e}")))
 }
 
-/// The adapter's own diagnosis, trimmed — it is usually why the run failed.
+/// The adapter's own diagnosis, trimmed. It usually explains why the run failed.
 fn stderr_tail(stderr: &str) -> String {
     const LIMIT: usize = 2000;
     let text = stderr.trim();
@@ -410,7 +409,7 @@ fn create_scratch_file_in(
 /// a file the adapter reads with its own library, per the adapter contract.
 ///
 /// Every failure is a `ContractError`, because an adapter that did not complete
-/// produced no view of the register — reporting that as "no findings" would be
+/// produced no view of the register. Reporting that as "no findings" would be
 /// wrong rather than merely incomplete.
 pub fn run_adapter(
     program: &Path,

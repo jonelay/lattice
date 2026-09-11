@@ -1,7 +1,7 @@
 //! The `Summary subcommand` requirement's zero-config scenarios.
 //!
-//! A profile with no `SUMMARY` config gets a structural report — node and edge
-//! counts by kind, finding tallies by code and severity — rather than exit 2.
+//! A profile with no `SUMMARY` config gets a structural report (node and edge
+//! counts by kind, finding tallies by code and severity) rather than exit 2.
 //! The configured rollup's own scenarios stay in `cli.rs` and `output.rs`.
 
 mod common;

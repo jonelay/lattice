@@ -2,7 +2,7 @@
 
 Two boundaries, one module, because every adapter needs both and the failure
 routing differs: a *target* file the adapter cannot read becomes a PARSE_ERROR
-issue and a None return, never an exception — raising would turn a register
+issue and a None return, never an exception. Raising would turn a register
 problem into exit 2, which callers read as the adapter itself being broken.
 A *profile* that cannot say where the register lives is that broken setup,
 so config access raises ValueError instead of reporting.
@@ -46,7 +46,7 @@ def adapter_paths(profile: Profile, needs: str) -> dict:
 
     *needs* names the keys the caller requires, so the exit-2 message tells
     the profile author what to declare. Key-level validation stays with the
-    caller — the adapters genuinely differ there.
+    caller, since the adapters genuinely differ there.
     """
     adapter = profile.extra.get("adapter")
     if not isinstance(adapter, dict):

@@ -119,8 +119,8 @@ fn qualified_kind(kind: &str) -> Result<(), String> {
 }
 
 /// Read a fuse profile: cross-source `edge_kinds` whose endpoints are
-/// `source:kind` pairs, plus validations. Refuses `node_kinds` — those belong
-/// to the source profiles, and a copy here would drift from them.
+/// `source:kind` pairs, plus validations. Refuses `node_kinds` because those
+/// belong to the source profiles; a copy here would drift from them.
 pub fn load_fuse_profile(path: &Path) -> Result<FuseProfile, String> {
     let Value::Object(mut top) = load_yaml(path)? else {
         return Err("fuse profile must be a YAML mapping".into());
@@ -507,7 +507,7 @@ pub fn assemble(
                         Severity::Warning,
                         "CONFIG_ERROR",
                         format!(
-                            "could not load source profile '{}': {e} — composed IDs for source '{}' will not be validated against their declared pattern",
+                            "could not load source profile '{}': {e}; composed IDs for source '{}' will not be validated against their declared pattern",
                             source.profile.display(),
                             source.name,
                         ),

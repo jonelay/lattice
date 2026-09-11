@@ -19,7 +19,7 @@ use lattice_core::validate::{resolve_adapter_issues, validate};
 
 /// Exit 1: the register has error-severity findings.
 const EXIT_FINDINGS: u8 = 1;
-/// Exit 2: lattice could not run the command at all. Never collapsed into 1 —
+/// Exit 2: lattice could not run the command at all. Never collapsed into 1;
 /// callers use the distinction to tell a broken setup from a real finding.
 const EXIT_CONFIG: u8 = 2;
 
@@ -28,7 +28,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[derive(Parser)]
 #[command(
     name = "lattice",
-    about = "Lattice: validate typed node/edge registers over git-tracked text.",
+    about = "Validate and query typed node/edge registers over plain text.",
     // click prints `lattice, version X.Y.Z`, which clap's own flag cannot
     // spell. Handled below rather than accepting a gratuitous difference.
     disable_version_flag = true
@@ -43,7 +43,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Compose source registers and validate cross-source references.
+    /// Compose multiple source registers and validate cross-source references.
     Fuse {
         /// Path to fuse manifest YAML.
         #[arg(long)]
@@ -82,22 +82,21 @@ enum Command {
         #[arg(long)]
         strict: bool,
     },
-    /// Per-kind counts of nodes with incoming and outgoing edges. A report,
-    /// not a validation pass: exit 0 or 2, never 1.
+    /// Per-kind counts of nodes with incoming and outgoing edges.
     Coverage {
         #[command(flatten)]
         common: Common,
     },
-    /// Print the resolved profile document an adapter or a sidecar reads.
+    /// Print the resolved profile document that an adapter receives.
     ///
-    /// The handoff the core already writes for `--adapter`, on stdout instead of
-    /// a scratch file, so a program that consumes a register can be run by hand.
+    /// Writes to stdout so you can inspect or pipe what `--adapter` normally
+    /// gets as a scratch file.
     Resolve {
         /// Path to profile YAML file.
         #[arg(long)]
         profile: PathBuf,
     },
-    /// Ask the graph a question. Queries produce no findings: exit 0 or 2, never 1.
+    /// Ask the graph a question. Queries never produce findings (exit 0 or 2, never 1).
     #[command(subcommand)]
     Query(QueryCommand),
 }
@@ -148,7 +147,7 @@ enum QueryCommand {
         #[arg(long = "edge-kind")]
         edge_kinds: Vec<String>,
     },
-    /// Declared nodes no edge names.
+    /// Nodes with no incoming or outgoing edges.
     Orphans {
         #[command(flatten)]
         common: Common,
@@ -168,7 +167,7 @@ enum QueryCommand {
         filters: Vec<Condition>,
     },
     /// Register entries and findings originating at a source path. Findings
-    /// are answer content here, not a verdict — the exit code stays 0.
+    /// here are informational, not a verdict - the exit code stays 0.
     At {
         #[command(flatten)]
         common: Common,
@@ -179,8 +178,8 @@ enum QueryCommand {
         #[arg(long = "filter", value_parser = query::parse_filter)]
         filters: Vec<Condition>,
     },
-    /// What changed between two revisions of the target: the adapter runs
-    /// live at each, and the two registers are compared — never a snapshot.
+    /// What changed between two revisions of the target. Runs the adapter
+    /// at each revision and compares the results.
     Diff {
         #[command(flatten)]
         common: Common,
@@ -239,7 +238,7 @@ fn auto_format() -> String {
 /// Write a rendered payload the way `click.echo` does: strip ANSI when the
 /// stream is not a terminal, then append the newline.
 ///
-/// The stripping is not cosmetic — `rich` colours unconditionally, so a port
+/// The stripping is not cosmetic: `rich` colours unconditionally, so a port
 /// that wrote the rendered text straight out would differ from every captured
 /// baseline on every coloured line.
 fn echo(text: &str, stream: Stream) {
@@ -279,8 +278,8 @@ fn load(common: &Common) -> Result<(Profile, LatticeGraph), String> {
 
 /// Render every named suggestion document as hint findings, in document order.
 ///
-/// A document the core cannot use — unreadable, unparseable, or a version it
-/// does not support — is a broken setup rather than a finding about the
+/// A document the core cannot use (unreadable, unparseable, or a version it
+/// does not support) is a broken setup rather than a finding about the
 /// register, so it travels as an `Err` the caller turns into exit 2.
 fn overlay(paths: &[PathBuf], graph: &LatticeGraph) -> Result<Vec<Issue>, String> {
     let mut issues = Vec::new();
@@ -371,8 +370,8 @@ fn main() -> ExitCode {
     };
     let format = common.format();
 
-    // Diff never runs the adapter against the working target — it runs it at
-    // two materialized revisions — so it branches off before the shared load.
+    // Diff runs the adapter at two materialized revisions, not the working
+    // target, so it branches off before the shared load.
     if let Command::Query(QueryCommand::Diff {
         common,
         rev_a,
@@ -463,8 +462,8 @@ fn main() -> ExitCode {
     }
 }
 
-/// Answer one query: payload to stdout, adapter issues to stderr, exit 0 —
-/// or exit 2 when the question could not be posed. Never exit 1: queries
+/// Answer one query: payload to stdout, adapter issues to stderr, exit 0
+/// or exit 2 when the question could not be posed. Never exit 1; queries
 /// produce no findings, so even error-severity adapter issues only warn.
 fn run_query(
     command: &QueryCommand,
@@ -558,9 +557,9 @@ fn run_query(
 
 /// Run the adapter at two materialized revisions and report what changed.
 ///
-/// Each run's adapter issues go to stderr under its revision's name — a diff
-/// computed from partially unreadable input at either end must say so — but
-/// like every query this exits 0 or 2, never 1.
+/// Each run's adapter issues go to stderr under its revision's name so a diff
+/// computed from partially unreadable input at either end says so. Like every
+/// query this exits 0 or 2, never 1.
 fn run_diff(common: &Common, rev_a: &str, rev_b: &str, format: &str) -> ExitCode {
     let loaded = (|| -> Result<_, String> {
         let profile = load_profile(&common.profile).map_err(|e| format!("Profile error: {e}"))?;

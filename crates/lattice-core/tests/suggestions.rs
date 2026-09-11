@@ -1,5 +1,5 @@
 //! The suggestion overlay: document schema, version negotiation, ordering,
-//! and the property the whole feature rests on — advice never gates.
+//! and the property the whole feature rests on: advice never gates.
 
 mod common;
 
@@ -129,7 +129,7 @@ fn an_unsupported_suggestion_version_is_exit_two() {
 }
 
 /// A broken overlay must stay distinguishable from a clean run and from a real
-/// finding — the three-valued exit code is what callers read to tell them apart.
+/// finding; the three-valued exit code is what callers read to tell them apart.
 #[test]
 fn a_version_mismatch_on_a_clean_register_is_not_zero_or_one() {
     let mut doc = document(vec![]);

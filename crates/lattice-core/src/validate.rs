@@ -259,7 +259,7 @@ fn resolve_axes(issues: &mut Vec<Issue>, graph: &LatticeGraph, profile: &Profile
     // One finding per binding, not per issue: the mismatch is a property of the
     // pairing, and repeating it per finding would bury the findings it reports
     // about. Keyed on the code too, so two codes bound to one missing pathway each
-    // say so — a single finding could name only one of them.
+    // say so; a single finding could name only one of them.
     let mut unresolved: BTreeMap<(&str, &str), Issue> = BTreeMap::new();
 
     for issue in issues.iter_mut() {
@@ -313,7 +313,7 @@ pub fn resolve_adapter_issues(graph: &LatticeGraph, profile: &Profile) -> Vec<Is
 /// A config key's value: `Ok(Some)` for a string, `Ok(None)` when the key is
 /// absent, `Err(type name)` for a declared value of any other type.
 ///
-/// Wrong type and absence are distinct on purpose — reading a mistyped value
+/// Wrong type and absence are distinct on purpose. Reading a mistyped value
 /// as "missing" (or stringifying it into a kind check) would report the wrong
 /// fault, and a declared config must never fail in silence.
 pub(crate) fn config_str<'c>(
@@ -336,7 +336,7 @@ enum KindSpace {
 /// Read a validation entry's kind-naming keys, reporting every fault.
 ///
 /// Each key is typed and checked against the declared kinds independently of
-/// its siblings — one missing or mistyped key never masks another's fault
+/// its siblings; one missing or mistyped key never masks another's fault
 /// (validation spec, config typing). Returns one slot per requested key,
 /// `None` where the key was missing, mistyped, or named an undeclared kind.
 fn read_kind_keys<'c, const N: usize>(
@@ -615,7 +615,7 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
 
 /// The tail of the pipeline over findings already at their resolved severities:
 /// stale-suppression detection, `--strict` promotion, then suppression. Split
-/// from `collect` so a caller that merges in findings of its own — fuse — can
+/// from `collect` so a caller that merges in findings of its own (fuse) can
 /// run the tail once over the union.
 pub(crate) fn finish(issues: &mut Vec<Issue>, profile: &Profile, origin: Provenance, strict: bool) {
     let unused = unused_suppressions(issues.iter(), profile, origin);
@@ -658,7 +658,7 @@ pub(crate) fn apply_suppressions<'a>(
 /// Runs once, before suppression, so a `SUPPRESS_UNUSED` entry is judged
 /// against the findings the other entries produced here: it is used when any
 /// of them is stale, and is never asked about itself twice. The message says
-/// only what the core knows — a code it never saw may be a typo or an adapter
+/// only what the core knows. A code it never saw may be a typo or an adapter
 /// code that stayed dormant, and it cannot tell which.
 pub(crate) fn unused_suppressions<'a>(
     issues: impl IntoIterator<Item = &'a Issue>,
@@ -743,8 +743,8 @@ fn unused_message<'a>(
     ))
 }
 
-/// Every finding at its resolved severity — profile overrides and pathway
-/// demotion applied — before `--strict`, stale-suppression detection and
+/// Every finding at its resolved severity (profile overrides and pathway
+/// demotion applied) before `--strict`, stale-suppression detection and
 /// suppression. Unsorted.
 pub(crate) fn collect(graph: &LatticeGraph, profile: &Profile) -> Vec<Issue> {
     let mut issues: Vec<Issue> = Vec::new();
@@ -1044,7 +1044,7 @@ pub(crate) fn collect(graph: &LatticeGraph, profile: &Profile) -> Vec<Issue> {
 
         let ctx = coverage_context(graph, profile, target, evidence);
 
-        // Children keyed by parent — `via` edge targets are the parents. Only
+        // Children keyed by parent. `via` edge targets are the parents. Only
         // target-kind endpoints join the rollup: a foreign-kind or dangling
         // source has no evidence semantics here and contributes no child.
         // When via == evidence the original single-pass gave evidence priority;

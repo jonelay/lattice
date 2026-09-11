@@ -1,7 +1,7 @@
 //! The `validation` capability's scenarios, against the Rust validator.
 //!
 //! Written from `openspec/specs/validation/spec.md`. A handful of these overlap
-//! with `pinned_behaviours.rs`, which asks a different question — that file pins
+//! with `pinned_behaviours.rs`, which asks a different question. That file pins
 //! observed behaviour on paths the real-data gate never exercises, this one holds
 //! the core to what the contract says. A case can pass one and fail the other.
 
@@ -457,7 +457,7 @@ fn a_profile_override_applies_to_an_adapter_code() {
 }
 
 /// An issue arriving at hint from outside core cannot be promoted. Core has no
-/// shipped default for the code, so the pre-pass cannot see it coming — only the
+/// shipped default for the code, so the pre-pass cannot see it coming. Only the
 /// severity it actually arrives at says it is advice.
 #[test]
 fn an_override_promoting_an_externally_emitted_hint_is_a_config_error() {
@@ -578,7 +578,7 @@ fn pathway_profile() -> Profile {
 /// pathway whose current position is `M0`.
 ///
 /// A second node and bidirectional edges join them, so the bound finding is the
-/// graph's only one — otherwise an incidental `UNREFERENCED`/`UNTRACED` would
+/// graph's only one; otherwise an incidental `UNREFERENCED`/`UNTRACED` would
 /// answer the strict case instead of the demotion under test.
 fn pathway_graph(trigger: Value) -> LatticeGraph {
     let mut attrs = json!({"text": "t"});
@@ -1183,8 +1183,8 @@ fn coverage_state_reports_the_population_once_per_config() {
 
 #[test]
 fn coverage_state_hint_names_the_base_population() {
-    // 1 of 3 tests unattributed: without the base, the hint reads as "the
-    // test layer is not wired" — the misreading observed on live data.
+    // 1 of 3 tests unattributed. Without the base, the hint reads as "the
+    // test layer is not wired". That misreading occurred on live data.
     let profile = profile_from(&coverage_profile(&["verifies"])).unwrap();
     let graph = ingest(json!({
         "interface_version": "1.0",
@@ -1660,7 +1660,7 @@ fn constraint_strict_promotion() {
 // Requirement: Finding suppression
 
 /// `need` nodes with `orphan_ok`, so the only findings are the VACANCYs the
-/// dangling `derives` edges produce — one per source node, `node_id` = source.
+/// dangling `derives` edges produce, one per source node (`node_id` = source).
 const SUPPRESS_PROFILE: &str = r#"
 name: t
 profile_version: "1.0.0"

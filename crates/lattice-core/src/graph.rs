@@ -8,7 +8,7 @@ use crate::types::{Issue, Provenance};
 
 /// An ordering pathway read from the target: its positions and where it stands now.
 ///
-/// Ingested data, on the same footing as nodes and edges — the register declares
+/// Ingested data, on the same footing as nodes and edges. The register declares
 /// it and the adapter reads it. Nothing here is computed or defaulted.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Pathway {
@@ -26,7 +26,7 @@ impl Pathway {
 
     /// True when `position` sits strictly later on the pathway than `current`.
     ///
-    /// False for a non-member, which callers must screen with `is_member` first —
+    /// False for a non-member, which callers must screen with `is_member` first;
     /// the two cases mean different things and share no answer.
     #[must_use]
     pub fn is_after(&self, position: &str) -> bool {

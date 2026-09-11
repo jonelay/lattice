@@ -1,8 +1,8 @@
 //! The `cli` capability's scenarios, driven through the built binary.
 //!
 //! These run the real process rather than calling the library, because what they
-//! check — the three-valued exit code, which stream a payload lands on, the
-//! `--format` default — exists only there.
+//! check (the three-valued exit code, which stream a payload lands on, the
+//! `--format` default) exists only there.
 //!
 //! Adapters are shell scripts written per case. An adapter is a program the core
 //! runs and reads stdout from, so a script is a complete one.
@@ -637,7 +637,7 @@ fn a_non_executable_adapter_exits_two() {
 #[test]
 fn an_adapter_that_writes_a_document_then_fails_is_still_exit_two() {
     // Partial output plus a non-zero exit is a broken adapter, not a register
-    // with findings — reading the document would be trusting an aborted run.
+    // with findings. Reading the document would be trusting an aborted run.
     let case = Case::running(&format!("cat <<'DOC'\n{CLEAN_DOCUMENT}\nDOC\nexit 1"));
     let output = case.run(&["validate", "--format", "plain"]);
 

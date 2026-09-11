@@ -1,7 +1,7 @@
 //! The suggestion overlay: a producer's ranked candidate edges become hints.
 //!
-//! Nothing here ranks anything. A producer — an embedding sidecar, later a panel
-//! of them — writes a suggestion document, and the core renders it. Ranking, and
+//! Nothing here ranks anything. A producer (an embedding sidecar, later a panel
+//! of them) writes a suggestion document, and the core renders it. Ranking, and
 //! anything that would need a model or a network, stays outside.
 //!
 //! The document is scratch by contract: the core reads it and never writes one.
@@ -64,7 +64,7 @@ fn parse_suggestion(entry: &Value, where_: &str) -> Result<Suggestion, ContractE
 /// Entries are rendered in document order: a producer's tie-break may encode
 /// something its scores do not, so re-sorting here would discard it. An entry
 /// naming an ID the graph does not declare becomes `SUGGESTION_UNRESOLVED`
-/// rather than vanishing — a document goes stale as soon as the register moves
+/// rather than vanishing. A document goes stale as soon as the register moves
 /// under it, and silence would read as "this ranker had nothing to say".
 pub fn render_suggestions(
     document: &Value,

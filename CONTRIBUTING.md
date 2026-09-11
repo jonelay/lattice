@@ -5,7 +5,7 @@ Thanks for your interest in contributing. This guide covers the basics.
 ## Reporting bugs and requesting features
 
 Open an issue on [GitHub Issues](https://github.com/jonelay/lattice/issues).
-Include enough detail to reproduce the problem — the profile, register
+Include enough detail to reproduce the problem: the profile, register
 format, adapter invocation, and the full output or traceback.
 
 ## Development setup
@@ -22,7 +22,7 @@ python -m venv .venv
 
 ## Running tests
 
-Build the Rust binary first — the Python adapter suite needs it and
+Build the Rust binary first. The Python adapter suite needs it and
 silently skips core-facing tests when it is absent.
 
 ```bash
@@ -47,7 +47,7 @@ npx @fission-ai/openspec@1.7.0 validate --specs --strict
 4. Make sure all checks above pass.
 5. Open a pull request against `main`.
 
-Keep PRs focused — one logical change per PR.
+Keep PRs focused - one logical change per PR.
 
 ## AI-assisted development
 

@@ -27,14 +27,14 @@ PRODUCER = "lattice-suggest 0.2.0"
 
 
 class SuggestError(Exception):
-    """The sidecar could not run at all — distinct from finding nothing."""
+    """The sidecar could not run at all, distinct from finding nothing."""
 
 
 def _texts(node: dict, profile: Profile) -> list[str]:
     """The text a node offers a ranker: the attrs its kind declares as text.
 
     The profile names them, in order, so a register carrying text in a second
-    place needs a profile edit and no code change here — and this program names
+    place needs a profile edit and no code change here. This program names
     no attr of its own, which is the same reason node kinds and edge kinds are
     profile data rather than literals.
 
@@ -64,8 +64,8 @@ def _chunks(text: str, prefix: str) -> list[str]:
 
     A partition, never an extraction: `"".join` of the parts reproduces the
     input, separators included, save for any part that is entirely whitespace.
-    Text a splitter drops is invisible in a ranked list — nothing downstream can
-    tell a missing region from one that scored low — so a part carrying any
+    Text a splitter drops is invisible in a ranked list. Nothing downstream can
+    tell a missing region from one that scored low, so a part carrying any
     text at all is always kept.
 
     Each part but the last keeps its trailing newline, because the cut falls
@@ -89,7 +89,7 @@ def _chunks(text: str, prefix: str) -> list[str]:
 
 
 def _first_occurrences(nodes: list[dict]) -> list[dict]:
-    """One node per ID, the first declared — the occurrence the core keeps."""
+    """One node per ID, the first declared. This is the occurrence the core keeps."""
     seen: dict[str, dict] = {}
     for n in nodes:
         seen.setdefault(n["id"], n)
@@ -115,7 +115,7 @@ def _report_chunking(
 
     A declared marker that splits nothing is a profile typo or an adapter that
     stopped emitting the text it names, and the ranking it produces is the
-    unchunked one — indistinguishable on stdout from a register with no blocks.
+    unchunked one, indistinguishable on stdout from a register with no blocks.
     The chunk total is printed for the same reason a finding count is read
     beside an edge count: it is what shows the feature is on.
     """
@@ -148,7 +148,7 @@ def candidates(
     """The nodes to rank and the nodes to rank them against, for *edge_kind*.
 
     Sources are nodes of a legal source kind carrying no outgoing edge of this
-    kind — the population the register has not attributed. Targets are every
+    kind, the population the register has not attributed. Targets are every
     node of a legal target kind. Pairings the profile does not allow are never
     proposed: the core would reject one as an EDGE_CONSTRAINT violation, so
     offering it spends a reviewer's attention on an edit that cannot land.
@@ -197,13 +197,13 @@ def rank(
     """Score every legal pairing and keep each source's *top_k* targets.
 
     Every legal pairing, with no pre-filter. At this register's size the full
-    product is cheap, and a pre-filter would silently bound recall — which is
+    product is cheap, and a pre-filter would silently bound recall. That is
     the one failure a ranked review list must not have, since a candidate it
     never surfaces is one no reviewer can rescue.
 
     The one exclusion is a node offering no text at all: the baseline is
     similarity over declared text, so a textless node has no defined input and
-    any score for it would be fabricated — a textless register once produced
+    any score for it would be fabricated. A textless register once produced
     thousands of suggestions all at cosine 1.0, in silence. Excluded nodes are
     reported on stderr, before the embed call, so an all-textless population
     never needs a backend.
@@ -211,7 +211,7 @@ def rank(
     allowed = set(profile.edge_kinds[edge_kind].allowed)
     # A duplicated ID ranks once, over the union of its occurrences' text.
     # The interface document retains every occurrence and the core reports the defect;
-    # here, keying by ID must not silently keep one occurrence — a matching
+    # here, keying by ID must not silently keep one occurrence. A matching
     # occurrence never scored is a candidate no reviewer can rescue.
     src_pieces: dict[str, list[str]] = {}
     for n in sources:
@@ -304,7 +304,7 @@ def offline_backend(texts: list[str]) -> list[list[float]]:
 
 
 def ollama_backend(host: str, model: str):
-    """An embedding backend over ollama's HTTP API, via urllib — no new dependency."""
+    """An embedding backend over ollama's HTTP API, via urllib. No new dependency."""
 
     def embed(texts: list[str]) -> list[list[float]]:
         import urllib.error

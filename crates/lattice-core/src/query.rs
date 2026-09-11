@@ -2,7 +2,7 @@
 //!
 //! The graph stores flat node and edge vectors; every index here is built per
 //! invocation from a borrowed graph and dropped with the answer. Nothing is
-//! cached or written back — a stored index would be derived state at rest.
+//! cached or written back; a stored index would be derived state at rest.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -73,7 +73,7 @@ pub fn parse_filter(value: &str) -> Result<Condition, String> {
 
 /// A question that cannot be posed: an ID or kind the run does not know.
 ///
-/// Operational, not a finding — the caller reports it and exits 2.
+/// Operational, not a finding. The caller reports it and exits 2.
 #[derive(Debug)]
 pub struct QueryError(pub String);
 
@@ -166,8 +166,8 @@ fn check_node(graph: &LatticeGraph, id: &str) -> Result<(), QueryError> {
 /// The transitive closure from `origin`, excluding the origin itself.
 ///
 /// The walk follows edge endpoints as plain strings, so it traverses *through*
-/// an endpoint no adapter declared; only declared nodes enter the answer — an
-/// undeclared one is a dangling reference, not a phantom node.
+/// an endpoint no adapter declared; only declared nodes enter the answer.
+/// An undeclared one is a dangling reference, not a phantom node.
 ///
 /// With `check_resolved`, a second walk admits declared endpoints only. A
 /// node the first walk reaches and the second does not is tainted: every
@@ -236,8 +236,8 @@ fn walk<'a>(
 /// One shortest path from `src` to `tgt` along outgoing edges.
 ///
 /// BFS over adjacency lists that are already sorted, so among equal-length
-/// paths the one through lexicographically earlier neighbours wins — the
-/// deterministic tie-break the spec promises.
+/// paths the one through lexicographically earlier neighbours wins. This is
+/// the deterministic tie-break the spec promises.
 pub fn path(
     graph: &LatticeGraph,
     profile: &Profile,
@@ -294,7 +294,7 @@ pub fn path(
 /// Every declared node no edge names, ordered by ID.
 ///
 /// An edge counts for a node whenever it names that node's ID, even when its
-/// far endpoint was never declared — the node is referenced, so it is not
+/// far endpoint was never declared. The node is referenced, so it is not
 /// standing alone; the far endpoint is `VACANCY`'s business.
 pub fn orphans(
     graph: &LatticeGraph,
@@ -334,7 +334,7 @@ pub fn orphans(
 
 /// Per-kind node and edge tallies.
 ///
-/// Every kind the profile declares appears, zero when uninstantiated — a zero
+/// Every kind the profile declares appears, zero when uninstantiated. A zero
 /// edge count must be visible, not absent. A kind the register carries without
 /// a declaration appears too, so counts never under-report what was ingested.
 pub fn counts(graph: &LatticeGraph, profile: &Profile, filters: &[Condition]) -> CountsReport {
@@ -405,7 +405,7 @@ fn percent(part: i64, whole: i64) -> f64 {
 ///
 /// `issues` is the run's full validation output; findings are answer content
 /// here, never a verdict. The question is posed when the path exists under
-/// the target (or as given) or any provenance in the run names it — a
+/// the target (or as given) or any provenance in the run names it. A
 /// register file the adapter reported missing must stay queryable. Anything
 /// matching neither is a mistyped path, which is exit 2 rather than an
 /// empty answer. Matching is lexical: the argument as given and joined to
@@ -423,7 +423,7 @@ pub fn at(
     let joined = target.join(arg).to_string_lossy().into_owned();
     let mut candidates = vec![arg.to_string(), joined];
     // An absolute argument beneath the target must also match provenance an
-    // adapter wrote target-relative — without this, the absolute form of a
+    // adapter wrote target-relative. Without this, the absolute form of a
     // populated file reads as a clean empty answer.
     if let Ok(rel) = Path::new(arg).strip_prefix(target) {
         candidates.push(rel.to_string_lossy().into_owned());
@@ -489,7 +489,7 @@ pub fn at(
 ///
 /// Nodes compare by ID → (kind, attrs); edges by (src, tgt, kind) → attrs,
 /// with parallel edges paired in document order; pathways by name → (order,
-/// current). A declaration that merely moved lines therefore does not diff —
+/// current). A declaration that merely moved lines therefore does not diff;
 /// line numbers are where a thing was said, not what was said.
 pub fn diff(rev_a: &str, a: &LatticeGraph, rev_b: &str, b: &LatticeGraph) -> DiffReport {
     // Both registers outlive the answer, so the identities compare as borrowed
@@ -531,7 +531,7 @@ pub fn diff(rev_a: &str, a: &LatticeGraph, rev_b: &str, b: &LatticeGraph) -> Dif
         .collect();
 
     // Attrs per identity tuple in document order, so parallel edges pair up
-    // positionally rather than being matched by content — content is what
+    // positionally rather than being matched by content. Content is what
     // the pairing is meant to compare.
     type EdgeAttrs<'g> = BTreeMap<(&'g str, &'g str, &'g str), Vec<&'g Map<String, Value>>>;
     fn edges_of(g: &LatticeGraph) -> EdgeAttrs<'_> {
@@ -637,7 +637,7 @@ impl Drop for MaterializationDir {
 /// whatever revision was extracted there before.
 ///
 /// `git archive` piped through `tar -x`, chosen over a worktree because it
-/// touches none of the target's git state — there is nothing to deregister,
+/// touches none of the target's git state. There is nothing to deregister,
 /// and the working tree stays exactly as the user left it.
 pub fn materialize_revision(
     target: &Path,

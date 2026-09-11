@@ -6,9 +6,8 @@ use crate::graph::LatticeGraph;
 use crate::profile::Profile;
 use crate::types::{Issue, PathwayEntry, TraceEdge, TraceEntry, TraceReport};
 
-/// The rank a kind the profile does not declare sorts at — after every declared
-/// kind, and mirroring the reference core's fixed sentinel rather than inventing
-/// a wider one.
+/// Undeclared kinds get rank 999, sorting after up to 999 declared kinds.
+/// The fixed value mirrors the reference core's sentinel.
 const UNDECLARED_KIND_RANK: usize = 999;
 
 /// Outgoing edges by source node, then by edge kind.
@@ -51,8 +50,8 @@ pub(crate) fn build_trace_report_for_nodes(
     let mut findings_by_node: BTreeMap<&str, Vec<Issue>> = BTreeMap::new();
     let mut unattachable: Vec<Issue> = Vec::new();
     for issue in issues {
-        // A node_id naming no graph node — a VACANCY on a ghost source, say
-        // — must not vanish: no entry would ever carry it.
+        // A finding whose node_id names no graph node (e.g. VACANCY on a ghost
+        // source) must not vanish; no entry would ever carry it.
         match issue.node_id.as_deref().and_then(|id| graph.node(id)) {
             Some(node) if node_ids.is_none_or(|ids| ids.contains(node.id.as_str())) => {
                 findings_by_node

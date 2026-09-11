@@ -1,7 +1,7 @@
 //! The `profile-schema` capability's scenarios, against the Rust loader.
 //!
 //! Written from `openspec/specs/profile-schema/spec.md` rather than from
-//! `profile.rs`: the spike's only gate was the phase-sweep baselines, which reach
+//! `profile.rs`: the spike's only gate was the standing baselines, which reach
 //! one profile down one path. Everything a profile can get wrong is unexercised
 //! there, and a test derived from the implementation would agree with it by
 //! construction.
@@ -40,7 +40,7 @@ fn missing_required_key_names_it() {
 fn unrecognised_top_level_key_does_not_reject() {
     // The Rust core drops `extra` rather than carrying it: an adapter is a
     // separate program now and opens the profile itself. What the spec requires
-    // here — that core not reject the key — still holds.
+    // here (that the core not reject the key) still holds.
     let profile = profile_from(&format!("{MINIMAL_PROFILE}adapter: openspec\n"))
         .expect("an uninterpreted top-level key is not an error");
     assert_eq!(profile.name(), "t");
@@ -360,7 +360,7 @@ edge_kinds: {}
 #[test]
 fn chunk_line_prefix_that_is_blank_is_rejected() {
     // A prefix of spaces is a prefix of almost every line, so it names no cut
-    // point — it would chunk on indentation.
+    // point; it would chunk on indentation.
     let yaml = r#"
 name: t
 profile_version: "1.0.0"

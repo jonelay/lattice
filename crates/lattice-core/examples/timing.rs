@@ -1,6 +1,6 @@
 //! Task 3.4's measurement: where the Rust core's time goes on a stored document.
 //!
-//! An example rather than a flag on the spike binary — the shipped CLI should not
+//! An example rather than a flag on the spike binary. The shipped CLI should not
 //! grow a measurement surface, and the whole-process cost is measured from
 //! outside anyway. Reports the best of N, matching how 2.8 measured the Python
 //! side.
@@ -17,7 +17,7 @@ use lattice_core::profile::load_profile;
 use lattice_core::validate::validate;
 
 /// Results go through `black_box` so the optimiser cannot delete the work being
-/// measured — a discarded `validate` is a call the compiler is free to elide.
+/// measured. A discarded `validate` is a call the compiler is free to elide.
 const RUNS: u32 = 5;
 
 fn best(label: &str, runs: u32, mut body: impl FnMut()) {

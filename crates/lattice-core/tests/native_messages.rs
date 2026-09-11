@@ -1,7 +1,7 @@
 //! The native message vocabulary, blessed by consolidation phase 2a.
 //!
 //! Type names in core-emitted messages come from the profile's own attr-type
-//! vocabulary — `string`, `int`, `float`, `bool`, `list` — extended with `null`
+//! vocabulary (`string`, `int`, `float`, `bool`, `list`) extended with `null`
 //! and `object`; allowed-value lists render as compact JSON. Several of these
 //! started life in the parity suite (now `pinned_behaviours.rs`) pinned to the
 //! Python core's `repr` and `type(x).__name__`; they migrated here with native
@@ -208,7 +208,7 @@ fn config_typing_deep_keys_are_typed_like_coverage_keys() {
 #[test]
 fn config_typing_deep_mixed_faults_are_all_reported() {
     // Independence: the mistyped key and the missing key each report, and the
-    // well-formed key's referenced-kind check still runs — one fault never
+    // well-formed key's referenced-kind check still runs; one fault never
     // masks another.
     let errors = config_errors(&coverage_deep_profile(
         "      target_kind: 3\n      evidence: nosuch\n",

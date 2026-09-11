@@ -32,7 +32,7 @@ pub fn profile_from(yaml: &str) -> Result<Profile, ProfileError> {
     let dir = std::env::temp_dir().join("lattice_core_tests");
     std::fs::create_dir_all(&dir).unwrap();
     // A fresh path per call. Tests run on threads, and naming the file after its
-    // contents let two tests using the same profile share one path — where one
+    // contents let two tests using the same profile share one path, where one
     // can read the file while the other is still truncating it.
     static NEXT: AtomicU32 = AtomicU32::new(0);
     let path = dir.join(format!(
@@ -47,7 +47,7 @@ pub fn profile_from(yaml: &str) -> Result<Profile, ProfileError> {
 /// Write multiple named files into one fresh temp dir and load the first one.
 ///
 /// Each entry is `(filename, yaml_content)`. The first file is the one
-/// `load_profile` opens — the others exist so `extends:` can find them.
+/// `load_profile` opens. The others exist so `extends:` can find them.
 pub fn profile_from_files(files: &[(&str, &str)]) -> Result<Profile, ProfileError> {
     static NEXT: AtomicU32 = AtomicU32::new(0);
     let dir = std::env::temp_dir().join(format!(

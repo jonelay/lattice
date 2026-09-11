@@ -1,7 +1,7 @@
 //! Profile loading: the declared vocabulary of a register, read from YAML.
 //!
 //! The profile is where all domain knowledge lives. Nothing below names a kind, an
-//! ID shape or a check — it reads what the file declares and hands it to validation.
+//! ID shape or a check. It reads what the file declares and hands it to validation.
 //!
 //! `extra` has no counterpart here. Python's `Profile` carries the unrecognised
 //! top-level keys because adapters read `adapter:` out of it, and an adapter is now
@@ -58,7 +58,7 @@ fn err<T>(message: impl Into<String>) -> Result<T, ProfileError> {
     Err(ProfileError(message.into()))
 }
 
-/// The YAML value's runtime type — `string`, `int`, `float`, `bool`, `list`,
+/// The YAML value's runtime type: `string`, `int`, `float`, `bool`, `list`,
 /// `null`, or `object`. Declared semantic types such as `date` remain strings
 /// at this layer and are named separately when an expected schema type is known.
 pub(crate) fn name(value: &Value) -> &'static str {
@@ -133,8 +133,8 @@ pub struct AttrSchema {
 
 #[derive(Debug)]
 pub struct NodeKind {
-    /// The compiled pattern, anchored to the whole ID — Python matches with
-    /// `fullmatch`, and Rust's `is_match` is a search.
+    /// The compiled pattern, anchored to the whole ID. Python matches with
+    /// `fullmatch`; Rust's `is_match` is a search.
     id_pattern: Regex,
     /// The pattern as the profile wrote it. `ID_FORMAT` quotes this, so the
     /// anchoring above must not leak into a finding's text.
@@ -158,7 +158,7 @@ pub struct NodeKind {
     /// lookup and no longer remembers how it was written.
     pub declared_index: usize,
     /// Exempts this kind's nodes from `UNREFERENCED`/`UNTRACED`. Validation
-    /// policy only — `query orphans` still reports them as the ask-time fact.
+    /// policy only; `query orphans` still reports them.
     pub orphan_ok: bool,
 }
 
@@ -364,7 +364,7 @@ fn to_comparable(value: &Value) -> Option<Comparable> {
 /// Serialize the resolved profile document handed to adapters.
 ///
 /// The profile after inheritance resolution, plus `resolved_schema`, so that
-/// sections the core does not consume — `adapter:` above all — reach the
+/// sections the core does not consume (`adapter:` above all) reach the
 /// adapter unchanged.
 pub fn resolved_document(profile: &Profile) -> Result<String, ProfileError> {
     let mut document = match to_json(&profile.raw)? {

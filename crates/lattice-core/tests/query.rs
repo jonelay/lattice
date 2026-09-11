@@ -2,8 +2,8 @@
 //!
 //! Queries produce no findings, so what these check is the two-valued exit
 //! contract, the answer payloads, and where adapter issues land. The diff
-//! scenarios build a real git repo per case — mini-repo is a fixture
-//! directory, not a repository, and diff's contract is about revisions.
+//! scenarios build a real git repo per case. `mini-repo` is a fixture
+//! directory, not a repository; diff's contract is about revisions.
 
 mod common;
 
@@ -15,7 +15,7 @@ use lattice_core::query::diff;
 use lattice_core::types::DiffReport;
 
 /// Three node kinds and three edge kinds, one of which (`mitigates`) the
-/// register never instantiates — the zero-row scenario needs a declared kind
+/// register never instantiates. The zero-row scenario needs a declared kind
 /// with no instances.
 const QUERY_PROFILE: &str = r#"
 name: q
@@ -156,7 +156,7 @@ fn orphans_unknown_kind_exits_two() {
     assert!(stderr(&output).contains("widget"), "{}", stderr(&output));
 }
 
-// An edge counts for a node whenever it names that node's ID — the node is
+// An edge counts for a node whenever it names that node's ID. The node is
 // referenced, so it is not standing alone, whatever became of the far end.
 #[test]
 fn a_node_named_by_an_edge_with_an_undeclared_far_endpoint_is_not_an_orphan() {
@@ -409,7 +409,7 @@ fn check_resolved_reach_with_one_clean_path_is_not_tainted() {
 }
 
 /// The vacancy path is the shorter one, so a breadth-first walk meets N-1
-/// tainted — and expands its descendant N-3 — before the longer clean path
+/// tainted (and expands its descendant N-3) before the longer clean path
 /// arrives. The answer must still be clean for both.
 #[test]
 fn check_resolved_reach_clean_path_found_later_wins() {
@@ -848,7 +848,7 @@ fn at_a_directory_argument_matches_the_files_beneath_it() {
 
 #[test]
 fn at_a_relative_argument_matches_target_joined_provenance() {
-    // The heredoc is unquoted so $4 — the adapter's --target value — lands in
+    // The heredoc is unquoted so $4 (the adapter's --target value) lands in
     // the provenance, the way real adapters compose absolute paths.
     let document = r#"{"interface_version": "1.0",
       "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {},
@@ -862,7 +862,7 @@ fn at_a_relative_argument_matches_target_joined_provenance() {
 #[test]
 fn at_a_finding_at_the_path_attached_to_an_entry_elsewhere_is_listed() {
     // The dangling edge is written in r.md but attaches to T-1, whose entry
-    // lives at t.py — querying r.md must still surface the finding.
+    // lives at t.py. Querying r.md must still surface the finding.
     let document = r#"{"interface_version": "1.0",
       "nodes": [
         {"id": "T-1", "kind": "test", "attrs": {}, "provenance": {"file": "t.py", "line": 1}}],

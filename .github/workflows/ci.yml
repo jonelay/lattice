@@ -33,7 +33,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: lattice-binary
-          path: target/debug/lattice
+          path: |
+            target/debug/lattice
+            target/debug/adapter-*
+            !target/debug/adapter-*.d
 
   python-check:
     needs: rust-check
@@ -45,7 +48,7 @@ jobs:
           name: lattice-binary
           path: target/debug
       # upload-artifact does not preserve the executable bit
-      - run: chmod +x target/debug/lattice && test -x target/debug/lattice
+      - run: chmod +x target/debug/lattice target/debug/adapter-* && test -x target/debug/lattice
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

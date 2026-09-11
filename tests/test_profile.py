@@ -100,7 +100,7 @@ class TestResolvedReader:
     def test_resolved_document_is_yaml_readable(self, resolved_path):
         # The staged migration rests on JSON being a YAML subset: an adapter
         # still reading the profile path with a YAML library must see the same
-        # data. This is the contract the external bipolaris adapter relies on.
+        # data. This is the contract external adapters rely on.
         yaml = pytest.importorskip("yaml")
         text = resolved_path.read_text()
         assert yaml.safe_load(text) == json.loads(text)

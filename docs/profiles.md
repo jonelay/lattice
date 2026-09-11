@@ -1,15 +1,15 @@
 # Profile reference
 
-A profile declares which kinds of node exist, what their IDs look like, which attributes
-they carry, how they may be connected, and which rules to validate. The core ships no
-domain vocabulary — everything domain-specific arrives from a profile.
+A profile declares the node kinds, ID patterns, attributes, edge kinds, and validation
+rules for a register. Lattice doesn't know what a "requirement" or a "test" is until you
+tell it in a profile.
 
-[glossary.md](glossary.md) defines terms; `openspec/specs/profile-schema/spec.md` is
-the normative contract.
+[glossary.md](glossary.md) defines terms; `openspec/specs/profile-schema/spec.md`
+describes the full behavior.
 
 ## Profiles vs adapters
 
-A profile declares **vocabulary and policy**. An adapter reads **syntax**.
+The profile says what things mean. The adapter says how to read the file.
 
 | Question | Answered by |
 |---|---|
@@ -20,9 +20,9 @@ A profile declares **vocabulary and policy**. An adapter reads **syntax**.
 | What may point at what? | profile (`edge_kinds`) |
 | Which gaps are errors, warnings, or advice? | profile (`validations`) |
 
-A register whose on-disk shape differs from every shipped adapter needs a new adapter —
-a standalone program taking `--profile` and `--target` and writing an interface document
-to stdout. See `openspec/specs/adapter-contract/spec.md` and `crates/adapter-toml/`.
+If none of the shipped adapters can read your register's format, you can write your own.
+It takes `--profile` and `--target` and writes an interface document to stdout. See
+`openspec/specs/adapter-contract/spec.md` and `crates/adapter-toml/`.
 
 ## Minimal profile
 
@@ -70,9 +70,9 @@ wiring an adapter to it.
 | `pathways` | no | list of ordering-pathway names |
 | `extends` | no | path to a parent profile |
 
-**A top-level key the core does not recognise is preserved, not rejected.** The core
-passes unrecognised keys through in the resolved document for the adapter to read. Every
-shipped profile uses this for an `adapter:` block whose shape is adapter-specific.
+**A top-level key the core does not recognise is preserved, not rejected.** Keys the
+core doesn't use get passed along to the adapter as-is. Every shipped profile uses this
+for an `adapter:` block whose shape is adapter-specific.
 
 Per-adapter `adapter:` block configuration is in [adapters.md](adapters.md).
 
@@ -93,20 +93,20 @@ node_kinds:
       rationale: { type: string }
 ```
 
-**`id_pattern`** — regex the node's ID must match (`ID_FORMAT` on mismatch). Double
+**`id_pattern`.** Regex the node's ID must match (`ID_FORMAT` on mismatch). Double
 backslashes in YAML: `\d` → `\\d`. An invalid regex is a load error.
 
-**`summary_attr`** — attr for the trace output's summary column. Must be declared, not
+**`summary_attr`.** Attr for the trace output's summary column. Must be declared, not
 a `list`.
 
-**`text_attrs`** — attrs a text-ranking consumer reads, in order. Must be `string` or
+**`text_attrs`.** Attrs a text-ranking consumer reads, in order. Must be `string` or
 `enum`. Absent means fall back to `summary_attr`; `[]` means no text to rank.
 
-**`text_chunk_line_prefix`** — literal line prefix (not regex) at which a ranking consumer
+**`text_chunk_line_prefix`.** Literal line prefix (not regex) at which a ranking consumer
 subdivides text. Rejected if blank, contains a newline, or the kind has no rankable text.
 
-**`orphan_ok`** — `true` exempts the kind from `UNREFERENCED`/`UNTRACED`. Validation
-policy only — exempt nodes still appear in `query orphans`.
+**`orphan_ok`.** `true` exempts the kind from `UNREFERENCED`/`UNTRACED`.
+This only affects findings; exempt nodes still show up in `query orphans`.
 
 ## Attributes
 
@@ -150,7 +150,7 @@ edge_kinds:
 An edge outside the allowed pairs gets `EDGE_CONSTRAINT`. A pair naming a kind not in
 `node_kinds` is a load error. An edge kind with no `allowed` key permits nothing.
 
-**`cross_source: true`** — marks an edge kind whose targets may live in another source.
+**`cross_source: true`.** Marks an edge kind whose targets may live in another source.
 Unresolved targets get `VACANCY` at hint severity instead of the default, for later
 resolution during fuse composition.
 
@@ -174,7 +174,7 @@ validations:
       severity: info
 ```
 
-Every entry is honoured independently — the same code may appear more than once (e.g. two
+Every entry is honoured independently. The same code may appear more than once (e.g. two
 `COVERAGE` rules over different edge kinds). Unknown keys are rejected, not ignored.
 
 ### Finding codes
@@ -207,19 +207,20 @@ Hint-tier codes cannot be promoted; see [Severities](#severities).
 
 Configuration keys per code:
 
-- `COVERAGE` — `target_kind`, `edge_kind`, `where`, `severity`
-- `COVERAGE_DEEP` — `target_kind`, `via`, `evidence`, `where`, `severity`
-- `CONSTRAINT` — `kind`, `when`, `expect`, `reject`, `message`, `severity`
-- `SUMMARY` — `node_kind`, `status_attr`, `group_by_attr`, `severity`
-- `SUPPRESS` — `code`, `node_ids` (no `severity`; see [Suppressing findings](#suppressing-findings))
-- any other code (including adapter-emitted) — `severity` alone
+- `COVERAGE` - `target_kind`, `edge_kind`, `where`, `severity`
+- `COVERAGE_DEEP` - `target_kind`, `via`, `evidence`, `where`, `severity`
+- `CONSTRAINT` - `kind`, `when`, `expect`, `reject`, `message`, `severity`
+- `SUMMARY` - `node_kind`, `status_attr`, `group_by_attr`, `severity`
+- `SUPPRESS` - `code`, `node_ids` (no `severity`; see [Suppressing findings](#suppressing-findings))
+- any other code (including adapter-emitted) - `severity` alone
 
 ### Deep coverage
 
 `COVERAGE` is flat: does this node have an incoming edge of that kind? `COVERAGE_DEEP`
-is a rollup — covered by direct evidence **or** by every child being covered. Computed
-as a least fixed point; childless targets with no evidence and evidence-free cycles stay
-uncovered.
+is a rollup. A node counts as covered when it has a direct incoming edge of the
+`evidence` kind, **or** all nodes reachable from it along the `via` edge kind are
+themselves covered. The rollup propagates until no more nodes change. Leaf nodes
+with no evidence and evidence-free cycles stay uncovered.
 
 Both accept an optional `where` block (same syntax as `CONSTRAINT`) to limit which
 target-kind nodes are checked:
@@ -235,8 +236,9 @@ target-kind nodes are checked:
 
 ### SUMMARY
 
-`SUMMARY` configures `lattice summary`'s status rollup. Without it, summary falls back
-to a structural report (node/edge/finding counts by kind).
+`SUMMARY` configures `lattice summary`'s status rollup - a table grouping nodes by
+one attribute and counting values of another. Without it, summary falls back to a
+structural report (node/edge/finding counts by kind).
 
 ```yaml
   - SUMMARY:
@@ -265,7 +267,7 @@ one or both of `expect` (all must hold) and `reject` (none may hold).
       severity: warning
 ```
 
-`when` is a guard — if any condition fails, the rule is skipped. A rule must declare
+`when` is a guard: if any condition fails, the rule is skipped. A rule must declare
 at least one of `expect` or `reject`.
 
 Condition operators:
@@ -299,7 +301,7 @@ contract as `COVERAGE`. Pathway demotion and `--strict` promotion apply normally
 Four tiers: `error`, `warning`, `info`, `hint`. `--strict` promotes `warning` → `error`
 only. Exit codes: 0 clean, 1 error-severity findings, 2 lattice could not run.
 
-An override may demote any code, including to `hint`. **Hint cannot be promoted** — an
+An override may demote any code, including to `hint`. **Hint cannot be promoted.** An
 attempt is reported as `CONFIG_ERROR` and the finding stays at `hint`.
 
 ### SUPPRESS
@@ -364,14 +366,14 @@ validations:
       severity: error
 ```
 
-Merge: scalars — child wins. Lists — child replaces whole. Mappings — recursive deep
+Merge: scalars - child wins. Lists - child replaces whole. Mappings - recursive deep
 merge. `profile_version` comes from the child alone. Chains work; cycles are load errors.
 Node-kind order is parent-first, child additions after.
 
 ## Versioning
 
 `profile_version` is X.Y.Z (no leading zeros), required. The core rejects a major version
-it does not support. **Node IDs are public** — widening an `id_pattern` is safe;
+it does not support. **Node IDs are public.** Widening an `id_pattern` is safe;
 renumbering breaks downstream references.
 
 ## Verification
@@ -383,5 +385,5 @@ lattice validate --profile profiles/yours.yaml --adapter ./adapters/yours \
 ```
 
 `resolve` catches load errors. `validate` exercises the profile against real data.
-A finding count of zero proves nothing on its own — check the edge count beside it
+Zero findings over zero edges just means nothing was checked. Verify the edge count
 with `lattice query counts`.

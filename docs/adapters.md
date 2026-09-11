@@ -1,12 +1,10 @@
 # Adapter configuration
 
-Each adapter reads its configuration from the `adapter:` block in the profile. The core
-passes this block through unchanged in the resolved document — it has no opinion about
-its shape.
+Each adapter reads its configuration from the `adapter:` block in the profile. The core doesn't read this block; it just passes it to the adapter.
 
 ## Markdown table adapter
 
-`crates/adapter-md/`. Single-table form — one schema for every table matched by
+`crates/adapter-md/`. Single-table form - one schema for every table matched by
 `adapter.paths.files`:
 
 ```yaml
@@ -21,7 +19,7 @@ adapter:
       "Traces To": traces_to
 ```
 
-Multi-table form — `adapter.tables` dispatches by heading regex (first match wins,
+Multi-table form - `adapter.tables` dispatches by heading regex (first match wins,
 heading text without the `##`, nearest preceding heading at any level):
 
 ```yaml
@@ -88,7 +86,7 @@ See `profiles/toml.yaml` for a worked example.
 
 `crates/adapter-entomologist/`. Reads a git-backed issue tracker's register from its
 `entomologist-data` orphan branch via `git ls-tree` and `cat-file --batch`. No `adapter:`
-config needed — the register format is fixed.
+config needed; the register format is fixed.
 
 ## GitHub Issues adapter
 
@@ -103,4 +101,4 @@ instance-wide number. `adapter.link_type_map` maps link types to edge kinds.
 ## OpenSpec adapter
 
 `adapters/openspec` (Python). Reads `openspec/specs/*/spec.md` and `Requirement:`
-citation comments in test files. No `adapter:` block — paths are conventional.
+citation comments in test files. No `adapter:` block; paths are conventional.

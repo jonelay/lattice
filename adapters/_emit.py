@@ -1,8 +1,8 @@
 """The writing half of the adapter interface, shared by both adapters.
 
 The reading half is the core's `document.rs`. They are deliberately separate
-implementations of one format — that independence is what the contract is for —
-so a change to the document shape touches both.
+implementations of one format; that independence is what the contract is for.
+A change to the document shape touches both.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ class DocumentBuilder:
     """What an adapter builds into: a document under construction.
 
     Not a `LatticeGraph`. `add_node` there rejects a repeated ID, which is
-    correct for the core but wrong here — the core resolves duplicates at
+    correct for the core but wrong here. The core resolves duplicates at
     ingest now, and it can only do that if both occurrences reach it. A builder
     that deduplicated would drop the second in silence, which is the one thing
     an adapter must never do.
@@ -56,7 +56,7 @@ class DocumentBuilder:
         return id in self._ids
 
     def node_data(self, id: str) -> dict:
-        """The first occurrence of `id` — the one ingest will keep as the node."""
+        """The first occurrence of `id`, which is the one ingest will keep as the node."""
         for nid, data in self._nodes:
             if nid == id:
                 return dict(data)
@@ -100,7 +100,7 @@ def _provenance(prov: Provenance, root: Path) -> dict:
 
     An absolute path records where this checkout happens to sit, so two runs of
     the same commit under different paths would disagree byte for byte. A path
-    outside the target — or a placeholder like `<profile>` — is left as it is,
+    outside the target, or a placeholder like `<profile>`, is left as it is,
     because relativising it would say something untrue about where it came from.
     """
     file = prov.file

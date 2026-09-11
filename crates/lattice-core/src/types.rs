@@ -1,4 +1,4 @@
-//! Provenance, severity and findings — the vocabulary every other module reports in.
+//! Provenance, severity and findings: the vocabulary every other module reports in.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -28,8 +28,8 @@ impl fmt::Display for Provenance {
 }
 
 /// Issue severity. Only `Error` sets a non-zero exit code; `Hint` is advice
-/// the tool cannot stand behind, and nothing — not `--strict`, not a profile
-/// override — promotes a finding out of it.
+/// the tool cannot stand behind. Nothing (not `--strict`, not a profile
+/// override) promotes a finding out of it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Severity {
     Error,
@@ -125,8 +125,8 @@ impl Issue {
 
     /// The total order findings are reported in: location, then code, then identity.
     ///
-    /// Severity is deliberately absent — findings read in source order, not worst
-    /// first, and a severity term would reorder output when a profile overrides one.
+    /// Severity is deliberately absent. Findings read in source order, not worst
+    /// first; a severity term would reorder output when a profile overrides one.
     #[must_use]
     pub fn sort_key(&self) -> (&str, i64, &str, &str, &str) {
         (
@@ -219,7 +219,7 @@ pub struct EdgeRef {
 #[derive(Debug)]
 pub struct ReachReport {
     pub origin: String,
-    /// `"reaches"` or `"reached-by"` — which way the walk followed edges.
+    /// `"reaches"` or `"reached-by"`: which way the walk followed edges.
     pub direction: String,
     /// The restriction the caller asked for; empty means every edge kind.
     pub edge_kinds: Vec<String>,
@@ -439,7 +439,7 @@ pub struct AtReport {
     pub path: String,
     /// Entries whose node is declared at the path, edges and findings attached.
     pub entries: Vec<TraceEntry>,
-    /// Findings at the path that sit inside none of those entries — attached
+    /// Findings at the path that sit inside none of those entries: attached
     /// to a node declared elsewhere, or attachable to no node at all.
     pub findings: Vec<Issue>,
 }

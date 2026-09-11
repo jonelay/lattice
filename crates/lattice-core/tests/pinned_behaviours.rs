@@ -1,8 +1,8 @@
-//! Paths the phase-sweep fixture never exercises, pinned as the tool's own contract.
+//! Paths the standing fixture never exercises, pinned as the tool's own contract.
 //!
 //! The baselines cover one register through one profile. Everything they do not
-//! contain — a malformed document, a duplicate ID, a dangling edge, a config
-//! error, non-ASCII in a finding — is unverified by that gate, so this suite
+//! contain (a malformed document, a duplicate ID, a dangling edge, a config
+//! error, non-ASCII in a finding) is unverified by that gate, so this suite
 //! pins it directly. It began as `python_parity.rs`, each expectation captured
 //! from the Python core before it was deleted; the consolidation track retired
 //! that coupling (2a: message dialect, into `native_messages.rs`; 2b: config
@@ -153,7 +153,7 @@ fn a_dangling_edge_target_is_reported_and_the_node_is_not_invented() {
         "edge 'REQ-1'->'REQ-9' (kind 'derives'): target 'REQ-9' does not exist"
     );
     assert_eq!(dangling[0].severity, Severity::Error);
-    // REQ-1 is the edge source, so it has outgoing — no UNTRACED. But it has
+    // REQ-1 is the edge source, so it has outgoing edges (no UNTRACED). But it has
     // no incoming edge, so UNREFERENCED fires.
     assert!(
         !issues

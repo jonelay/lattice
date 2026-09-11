@@ -1,11 +1,11 @@
 """Shared structural discovery of Python test definitions.
 
 Discovery is static and AST-based: one source definition is one test node,
-however many cases a runner expands it to — a `test_`-named function at module
+however many cases a runner expands it to: a `test_`-named function at module
 top level, or a `test_`-named direct method of a top-level class. Text that
 merely looks like a definition (a `def test_` inside a string literal) is not
 one, and a module that does not parse is reported rather than pattern-matched.
-Edge binding — pytest markers, citation comments — stays per-adapter.
+Edge binding (pytest markers, citation comments) stays per-adapter.
 """
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ def iter_test_holders(
 
     A top-level test function arrives as `(None, [fn])`. A class is yielded
     even when its test-method list is empty, so a caller reading class-level
-    markers still sees — and can report on — a class holding no tests.
+    markers still sees, and can report on, a class holding no tests.
     """
     for node in ast.iter_child_nodes(tree):
         if isinstance(node, ast.ClassDef):

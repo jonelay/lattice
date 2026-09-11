@@ -8,7 +8,7 @@
 //!
 //! Three are settled by the language rather than by this code: "Provenance is
 //! required" asserts a `TypeError` from a missing Python argument, and "Mutating
-//! a read does not affect the graph" — once for nodes, once for pathway order —
+//! a read does not affect the graph" (once for nodes, once for pathway order)
 //! asserts that a caller cannot write through what it reads. Provenance is a
 //! non-defaulted parameter here, and the readers hand out shared references that
 //! cannot be mutated at all, so a test would assert a property of Rust.
