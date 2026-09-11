@@ -7,7 +7,7 @@ issue codes, built-in validators, adapter-issue channel, and strict-mode enforce
 
 ### Requirement: Issue model
 A validation finding SHALL be an `Issue` with fields: `severity` (error, warning, info,
-hint), `code` (string identifier like `ORPHAN_NODE`), `message` (human-readable),
+hint), `code` (string identifier like `UNREFERENCED`), `message` (human-readable),
 `provenance` (file + line from the graph element), and `node_id` (the node the finding
 concerns, or null for findings not tied to a single node). An issue MAY additionally
 carry a `state` (string): a machine-readable qualifier of what the finding established,
@@ -16,7 +16,7 @@ is absent, not null-valued, so findings that never had one are byte-identical to
 the field existed.
 
 #### Scenario: Issue formatting
-- **WHEN** an issue with severity=warning, code="ORPHAN_NODE", provenance=("REQS.md", 42) is formatted
+- **WHEN** an issue with severity=warning, code="UNREFERENCED", provenance=("REQS.md", 42) is formatted
 - **THEN** the output includes severity, code, file, line, and message
 
 #### Scenario: Node-scoped finding carries node_id
@@ -24,7 +24,7 @@ the field existed.
 - **THEN** the issue's `node_id` is "REQ-1"
 
 #### Scenario: Absent state is absent, not null
-- **WHEN** an `ORPHAN_NODE` issue is serialized to JSON
+- **WHEN** an `UNREFERENCED` issue is serialized to JSON
 - **THEN** the entry carries no `state` key
 
 ### Requirement: Built-in validators
@@ -36,7 +36,8 @@ Core SHALL provide these validators, each identified by a code:
   The issue SHALL carry `node_id` set to the edge's source node
 - `VACANCY`: edge references a node ID that does not exist in the graph.
   The issue SHALL carry `node_id` set to the edge's source node
-- `ORPHAN_NODE`: node has no incoming or outgoing edges
+- `UNREFERENCED`: node has no incoming edges
+- `UNTRACED`: node has no outgoing edges
 - `ATTR_REQUIRED`: a required attr is missing from a node
 - `ATTR_TYPE`: an attr value does not match its declared type
 - `ATTR_ENUM`: an enum attr value is not in the declared `values` list
@@ -61,11 +62,27 @@ Core SHALL provide these validators, each identified by a code:
   attrs; no adapter involvement. A profile MAY declare multiple CONSTRAINT
   entries, each with its own condition set — every entry SHALL be honoured
   independently per the existing repeated-code contract
+- `SUPPRESS_UNUSED`: a profile `SUPPRESS` entry whose selector matched no finding
+  this run (info by default). Carries no `node_id`; provenance names the profile.
+  Emitted by core after finding collection and before severity resolution, so a
+  profile override to warning is reachable by `--strict`
+
+A node with no edges in either direction SHALL receive both `UNREFERENCED` and
+`UNTRACED` findings. The two codes are independent: a node may be unreferenced
+(no incoming) while having outgoing edges, or untraced (no outgoing) while
+having incoming edges.
 
 A profile MAY configure the same validation code more than once. The profile's
 `validations:` list SHALL be read as a sequence, and every entry SHALL be honoured
 independently — a later entry for a code already seen SHALL NOT replace an earlier one.
 Silently discarding a declared configuration is the failure this tool exists to prevent.
+
+Severity is a per-code property: the profile holds one severity per code, not one per
+entry. When multiple entries for the same code each declare `severity`, the last
+declaration in the sequence sets the severity for all findings of that code. This is not
+a replacement — the check each entry configures still runs independently, and every
+finding it produces is reported. The severity declaration is about the code's weight, not
+about which entries are heard.
 
 A pathway binding is the one exception, and it is an exception by rejection rather than by
 discard: a second binding for an already-bound code SHALL be a load error, per the
@@ -122,6 +139,22 @@ matching parent's coverage.
 #### Scenario: Dangling reference
 - **WHEN** an edge of kind `derives` connects `REQ-0604` to `RISK-001` and `RISK-001` does not exist
 - **THEN** validation emits a `VACANCY` issue with `node_id` set to `REQ-0604`
+
+#### Scenario: Unreferenced node
+- **WHEN** a node has outgoing edges but no incoming edges and its kind is not `orphan_ok`
+- **THEN** validation emits `UNREFERENCED` for that node
+
+#### Scenario: Untraced node
+- **WHEN** a node has incoming edges but no outgoing edges and its kind is not `orphan_ok`
+- **THEN** validation emits `UNTRACED` for that node
+
+#### Scenario: Fully disconnected node
+- **WHEN** a node has no edges in either direction and its kind is not `orphan_ok`
+- **THEN** validation emits both `UNREFERENCED` and `UNTRACED` for that node
+
+#### Scenario: Connected node
+- **WHEN** a node has both incoming and outgoing edges
+- **THEN** validation emits neither `UNREFERENCED` nor `UNTRACED` for that node
 
 #### Scenario: Missing required attr
 - **WHEN** a `req` node lacks a `text` attr declared as `required: true`
@@ -180,7 +213,7 @@ Verified by: `cargo test --test validation strict`
 
 ### Requirement: Severity override in profile
 Where the profile's `validations` section overrides the default severity of a built-in
-validator (e.g. downgrade `ORPHAN_NODE` from warning to info), core SHALL apply the
+validator (e.g. downgrade `UNREFERENCED` from warning to info), core SHALL apply the
 overridden severity to that validator's findings. An override for a code core does not
 implement SHALL apply the same way to adapter issues carrying that code — a recorded
 override that changes nothing is the silently inert setting the profile-schema spec
@@ -202,8 +235,8 @@ Verified by: `cargo test --test validation override` and
 `cargo test --test suggestions promoted`
 
 #### Scenario: Override severity
-- **WHEN** the profile sets `ORPHAN_NODE` severity to `info` and validation finds orphans
-- **THEN** the findings have severity `info`, not the default `warning`
+- **WHEN** the profile sets `UNREFERENCED` severity to `info` and validation finds orphans
+- **THEN** the `UNREFERENCED` findings have severity `info`, not the default `warning`
 
 #### Scenario: Override applies to an adapter code
 - **WHEN** the profile sets `PARSE_ERROR` severity to `info` and the adapter emits a
@@ -211,8 +244,8 @@ Verified by: `cargo test --test validation override` and
 - **THEN** the validation report carries that issue with severity `info`
 
 #### Scenario: Demotion to hint is honoured
-- **WHEN** the profile sets `ORPHAN_NODE` severity to `hint` and validation finds orphans
-- **THEN** the findings have severity `hint` and never affect the exit code
+- **WHEN** the profile sets `UNREFERENCED` severity to `hint` and validation finds orphans
+- **THEN** the `UNREFERENCED` findings have severity `hint` and never affect the exit code
 
 #### Scenario: Promotion from a hint-default code is rejected
 - **WHEN** the profile sets `COVERAGE_UNKNOWN` severity to `warning`
@@ -310,8 +343,8 @@ Verified by: `cargo test --test validation pathway`
 
 #### Scenario: Unbound codes are untouched
 - **WHEN** a profile binds only `OBLIGATION_UNBACKED` and validation also finds
-  `ORPHAN_NODE`
-- **THEN** the `ORPHAN_NODE` findings keep their declared severity
+  `UNREFERENCED`
+- **THEN** the `UNREFERENCED` findings keep their declared severity
 
 ### Requirement: Findings the pathway pass cannot resolve
 The severity-resolution pass SHALL leave a finding untouched when it cannot be resolved,
@@ -447,20 +480,21 @@ Verified by: `cargo test --test validation hint`
 - **THEN** the report includes it — a hint is reported, never dropped
 
 ### Requirement: Per-kind orphan exemption
-Where the profile marks a node kind `orphan_ok: true`, core SHALL NOT emit `ORPHAN_NODE`
-for nodes of that kind. The exemption is policy about the kind — some kinds legitimately
-enter the register unconnected — and SHALL NOT affect any other validator or query:
-`query orphans` still reports such nodes as the ask-time fact they are.
+Where the profile marks a node kind `orphan_ok: true`, core SHALL NOT emit
+`UNREFERENCED` or `UNTRACED` for nodes of that kind. The exemption is policy
+about the kind — some kinds legitimately enter the register unconnected — and
+SHALL NOT affect any other validator or query: `query orphans` still reports
+such nodes as the ask-time fact they are.
 
 Verified by: `cargo test --test validation orphan_ok`
 
-#### Scenario: Exempt kind raises no ORPHAN_NODE
+#### Scenario: Exempt kind raises no directional orphan findings
 - **WHEN** the profile marks kind `test` with `orphan_ok: true` and a `test` node has no edges
-- **THEN** validation emits no `ORPHAN_NODE` for that node
+- **THEN** validation emits neither `UNREFERENCED` nor `UNTRACED` for that node
 
 #### Scenario: Non-exempt kinds are unaffected
 - **WHEN** the profile marks only `test` as `orphan_ok` and a `req` node has no edges
-- **THEN** validation emits `ORPHAN_NODE` for the `req` node
+- **THEN** validation emits both `UNREFERENCED` and `UNTRACED` for the `req` node
 
 ### Requirement: Coverage evidence state
 A `COVERAGE` finding SHALL carry a `state` distinguishing what the register can prove.
@@ -595,12 +629,14 @@ An operator key the core does not recognise SHALL be a load error (`CONFIG_ERROR
 not a silently inert condition.
 
 For `eq`, `not`, and `in`: comparison SHALL be type-aware — a string `"42"` does not
-match an integer `42`. For `lt`, `gt`, `lte`, and `gte`, two strings SHALL compare
-lexicographically and two integers SHALL compare numerically. This orders canonical
-`YYYY-MM-DD` dates chronologically. Missing attrs, mixed types, floats, and other JSON
-types SHALL not compare and the condition SHALL fail. For `matches`: the value SHALL be
-coerced to a string before matching; a non-string attr that cannot be represented as text
-SHALL not match.
+match an integer `42`. For `lt`, `gt`, `lte`, and `gte`: the threshold value in the
+profile SHALL be an integer or a string; any other type (array, object, boolean, null,
+float) SHALL be a load error (`CONFIG_ERROR`). At evaluation time, two strings SHALL
+compare lexicographically and two integers SHALL compare numerically. This orders
+canonical `YYYY-MM-DD` dates chronologically. A missing attr or a type mismatch between
+the node's attr and the threshold SHALL not compare and the condition SHALL fail.
+For `matches`: the value SHALL be coerced to a string before matching; a non-string attr
+that cannot be represented as text SHALL not match.
 
 For `present`: only existence is checked, not the value. `present: true` on an attr
 whose value is an empty string or zero passes — the attr exists.
@@ -658,3 +694,134 @@ Verified by: `cargo test --test validation constraint`
 #### Scenario: Type-aware comparison
 - **WHEN** `expect: { count: { eq: "42" } }` and node attr `count` is integer `42`
 - **THEN** the condition fails (string "42" does not match integer 42)
+
+### Requirement: Finding suppression
+A profile MAY declare `SUPPRESS` entries in its `validations` list. Each entry
+names a finding `code` and optionally a `node_ids` list. When `node_ids` is
+present, only findings matching both the code and a listed `node_id` are
+suppressed. When `node_ids` is absent, all findings of that code are
+suppressed.
+
+Suppression SHALL be applied after severity resolution (profile overrides and
+pathway demotion) and after `--strict` promotion, before the exit-code
+decision. A suppressed finding:
+
+- SHALL NOT count toward exit code 1.
+- SHALL carry `suppressed: true` in JSON output.
+- SHALL be omitted from plain and rich output.
+- SHALL retain its resolved severity, code, message, and provenance in JSON.
+
+A suppress entry naming `CONFIG_ERROR` SHALL be rejected at load time. A
+profile that silences configuration errors would defeat the invariant that
+unreadable input is reported, never dropped.
+
+Multiple suppress entries for the same code SHALL be honoured independently:
+their `node_ids` lists merge (union). A suppress-all (no `node_ids`) for a
+code supersedes any ID-specific entry for the same code.
+
+`--strict` SHALL NOT unsuppress findings. Suppression is an explicit
+declaration that a finding is structurally expected; `--strict` promotes
+severity, not policy.
+
+Verified by: `cargo test --test validation suppress`
+
+#### Scenario: Suppress all findings of a code
+- **WHEN** the profile suppresses `VACANCY` with no `node_ids` and validation
+  produces 59 VACANCY findings
+- **THEN** all 59 are suppressed: omitted from plain output, present in JSON
+  with `suppressed: true`, and do not affect exit code
+
+#### Scenario: Suppress specific node IDs
+- **WHEN** the profile suppresses `VACANCY` with `node_ids: [UN-1, UN-2]` and
+  validation produces VACANCY findings for UN-1, UN-2, and UN-3
+- **THEN** UN-1 and UN-2 are suppressed; UN-3 is not
+
+#### Scenario: Suppress-all supersedes an ID-specific entry
+- **WHEN** the profile declares `SUPPRESS: {code: VACANCY, node_ids: [UN-1]}`
+  and also `SUPPRESS: {code: VACANCY}`, and VACANCY findings exist for UN-1
+  and UN-2
+- **THEN** both findings are suppressed and no `SUPPRESS_UNUSED` is emitted for
+  either entry
+
+#### Scenario: Suppressed finding keeps its resolved fields in JSON
+- **WHEN** a `VACANCY` finding for UN-1 at severity `error` is suppressed and
+  rendered as JSON
+- **THEN** the entry carries `"suppressed": true` alongside its `severity`,
+  `code`, `message`, `file`, `line`, and `node_id`, unchanged from the
+  unsuppressed rendering
+
+#### Scenario: Suppressed finding does not affect exit code
+- **WHEN** all error-severity findings are suppressed
+- **THEN** the exit code is 0
+
+#### Scenario: Strict does not unsuppress
+- **WHEN** `--strict` is passed and a warning-severity finding is suppressed
+- **THEN** the finding remains suppressed (not promoted and un-suppressed)
+
+#### Scenario: CONFIG_ERROR suppression rejected at load
+- **WHEN** the profile declares `SUPPRESS: {code: CONFIG_ERROR}`
+- **THEN** the loader rejects the profile
+
+### Requirement: SUPPRESS_UNUSED built-in code
+Core SHALL provide the built-in code `SUPPRESS_UNUSED` (info by default),
+emitted by core, carrying no `node_id` and naming the profile as provenance,
+as configuration-level findings do.
+
+After finding collection and before severity resolution, core SHALL check each
+suppress entry at `(code, node_id)` granularity. A suppress entry whose
+selector matched no finding SHALL produce one `SUPPRESS_UNUSED` finding. The
+message SHALL state what the core knows: whether the code is a built-in
+validator code, whether any finding carried it this run (even if `node_ids`
+did not match), and which `node_ids` went unmatched. The core SHALL NOT claim
+to distinguish a typo from a dormant suppression — it cannot know an
+adapter's full code vocabulary, only what appeared this run.
+
+`SUPPRESS_UNUSED` defaults to info because the observation is about profile
+hygiene, not register correctness. It is an ordinary code: a profile MAY
+override its severity, and `--strict` promotes it when it arrives at
+`warning`, so a profile that overrides it to `warning` gates stale
+suppressions under `--strict`. Unused detection therefore runs before
+severity resolution — a `SUPPRESS_UNUSED` emitted after the override pass
+could never be promoted.
+
+Unused detection SHALL run once. The resulting `SUPPRESS_UNUSED` findings are
+then subject to suppression through the normal mechanism, which makes
+self-reference deterministic without special-casing.
+
+Verified by: `cargo test --test validation suppress_unused`
+
+#### Scenario: Unmatched suppress produces SUPPRESS_UNUSED
+- **WHEN** the profile suppresses `TYPO_CODE` and no finding with that code
+  was emitted
+- **THEN** validation emits a `SUPPRESS_UNUSED` info naming the unmatched code
+  and stating it is not a built-in code and no finding carried it
+
+#### Scenario: Dormant built-in suppress produces SUPPRESS_UNUSED
+- **WHEN** the profile suppresses `VACANCY` and validation produces zero
+  VACANCY findings
+- **THEN** validation emits a `SUPPRESS_UNUSED` info stating VACANCY is a
+  built-in code that matched no finding
+
+#### Scenario: Node-id-specific unmatched suppress
+- **WHEN** the profile suppresses `VACANCY` with `node_ids: [UN-1]` and
+  VACANCY findings exist for UN-2 and UN-3 but not UN-1
+- **THEN** validation emits a `SUPPRESS_UNUSED` info for the UN-1 selector,
+  stating the code was emitted but not for that node
+
+#### Scenario: SUPPRESS_UNUSED names the profile as provenance
+- **WHEN** a `SUPPRESS_UNUSED` finding is emitted
+- **THEN** it carries no `node_id` and its provenance names the profile, not a
+  register file
+
+#### Scenario: SUPPRESS_UNUSED is overridable and strict-promotable
+- **WHEN** the profile sets `SUPPRESS_UNUSED` severity to `warning`, one
+  suppress entry matches nothing, and validation runs with `--strict`
+- **THEN** the `SUPPRESS_UNUSED` finding is promoted to `error` and the exit
+  code is 1
+
+#### Scenario: SUPPRESS_UNUSED is itself suppressible
+- **WHEN** the profile declares `SUPPRESS: {code: SUPPRESS_UNUSED}` and two
+  other suppress entries match no findings
+- **THEN** validation emits two `SUPPRESS_UNUSED` findings (one per stale
+  entry), both suppressed, and the SUPPRESS_UNUSED suppress entry is itself
+  used (no further SUPPRESS_UNUSED emitted for it)

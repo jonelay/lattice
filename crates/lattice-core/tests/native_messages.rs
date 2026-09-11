@@ -14,6 +14,7 @@ use lattice_core::document::ingest_document;
 use lattice_core::output::{output_result, strip_ansi};
 use lattice_core::summary::build_summary;
 use lattice_core::trace::build_trace_report;
+use lattice_core::types::SummaryReport;
 use lattice_core::validate::validate;
 use serde_json::{Value, json};
 
@@ -251,7 +252,11 @@ fn summary_rollup_keys_are_json_scalars() {
                    "attrs": {"status": true, "file": "a.md"},
                    "provenance": {"file": "a.md", "line": 1}}],
     }));
-    let report = build_summary(&profile, &graph).expect("summary builds");
+    let SummaryReport::Configured(report) =
+        build_summary(&profile, &graph).expect("summary builds")
+    else {
+        panic!("a SUMMARY config selects the rollup")
+    };
     assert!(
         report.status_keys.iter().any(|k| k == "true"),
         "keys were {:?}",

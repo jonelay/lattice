@@ -11,8 +11,8 @@ mod common;
 
 use common::{Case, MINIMAL_PROFILE, binary, code, stderr, stdout};
 
-/// A well-formed document with one node that has no edges: one `ORPHAN_NODE`
-/// warning, so the register is clean at the default severities.
+/// A well-formed document with one node that has no edges: `UNREFERENCED` and
+/// `UNTRACED` warnings, so the register is clean at the default severities.
 const CLEAN_DOCUMENT: &str = r#"{"interface_version": "1.0",
   "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {},
              "provenance": {"file": "r.md", "line": 1}}]}"#;
@@ -31,7 +31,7 @@ fn a_clean_register_exits_zero() {
     let case = Case::emitting(CLEAN_DOCUMENT);
     let output = case.run(&["validate", "--format", "plain"]);
     assert_eq!(code(&output), 0, "{}", stderr(&output));
-    assert!(stdout(&output).contains("WARNING ORPHAN_NODE"));
+    assert!(stdout(&output).contains("WARNING UNREFERENCED"));
 }
 
 #[test]
@@ -261,18 +261,6 @@ fn summary_honours_a_profile_override_on_an_adapter_code() {
 // Requirement: Summary subcommand
 
 #[test]
-fn a_profile_with_no_summary_config_exits_two() {
-    let case = Case::emitting(CLEAN_DOCUMENT);
-    let output = case.run(&["summary", "--format", "plain"]);
-
-    assert_eq!(code(&output), 2);
-    assert_eq!(
-        stderr(&output).trim(),
-        "Error: profile has no SUMMARY validation config"
-    );
-}
-
-#[test]
 fn a_profile_with_two_summary_configs_exits_two_rather_than_choosing() {
     let case = Case::with_profile(
         &summary_profile(
@@ -316,7 +304,8 @@ fn the_format_defaults_to_plain_when_stdout_is_not_a_terminal() {
     let output = case.run(&["validate"]);
     assert_eq!(
         stdout(&output).trim(),
-        "WARNING ORPHAN_NODE r.md:1 node 'REQ-1' has no edges",
+        "WARNING UNREFERENCED r.md:1 node 'REQ-1' has no incoming edges\n\
+         WARNING UNTRACED r.md:1 node 'REQ-1' has no outgoing edges",
         "rich would have padded the columns"
     );
 }
@@ -359,11 +348,11 @@ fn trace_renders_its_report_in_each_format() {
 
     let plain = stdout(&case.run(&["trace", "--format", "plain"]));
     assert!(plain.contains("REQ-1"), "{plain}");
-    assert!(plain.contains("edges:0 findings:1"), "{plain}");
+    assert!(plain.contains("edges:0 findings:2"), "{plain}");
 
     let rich = stdout(&case.run(&["trace", "--format", "rich"]));
     assert!(rich.contains("Key Attr"), "{rich}");
-    assert!(rich.contains("1 entries, 1 warning(s)"), "{rich}");
+    assert!(rich.contains("1 entries, 2 warning(s)"), "{rich}");
 }
 
 // Requirement: Exit codes for trace
@@ -534,9 +523,9 @@ fn the_rollup_carries_a_column_for_every_declared_status() {
         serde_json::from_str(&stdout(&case.run(&["summary", "--format", "json"]))).unwrap();
 
     // A declared status no node carries is a zero column, not an absent key.
-    assert_eq!(parsed["files"][0]["blocked"], 0);
-    assert_eq!(parsed["files"][0]["todo"], 0);
-    assert_eq!(parsed["files"][0]["done"], 1);
+    assert_eq!(parsed["groups"][0]["blocked"], 0);
+    assert_eq!(parsed["groups"][0]["todo"], 0);
+    assert_eq!(parsed["groups"][0]["done"], 1);
     assert_eq!(parsed["totals"]["total"], 1);
 }
 
@@ -660,13 +649,14 @@ fn an_adapter_that_writes_a_document_then_fails_is_still_exit_two() {
 
 #[test]
 fn hint_only_findings_exit_zero_with_and_without_strict() {
-    let profile =
-        format!("{MINIMAL_PROFILE}validations:\n  - ORPHAN_NODE:\n      severity: hint\n");
+    let profile = format!(
+        "{MINIMAL_PROFILE}validations:\n  - UNREFERENCED:\n      severity: hint\n  - UNTRACED:\n      severity: hint\n"
+    );
     let case = Case::with_profile(&profile, &format!("cat <<'DOC'\n{CLEAN_DOCUMENT}\nDOC"));
 
     let output = case.run(&["validate", "--format", "plain"]);
     assert_eq!(code(&output), 0, "{}", stderr(&output));
-    assert!(stdout(&output).contains("HINT ORPHAN_NODE"));
+    assert!(stdout(&output).contains("HINT UNREFERENCED"));
     assert_eq!(
         code(&case.run(&["validate", "--strict", "--format", "plain"])),
         0,
@@ -725,4 +715,107 @@ fn case_resolve(case: &Case) -> std::process::Output {
         .arg(&case.profile)
         .output()
         .expect("the lattice binary runs")
+}
+
+// Requirement: Exit codes
+
+/// The minimal profile plus the given `validations` entries.
+fn suppressing(validations: &str) -> String {
+    format!("{MINIMAL_PROFILE}validations:\n{validations}")
+}
+
+/// Two dangling edges from one node: two error-severity VACANCYs, both with
+/// `node_id` REQ-1, distinguishable only by their target.
+const TWO_ERRORS_DOCUMENT: &str = r#"{"interface_version": "1.0",
+  "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {},
+             "provenance": {"file": "r.md", "line": 1}},
+            {"id": "REQ-2", "kind": "req", "attrs": {},
+             "provenance": {"file": "r.md", "line": 2}}],
+  "edges": [{"src": "REQ-1", "tgt": "REQ-9", "kind": "derives",
+             "provenance": {"file": "r.md", "line": 1}},
+            {"src": "REQ-2", "tgt": "REQ-8", "kind": "derives",
+             "provenance": {"file": "r.md", "line": 2}}]}"#;
+
+#[test]
+fn suppressed_errors_do_not_gate() {
+    let case = Case::with_profile(
+        &suppressing("  - SUPPRESS: {code: VACANCY}\n"),
+        &format!("cat <<'DOC'\n{ERROR_DOCUMENT}\nDOC"),
+    );
+    let output = case.run(&["validate", "--format", "plain"]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert!(!stdout(&output).contains("VACANCY"), "{}", stdout(&output));
+
+    let json = case.run(&["validate", "--format", "json"]);
+    assert_eq!(code(&json), 0);
+    let parsed: serde_json::Value = serde_json::from_str(&stdout(&json)).unwrap();
+    let vacancy = parsed["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["code"] == "VACANCY")
+        .expect("json keeps the audit trail");
+    assert_eq!(vacancy["suppressed"], true);
+    assert_eq!(vacancy["severity"], "error");
+
+    // trace gates on the same terms.
+    assert_eq!(code(&case.run(&["trace", "--format", "plain"])), 0);
+}
+
+#[test]
+fn one_unsuppressed_error_still_gates() {
+    let case = Case::with_profile(
+        &suppressing("  - SUPPRESS: {code: VACANCY, node_ids: [REQ-1]}\n"),
+        &format!("cat <<'DOC'\n{TWO_ERRORS_DOCUMENT}\nDOC"),
+    );
+    let output = case.run(&["validate", "--format", "plain"]);
+    assert_eq!(code(&output), 1);
+    let shown = stdout(&output);
+    assert!(shown.contains("REQ-8"), "{shown}");
+    assert!(!shown.contains("REQ-9"), "{shown}");
+}
+
+#[test]
+fn strict_promoted_then_suppressed_does_not_gate() {
+    let case = Case::with_profile(
+        &suppressing("  - SUPPRESS: {code: UNREFERENCED}\n  - SUPPRESS: {code: UNTRACED}\n"),
+        &format!("cat <<'DOC'\n{CLEAN_DOCUMENT}\nDOC"),
+    );
+    let output = case.run(&["validate", "--strict", "--format", "json"]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    let parsed: serde_json::Value = serde_json::from_str(&stdout(&output)).unwrap();
+    for finding in parsed["findings"].as_array().unwrap() {
+        assert_eq!(finding["severity"], "error", "strict still promoted it");
+        assert_eq!(finding["suppressed"], true);
+    }
+}
+
+#[test]
+fn a_stale_suppress_entry_is_reported_at_info_and_exits_zero() {
+    let case = Case::with_profile(
+        &suppressing("  - SUPPRESS: {code: VACANCY}\n"),
+        &format!("cat <<'DOC'\n{CLEAN_DOCUMENT}\nDOC"),
+    );
+    let output = case.run(&["validate", "--format", "plain"]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert!(
+        stdout(&output).contains("INFO SUPPRESS_UNUSED <profile>:0"),
+        "{}",
+        stdout(&output)
+    );
+}
+
+#[test]
+fn a_profile_suppressing_config_error_exits_two() {
+    let case = Case::with_profile(
+        &suppressing("  - SUPPRESS: {code: CONFIG_ERROR}\n"),
+        &format!("cat <<'DOC'\n{CLEAN_DOCUMENT}\nDOC"),
+    );
+    let output = case.run(&["validate", "--format", "plain"]);
+    assert_eq!(code(&output), 2);
+    assert!(
+        stderr(&output).contains("CONFIG_ERROR"),
+        "{}",
+        stderr(&output)
+    );
 }

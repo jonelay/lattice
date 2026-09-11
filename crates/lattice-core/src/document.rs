@@ -121,6 +121,26 @@ fn take_string(mapping: &mut Value, key: &str, where_: &str) -> Result<String, C
     }
 }
 
+/// An absent key and an explicit null both read as `None`; any other non-string
+/// is an error.
+fn take_optional_string(
+    mapping: &mut Value,
+    key: &str,
+    where_: &str,
+) -> Result<Option<String>, ContractError> {
+    let Value::Object(object) = mapping else {
+        return err(format!(
+            "{where_}: expected an object, got {}",
+            type_name(mapping)
+        ));
+    };
+    match object.remove(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(text)) => Ok(Some(text)),
+        Some(_) => err(format!("{where_}: '{key}' must be a string or null")),
+    }
+}
+
 fn take_provenance(entry: &mut Value, where_: &str) -> Result<Provenance, ContractError> {
     let mut raw = take(entry, "provenance", where_)?;
     let provenance_where = format!("{where_} provenance");
@@ -258,7 +278,7 @@ fn ingest_edges(graph: &mut LatticeGraph, document: &mut Value) -> Result<(), Co
 /// Attach each pathway, refusing an invalid one rather than reporting it.
 ///
 /// Validity is the adapter's job — it read the declaration and can name the file.
-/// An invalid pathway arriving here means the adapter is broken, and an pathway whose
+/// An invalid pathway arriving here means the adapter is broken, and a pathway whose
 /// `current` is outside its order would place every bound finding both before and
 /// after it.
 fn ingest_axes(graph: &mut LatticeGraph, document: &mut Value) -> Result<(), ContractError> {
@@ -307,24 +327,8 @@ fn ingest_issues(graph: &mut LatticeGraph, document: &mut Value) -> Result<(), C
         let Some(severity) = Severity::parse(&raw_severity) else {
             return err(format!("{where_}: unknown severity '{raw_severity}'"));
         };
-        let node_id = match entry
-            .as_object_mut()
-            .expect("severity extraction established an object")
-            .remove("node_id")
-        {
-            None | Some(Value::Null) => None,
-            Some(Value::String(text)) => Some(text),
-            Some(_) => return err(format!("{where_}: 'node_id' must be a string or null")),
-        };
-        let state = match entry
-            .as_object_mut()
-            .expect("severity extraction established an object")
-            .remove("state")
-        {
-            None | Some(Value::Null) => None,
-            Some(Value::String(text)) => Some(text),
-            Some(_) => return err(format!("{where_}: 'state' must be a string or null")),
-        };
+        let node_id = take_optional_string(&mut entry, "node_id", &where_)?;
+        let state = take_optional_string(&mut entry, "state", &where_)?;
         let mut issue = Issue::new(
             severity,
             take_string(&mut entry, "code", &where_)?,

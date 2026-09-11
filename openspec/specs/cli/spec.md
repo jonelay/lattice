@@ -6,10 +6,11 @@ and exit code semantics.
 ## Requirements
 ### Requirement: CLI entry point
 `lattice` SHALL be a CLI with subcommands. The subcommands are `validate`,
-`summary`, `trace`, and the `query` family; all take `--profile`, `--adapter`,
-`--target`, and `--format`. `validate` and `trace` additionally take `--strict`;
-`summary` and `query` do not — `summary` runs no validation pass, and only
-error-severity adapter issues affect its exit code; `query` produces no findings
+`summary`, `trace`, `coverage`, and the `query` family; all take `--profile`,
+`--adapter`, `--target`, and `--format`. `validate` and `trace` additionally
+take `--strict`; `summary`, `coverage`, and `query` do not — `summary` runs no
+validation pass, and only error-severity adapter issues affect its exit code;
+`coverage` is a report that produces no findings; `query` produces no findings
 at all, so no severity affects its exit code (see the `query` capability).
 
 The adapter issues `summary` reports and exits on SHALL carry resolved severities —
@@ -29,6 +30,10 @@ said is wrong.
 #### Scenario: Run trace
 - **WHEN** the user runs `lattice trace --profile path/to/profile.yaml --adapter ./path/to/adapter --target /path/to/repo`
 - **THEN** lattice loads the profile, runs the adapter program and ingests its document, validates the graph, and outputs the trace report
+
+#### Scenario: Run coverage
+- **WHEN** the user runs `lattice coverage --profile path/to/profile.yaml --adapter ./path/to/adapter --target /path/to/repo`
+- **THEN** lattice loads the profile, runs the adapter program and ingests its document, and reports per-kind coverage statistics
 
 #### Scenario: Run query
 - **WHEN** the user runs `lattice query counts --profile path/to/profile.yaml --adapter ./path/to/adapter --target /path/to/repo`
@@ -72,12 +77,18 @@ exits non-zero, adapter output that cannot be parsed or does not satisfy the int
 schema, or an interface version the core does not support). With `--strict` (on the
 commands that take it), warnings are promoted to errors before the exit code decision.
 
+A suppressed finding SHALL NOT count toward exit code 1, whatever its severity and
+whether or not `--strict` promoted it. Suppression runs after promotion and before the
+exit-code decision, so the count that decides between 0 and 1 is the error-severity
+findings that are not suppressed. A suppressed finding is still reported in `json`
+(see the `output` capability); it is excluded from the gate, not from the record.
+
 Exit 2 distinguishes "lattice is misconfigured" from "the register has errors", so a
 caller can tell a broken setup from a genuine finding.
 
-`query` subcommands never exit 1: they produce no findings, so their exit codes are
-0 (answered) or 2 (could not run or could not pose the question) only — the
-three-valued contract stays with `validate`, `summary`, and `trace`.
+`query` subcommands and `coverage` never exit 1: they produce no findings, so their
+exit codes are 0 (answered) or 2 (could not run or could not pose the question) only —
+the three-valued contract stays with `validate`, `summary`, and `trace`.
 
 Verified by: `cargo test --test cli exit` and `cargo test --test query exit`
 
@@ -88,6 +99,20 @@ Verified by: `cargo test --test cli exit` and `cargo test --test query exit`
 #### Scenario: Errors found
 - **WHEN** validation produces errors
 - **THEN** exit code is 1
+
+#### Scenario: Suppressed errors do not gate
+- **WHEN** validation produces error-severity findings and every one of them is
+  suppressed by the profile
+- **THEN** exit code is 0
+
+#### Scenario: One unsuppressed error still gates
+- **WHEN** validation produces two error-severity findings and the profile
+  suppresses one of them
+- **THEN** exit code is 1
+
+#### Scenario: Strict-promoted then suppressed does not gate
+- **WHEN** `--strict` promotes a warning to error and that finding is suppressed
+- **THEN** exit code is 0
 
 #### Scenario: Configuration failure
 - **WHEN** `--adapter` names a program that cannot be run
@@ -100,6 +125,10 @@ Verified by: `cargo test --test cli exit` and `cargo test --test query exit`
 
 #### Scenario: Query never exits 1
 - **WHEN** a `query` subcommand runs against a register whose adapter emitted error-severity issues
+- **THEN** the exit code is 0, with the issues reported on stderr
+
+#### Scenario: Coverage never exits 1
+- **WHEN** `lattice coverage` runs against a register whose adapter emitted error-severity issues
 - **THEN** the exit code is 0, with the issues reported on stderr
 
 ### Requirement: Adapter loading

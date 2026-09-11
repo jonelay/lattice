@@ -64,6 +64,7 @@ fn report(
 }
 const PROFILE: &str = "edge_kinds:\n  links:\n    allowed: [[z:item, a:item]]\nvalidations:\n  - COVERAGE: {target_kind: 'a:item', edge_kind: links, severity: hint}\n";
 
+// Requirement: Read a fuse manifest
 #[test]
 fn manifest_order_paths_and_invalid_inputs() {
     let dir = Scratch::new();
@@ -92,6 +93,9 @@ fn manifest_order_paths_and_invalid_inputs() {
     }
 }
 
+// Requirement: Source-qualified merge with colon separator
+// Requirement: Pathway preservation
+// Requirement: Tri-format output
 #[test]
 fn assembly_qualifies_ids_kinds_edges_pathways_and_preserves_attributes() {
     let dir = Scratch::new();
@@ -122,6 +126,7 @@ fn assembly_qualifies_ids_kinds_edges_pathways_and_preserves_attributes() {
     }
 }
 
+// Requirement: Standard validators on the composed graph
 #[test]
 fn composed_ids_are_validated_against_source_profile_patterns() {
     let dir = Scratch::new();
@@ -155,6 +160,8 @@ fn composed_ids_are_validated_against_source_profile_patterns() {
     );
 }
 
+// Requirement: Cross-source edge resolution via allowed pairings
+// Requirement: Standard validators on the composed graph
 #[test]
 fn duplicates_ambiguity_dangling_coverage_and_strict() {
     let dir = Scratch::new();
@@ -207,6 +214,7 @@ fn duplicates_ambiguity_dangling_coverage_and_strict() {
     );
 }
 
+// Requirement: Standard validators on the composed graph
 #[test]
 fn source_findings_retain_attribution_and_are_promoted_after_collection() {
     let dir = Scratch::new();
@@ -225,6 +233,7 @@ fn source_findings_retain_attribution_and_are_promoted_after_collection() {
     assert_eq!(report.findings[1].issue.node_id, None);
 }
 
+// Requirement: Standard validators on the composed graph
 #[test]
 fn coverage_with_undeclared_edge_kind_produces_config_error() {
     let dir = Scratch::new();
@@ -242,6 +251,7 @@ fn coverage_with_undeclared_edge_kind_produces_config_error() {
     );
 }
 
+// Requirement: Standard validators on the composed graph
 #[test]
 fn coverage_undeclared_edge_kind_observed_in_edges_produces_config_error() {
     let dir = Scratch::new();
@@ -265,8 +275,9 @@ fn coverage_undeclared_edge_kind_observed_in_edges_produces_config_error() {
     );
 }
 
+// Requirement: Standard validators on the composed graph
 #[test]
-fn coverage_last_wins_severity_across_repeated_entries() {
+fn coverage_repeated_entries_share_per_code_severity() {
     let dir = Scratch::new();
     let profile = "edge_kinds:\n  links:\n    allowed: [[z:item, a:item]]\nvalidations:\n  - COVERAGE: {target_kind: 'a:item', edge_kind: links, severity: error}\n  - COVERAGE: {target_kind: 'a:item', edge_kind: links, severity: hint}\n";
     let z = trace(json!([entry("Z", json!([]))]));
@@ -283,10 +294,11 @@ fn coverage_last_wins_severity_across_repeated_entries() {
         coverage_findings
             .iter()
             .all(|f| f.issue.severity == lattice_core::types::Severity::Hint),
-        "last-wins severity should be hint"
+        "per-code severity should be hint (last-declared)"
     );
 }
 
+// Requirement: Standard validators on the composed graph
 #[test]
 fn coverage_unknown_state_and_hint_through_fuse() {
     let dir = Scratch::new();
@@ -308,6 +320,7 @@ fn coverage_unknown_state_and_hint_through_fuse() {
     );
 }
 
+// Requirement: Standard validators on the composed graph
 #[test]
 fn coverage_where_filters_target_nodes() {
     let dir = Scratch::new();
@@ -329,6 +342,7 @@ fn coverage_where_filters_target_nodes() {
     );
 }
 
+// Requirement: Standard validators on the composed graph
 #[test]
 fn coverage_where_null_is_treated_as_absent() {
     let dir = Scratch::new();
@@ -342,6 +356,8 @@ fn coverage_where_null_is_treated_as_absent() {
     );
 }
 
+// Requirement: Read a fuse profile
+// Requirement: Run each source through lattice trace
 #[test]
 fn rejects_bad_profiles_and_traces() {
     let dir = Scratch::new();
@@ -377,6 +393,7 @@ fn cli(path: &Path, format: &str) -> std::process::Output {
         .output()
         .unwrap()
 }
+// Requirement: Fuse exit codes
 #[test]
 fn cli_bad_manifest_and_source_failure_are_exit_two_in_every_format() {
     let dir = Scratch::new();
@@ -389,6 +406,7 @@ fn cli_bad_manifest_and_source_failure_are_exit_two_in_every_format() {
         assert_eq!(cli(&dir.0.join("missing"), format).status.code(), Some(2));
     }
 }
+// Requirement: Source-qualified merge with colon separator
 #[test]
 fn mini_fuse_live_fixture_has_real_edges_findings_and_pathways() {
     let path =
@@ -418,6 +436,7 @@ fn mini_fuse_live_fixture_has_real_edges_findings_and_pathways() {
     );
 }
 
+// Requirement: Standard validators on the composed graph
 #[test]
 fn standard_constraints_run_on_the_composed_graph() {
     let dir = Scratch::new();
@@ -439,6 +458,7 @@ fn standard_constraints_run_on_the_composed_graph() {
     assert_eq!(finding.issue.node_id.as_deref(), Some("a:A"));
 }
 
+// Requirement: Source-qualified merge with colon separator
 #[test]
 fn local_edges_repeated_allowed_pairs_and_raw_colons_keep_identity() {
     let dir = Scratch::new();
@@ -460,6 +480,7 @@ fn local_edges_repeated_allowed_pairs_and_raw_colons_keep_identity() {
     assert_eq!(report.edges[1].tgt, "a:A");
 }
 
+// Requirement: Cross-source edge resolution via allowed pairings
 #[test]
 fn target_must_match_an_allowed_kind_even_if_the_raw_id_exists() {
     let dir = Scratch::new();
@@ -471,12 +492,7 @@ fn target_must_match_an_allowed_kind_even_if_the_raw_id_exists() {
         false,
     );
     assert_eq!(report.exit_code(), 1);
-    assert!(
-        report
-            .findings
-            .iter()
-            .any(|f| f.issue.code == "VACANCY")
-    );
+    assert!(report.findings.iter().any(|f| f.issue.code == "VACANCY"));
     assert!(report.edges[0].target_kind.is_none());
 }
 
@@ -488,6 +504,7 @@ fn executable(dir: &Scratch, name: &str, text: &str) -> PathBuf {
     path
 }
 
+// Requirement: Run each source through lattice trace
 #[cfg(unix)]
 #[test]
 fn failed_trace_never_yields_a_partial_graph_and_keeps_healthy_findings() {
@@ -512,6 +529,7 @@ fn failed_trace_never_yields_a_partial_graph_and_keeps_healthy_findings() {
     assert_eq!(report.findings[1].source.as_deref(), Some("a"));
 }
 
+// Requirement: Run each source through lattice trace
 #[cfg(unix)]
 #[test]
 fn trace_rejection_through_fuse_produces_source_failure() {
@@ -550,6 +568,7 @@ fn trace_rejection_through_fuse_produces_source_failure() {
     }
 }
 
+// Requirement: Run each source through lattice trace
 #[cfg(unix)]
 #[test]
 fn mixed_success_findings_preserve_manifest_order() {
@@ -593,6 +612,8 @@ fn mixed_success_findings_preserve_manifest_order() {
     }
 }
 
+// Requirement: Run each source through lattice trace
+// Requirement: Standard validators on the composed graph
 #[cfg(unix)]
 #[test]
 fn mixed_success_with_strict_promotes_healthy_warnings() {
@@ -632,6 +653,8 @@ fn mixed_success_with_strict_promotes_healthy_warnings() {
     }
 }
 
+// Requirement: Run each source through lattice trace
+// Requirement: Fuse exit codes
 #[cfg(unix)]
 #[test]
 fn malformed_trace_and_unexecutable_binary_are_exit_two() {
@@ -667,6 +690,8 @@ fn malformed_trace_and_unexecutable_binary_are_exit_two() {
     );
 }
 
+// Requirement: Fuse exit codes
+// Requirement: Tri-format output
 #[cfg(unix)]
 #[test]
 fn cli_clean_warning_strict_and_source_errors_have_correct_exit_codes() {
@@ -710,4 +735,193 @@ fn cli_clean_warning_strict_and_source_errors_have_correct_exit_codes() {
             );
         }
     }
+}
+
+// Requirement: Read a fuse profile
+// Requirement: Suppression in program composition
+
+const SOURCE_PROFILE: &str = "name: local\nprofile_version: '1.0.0'\nnode_kinds: {item: {id_pattern: '.*', orphan_ok: true}}\nedge_kinds: {}\n";
+
+fn findings_json(report: &lattice_core::types::FuseReport) -> Vec<Value> {
+    let value: Value = serde_json::from_str(&output_result(report, "json").unwrap()).unwrap();
+    value["findings"].as_array().unwrap().clone()
+}
+
+#[test]
+fn fuse_profile_with_a_suppress_entry_loads_and_rejects_config_error_suppression() {
+    let dir = Scratch::new();
+    load_fuse_profile(&dir.write(
+        "ok.yaml",
+        "edge_kinds: {}\nvalidations:\n  - SUPPRESS: {code: VACANCY}\n",
+    ))
+    .expect("a SUPPRESS entry is accepted on a fuse profile");
+    let error = load_fuse_profile(&dir.write(
+        "bad.yaml",
+        "edge_kinds: {}\nvalidations:\n  - SUPPRESS: {code: CONFIG_ERROR}\n",
+    ))
+    .expect_err("CONFIG_ERROR cannot be suppressed at the fuse level either");
+    assert!(error.contains("CONFIG_ERROR"), "{error}");
+    let error = load_fuse_profile(&dir.write(
+        "typo.yaml",
+        "edge_kinds: {}\nvalidations:\n  - SUPPRESS: {code: VACANCY, node_id: [x]}\n",
+    ))
+    .expect_err("unknown keys are rejected");
+    assert!(error.contains("node_id"), "{error}");
+}
+
+#[test]
+fn suppress_source_level_suppression_survives_the_merge() {
+    let dir = Scratch::new();
+    dir.write("z.yaml", SOURCE_PROFILE);
+    dir.write("a.yaml", SOURCE_PROFILE);
+    let mut z = trace(json!([entry("Z", json!([]))]));
+    z["entries"][0]["findings"] = json!([{
+        "code": "UNTRACED", "severity": "error", "message": "m",
+        "file": "x", "line": 1, "suppressed": true
+    }]);
+    let report = report(&dir, z, trace(json!([])), "edge_kinds: {}", false);
+    assert_eq!(
+        report.exit_code(),
+        0,
+        "a source-suppressed error never gates"
+    );
+    let findings = findings_json(&report);
+    let untraced = findings.iter().find(|f| f["code"] == "UNTRACED").unwrap();
+    assert_eq!(untraced["suppressed"], true);
+    assert_eq!(untraced["source"], "z");
+    assert!(
+        !findings.iter().any(|f| f["code"] == "SUPPRESS_UNUSED"),
+        "the fuse profile declared nothing, so nothing is stale"
+    );
+    let plain = output_result(&report, "plain").unwrap();
+    assert!(!plain.contains("UNTRACED"), "{plain}");
+}
+
+#[test]
+fn suppress_fuse_level_entry_hides_cross_source_vacancies() {
+    let dir = Scratch::new();
+    let profile = format!("{PROFILE}  - SUPPRESS: {{code: VACANCY}}\n");
+    let report = report(
+        &dir,
+        trace(json!([entry("X", json!([edge("absent")]))])),
+        trace(json!([entry("A", json!([]))])),
+        &profile,
+        false,
+    );
+    assert_eq!(report.exit_code(), 0);
+    let findings = findings_json(&report);
+    let vacancy = findings.iter().find(|f| f["code"] == "VACANCY").unwrap();
+    assert_eq!(vacancy["suppressed"], true);
+    assert_eq!(vacancy["severity"], "error");
+    assert!(!findings.iter().any(|f| f["code"] == "SUPPRESS_UNUSED"));
+    for format in ["plain", "rich"] {
+        let text = output_result(&report, format).unwrap();
+        assert!(!text.contains("VACANCY"), "{format}: {text}");
+    }
+}
+
+#[test]
+fn suppress_fuse_level_node_ids_match_composed_ids() {
+    let dir = Scratch::new();
+    let profile = format!("{PROFILE}  - SUPPRESS: {{code: VACANCY, node_ids: ['z:X']}}\n");
+    let report = report(
+        &dir,
+        trace(json!([
+            entry("X", json!([edge("absent")])),
+            entry("Y", json!([edge("absent")]))
+        ])),
+        trace(json!([entry("A", json!([]))])),
+        &profile,
+        false,
+    );
+    assert_eq!(report.exit_code(), 1, "z:Y's vacancy still gates");
+    let findings = findings_json(&report);
+    let by_node = |id: &str| {
+        findings
+            .iter()
+            .find(|f| f["code"] == "VACANCY" && f["node_id"] == id)
+            .unwrap_or_else(|| panic!("no VACANCY for {id}"))
+            .clone()
+    };
+    assert_eq!(by_node("z:X")["suppressed"], true);
+    assert!(by_node("z:Y").get("suppressed").is_none());
+    assert!(!findings.iter().any(|f| f["code"] == "SUPPRESS_UNUSED"));
+}
+
+#[test]
+fn suppress_fuse_level_unmatched_entry_reports_against_the_fuse_profile() {
+    let dir = Scratch::new();
+    let profile = format!("{PROFILE}  - SUPPRESS: {{code: AMBIGUOUS_CROSS_REF}}\n");
+    let report = report(
+        &dir,
+        trace(json!([entry("Z", json!([edge("A")]))])),
+        trace(json!([entry("A", json!([]))])),
+        &profile,
+        false,
+    );
+    assert_eq!(report.exit_code(), 0);
+    let unused = report
+        .findings
+        .iter()
+        .find(|f| f.issue.code == "SUPPRESS_UNUSED")
+        .expect("a stale fuse-level entry is reported");
+    assert_eq!(unused.issue.severity, lattice_core::types::Severity::Info);
+    assert_eq!(unused.issue.provenance.file, "<fuse-profile>");
+    assert_eq!(unused.issue.node_id, None);
+    assert_eq!(unused.source, None);
+    assert!(
+        unused.issue.message.contains("AMBIGUOUS_CROSS_REF"),
+        "{}",
+        unused.issue.message
+    );
+}
+
+#[test]
+fn suppress_fuse_level_entry_does_not_reach_source_findings() {
+    // A source's UNTRACED is that source's to suppress: the fuse entry matches
+    // nothing the command itself collected, so it is stale, and the source
+    // finding keeps gating.
+    let dir = Scratch::new();
+    dir.write("z.yaml", SOURCE_PROFILE);
+    dir.write("a.yaml", SOURCE_PROFILE);
+    let mut z = trace(json!([entry("Z", json!([]))]));
+    z["entries"][0]["findings"] = json!([{
+        "code": "UNTRACED", "severity": "error", "message": "m", "file": "x", "line": 1
+    }]);
+    let report = report(
+        &dir,
+        z,
+        trace(json!([])),
+        "edge_kinds: {}\nvalidations:\n  - SUPPRESS: {code: UNTRACED}\n",
+        false,
+    );
+    assert_eq!(report.exit_code(), 1);
+    let findings = findings_json(&report);
+    let untraced = findings.iter().find(|f| f["code"] == "UNTRACED").unwrap();
+    assert!(untraced.get("suppressed").is_none());
+    assert!(findings.iter().any(|f| f["code"] == "SUPPRESS_UNUSED"));
+}
+
+#[test]
+fn suppress_strict_promotes_before_fuse_level_suppression() {
+    let dir = Scratch::new();
+    dir.write("z.yaml", SOURCE_PROFILE);
+    dir.write("a.yaml", SOURCE_PROFILE);
+    let profile =
+        format!("{PROFILE}  - VACANCY: {{severity: warning}}\n  - SUPPRESS: {{code: VACANCY}}\n");
+    let report = report(
+        &dir,
+        trace(json!([entry("X", json!([edge("absent")]))])),
+        trace(json!([entry("A", json!([]))])),
+        &profile,
+        true,
+    );
+    assert_eq!(report.exit_code(), 0);
+    let vacancy = report
+        .findings
+        .iter()
+        .find(|f| f.issue.code == "VACANCY")
+        .unwrap();
+    assert_eq!(vacancy.issue.severity, lattice_core::types::Severity::Error);
+    assert!(vacancy.issue.suppressed);
 }

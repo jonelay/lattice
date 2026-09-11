@@ -59,29 +59,62 @@ Verified by: `cargo test --test validation coverage_state`
 - **THEN** REQ-0401's coverage finding carries `state: "unverified"`
 
 ### Requirement: Summary subcommand
-`lattice summary` SHALL output a computed status rollup: for each spec file, count
-done/partial/todo/blocked spec-goals. Output follows the tri-format contract
-(plain/json/rich). The grouping node kind, status attr, and group-by attr come from the
-profile's `SUMMARY` validation config; `lattice summary` SHALL exit 2 when the profile
-declares no usable `SUMMARY` config, since it has nothing to roll up.
+`lattice summary` SHALL output a computed summary of the register. When the profile
+declares a `SUMMARY` validation config, the summary is the configured status-attr
+rollup: for each group, count nodes by status value. The grouping node kind, status
+attr, and group-by attr come from the profile's config.
 
-#### Scenario: Summary matches spec file counts
-- **WHEN** `lattice summary` runs against phase-sweep with the RM profile and adapter
-- **THEN** the output contains per-file counts matching the actual spec heading markers
+When the profile declares no `SUMMARY` config, `lattice summary` SHALL produce a
+default structural report instead of exiting 2. The structural report SHALL include:
 
-#### Scenario: Summary JSON format
-- **WHEN** `lattice summary --format=json` runs
-- **THEN** the output is a JSON object with a `files` array, each entry having `file`,
-  `done`, `partial`, `todo`, `blocked`, `total`, plus a `totals` object holding the
-  column sums
+- Node counts by kind (every kind declared in the profile, plus any undeclared kinds
+  observed in the graph)
+- Edge counts by kind, on the same terms
+- Finding tallies by code and resolved severity, computed from an internal validation
+  pass (without `--strict`); suppressed findings are left out
 
-#### Scenario: Profile has no SUMMARY config
-- **WHEN** `lattice summary` runs with a profile that declares no `SUMMARY` validation config
-- **THEN** lattice exits 2 with an error naming the missing config
+The structural report requires no profile configuration beyond the standard node and
+edge kind declarations. Its finding tallies are informational: an error-severity
+finding in the tally does not affect the exit code.
 
-Adapter issues SHALL be reported on stderr after the rollup regardless of severity, so a
-rollup computed from partially unreadable input says so. Only error-severity issues
-affect the exit code.
+When the profile declares a `SUMMARY` config that is unusable — a missing required
+key, a mistyped value, or more than one `SUMMARY` entry — `lattice summary` SHALL
+exit 2 rather than fall back, since a config the profile declared must not be
+silently discarded.
+
+Output follows the tri-format contract (plain/json/rich).
+
+Verified by: `cargo test --test summary`, and the summary scenarios in
+`cargo test --test cli` and `cargo test --test output`
+
+#### Scenario: Configured summary matches the register's counts
+- **WHEN** `lattice summary` runs against a profile with a `SUMMARY` config
+- **THEN** the output contains per-group counts matching the configured status-attr
+  pivot
+
+#### Scenario: Summary JSON format (configured)
+- **WHEN** `lattice summary --format=json` runs with a configured `SUMMARY`
+- **THEN** the output is a JSON object with a `groups` array — one entry per group,
+  keyed by the group-by attr and each status value plus `total` — and a `totals`
+  object holding the column sums
+
+#### Scenario: Zero-config structural report
+- **WHEN** `lattice summary` runs with a profile that declares no `SUMMARY` config
+- **THEN** lattice exits 0 and the output contains node counts by kind, edge counts by
+  kind, and finding tallies by code and severity
+
+#### Scenario: Zero-config JSON format
+- **WHEN** `lattice summary --format=json` runs with no `SUMMARY` config
+- **THEN** the output is a JSON object with `node_counts` and `edge_counts` maps and a
+  `finding_counts` array of `{code, severity, count}` entries
+
+#### Scenario: Multiple SUMMARY configs
+- **WHEN** `lattice summary` runs with a profile declaring two `SUMMARY` configs
+- **THEN** lattice exits 2 with an error
+
+Adapter issues SHALL be reported on stderr after the summary regardless of severity, so
+a summary computed from partially unreadable input says so. Only error-severity adapter
+issues affect the exit code.
 
 #### Scenario: Adapter errors surface after the rollup
 - **WHEN** the adapter emitted error-severity issues and the rollup is produced
@@ -92,8 +125,8 @@ affect the exit code.
 - **THEN** lattice prints the rollup, reports those warnings on stderr, and exits 0
 
 ### Requirement: Orphan detection
-The existing ORPHAN_NODE validator SHALL flag IDs that appear in edges but not as nodes
-(via VACANCY) and nodes with no connections (via ORPHAN_NODE). No new validator
+The existing validators SHALL flag IDs that appear in edges but not as nodes
+(via VACANCY) and nodes with no connections (via UNREFERENCED/UNTRACED). No new validator
 needed — the built-in validators cover this when the adapter builds the graph correctly.
 
 #### Scenario: Cited REQ absent from REQUIREMENTS.md

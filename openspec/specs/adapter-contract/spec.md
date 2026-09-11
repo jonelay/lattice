@@ -200,7 +200,7 @@ it partially.
 The interface version is distinct from `profile_version`, which governs the register
 schema, and from the lattice version, which governs the trace payload envelope.
 
-Verified by: `cargo test --test interface version`
+Verified by: `cargo test --test contract interface_version` and `cargo test --test cli interface_version`
 
 #### Scenario: Unsupported interface version is refused
 - **WHEN** an adapter emits a document declaring an interface version the core does not

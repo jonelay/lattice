@@ -53,12 +53,12 @@ pub(crate) fn build_trace_report_for_nodes(
     for issue in issues {
         // A node_id naming no graph node — a VACANCY on a ghost source, say
         // — must not vanish: no entry would ever carry it.
-        match issue.node_id.as_deref() {
-            Some(node_id)
-                if graph.has_node(node_id) && node_ids.is_none_or(|ids| ids.contains(node_id)) =>
-            {
-                let key = graph.node(node_id).expect("just checked").id.as_str();
-                findings_by_node.entry(key).or_default().push(issue);
+        match issue.node_id.as_deref().and_then(|id| graph.node(id)) {
+            Some(node) if node_ids.is_none_or(|ids| ids.contains(node.id.as_str())) => {
+                findings_by_node
+                    .entry(node.id.as_str())
+                    .or_default()
+                    .push(issue);
             }
             _ => unattachable.push(issue),
         }

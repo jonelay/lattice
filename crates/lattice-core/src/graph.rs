@@ -1,6 +1,6 @@
 //! The in-memory register: nodes, edges, pathways and accumulated adapter issues.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use serde_json::{Map, Value};
 
@@ -19,6 +19,7 @@ pub struct Pathway {
 
 impl Pathway {
     /// True when `position` is one of this pathway's declared positions.
+    #[must_use]
     pub fn is_member(&self, position: &str) -> bool {
         self.order.iter().any(|p| p == position)
     }
@@ -27,6 +28,7 @@ impl Pathway {
     ///
     /// False for a non-member, which callers must screen with `is_member` first —
     /// the two cases mean different things and share no answer.
+    #[must_use]
     pub fn is_after(&self, position: &str) -> bool {
         let (Some(at), Some(now)) = (self.index_of(position), self.index_of(&self.current)) else {
             return false;
@@ -39,7 +41,7 @@ impl Pathway {
     }
 }
 
-/// An pathway the graph refuses: repeated positions, or a `current` outside the order.
+/// A pathway the graph refuses: repeated positions, or a `current` outside the order.
 #[derive(Debug)]
 pub struct PathwayError(pub String);
 
@@ -50,6 +52,24 @@ impl std::fmt::Display for PathwayError {
 }
 
 impl std::error::Error for PathwayError {}
+
+/// Refuse a pathway declaration rather than repairing it: repeated positions
+/// leave "before" and "after" depending on which occurrence matched, and a
+/// current position outside the order places the pathway nowhere.
+pub fn check_pathway(name: &str, order: &[String], current: &str) -> Result<(), PathwayError> {
+    let unique: HashSet<&String> = order.iter().collect();
+    if unique.len() != order.len() {
+        return Err(PathwayError(format!(
+            "pathway '{name}': positions are not unique: {order:?}"
+        )));
+    }
+    if !order.iter().any(|p| p == current) {
+        return Err(PathwayError(format!(
+            "pathway '{name}': current position '{current}' is not in {order:?}"
+        )));
+    }
+    Ok(())
+}
 
 /// A repeated node ID, carrying both provenances so the caller can report them.
 ///
@@ -81,6 +101,45 @@ pub struct Node {
     pub kind: String,
     pub attrs: Map<String, Value>,
     pub provenance: Provenance,
+}
+
+/// Which nodes participate in edges, indexed once from a borrowed graph.
+///
+/// Both endpoints of every edge count as connected, whether or not the
+/// register declared them. An edge is evidence the node is referred to, which
+/// is the question UNREFERENCED/UNTRACED asks; whether the endpoint resolves is
+/// VACANCY's question, and answering it here would report one fault twice.
+#[derive(Debug)]
+pub struct EdgeIndex<'a> {
+    incoming: HashSet<&'a str>,
+    outgoing: HashSet<&'a str>,
+}
+
+impl<'a> EdgeIndex<'a> {
+    pub fn build(graph: &'a LatticeGraph) -> Self {
+        let mut incoming = HashSet::new();
+        let mut outgoing = HashSet::new();
+        for edge in graph.iter_edges() {
+            outgoing.insert(edge.src.as_str());
+            incoming.insert(edge.tgt.as_str());
+        }
+        Self { incoming, outgoing }
+    }
+
+    #[must_use]
+    pub fn has_incoming(&self, id: &str) -> bool {
+        self.incoming.contains(id)
+    }
+
+    #[must_use]
+    pub fn has_outgoing(&self, id: &str) -> bool {
+        self.outgoing.contains(id)
+    }
+
+    #[must_use]
+    pub fn connected(&self, id: &str) -> bool {
+        self.has_incoming(id) || self.has_outgoing(id)
+    }
 }
 
 /// An edge as stored. Parallel edges are distinct, each keeping its own provenance.
@@ -162,11 +221,8 @@ impl LatticeGraph {
         self.issues.push(issue);
     }
 
-    /// Attach an ordering pathway the adapter read from the target.
-    ///
-    /// Rejects rather than repairing: repeated positions leave "before" and "after"
-    /// depending on which occurrence matched, and a current position outside the
-    /// order places the pathway nowhere.
+    /// Attach an ordering pathway the adapter read from the target, or refuse
+    /// it on `check_pathway`'s terms.
     pub fn set_pathway(
         &mut self,
         name: impl Into<String>,
@@ -175,17 +231,7 @@ impl LatticeGraph {
     ) -> Result<(), PathwayError> {
         let name = name.into();
         let current = current.into();
-        let unique: std::collections::HashSet<&String> = order.iter().collect();
-        if unique.len() != order.len() {
-            return Err(PathwayError(format!(
-                "pathway '{name}': positions are not unique: {order:?}"
-            )));
-        }
-        if !order.contains(&current) {
-            return Err(PathwayError(format!(
-                "pathway '{name}': current position '{current}' is not in {order:?}"
-            )));
-        }
+        check_pathway(&name, &order, &current)?;
         self.pathways.insert(
             name.clone(),
             Pathway {

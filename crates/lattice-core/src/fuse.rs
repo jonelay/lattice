@@ -6,14 +6,19 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::graph::{EdgeSpec, LatticeGraph};
+use crate::graph::{EdgeSpec, LatticeGraph, check_pathway};
 use crate::profile::{Profile, load_profile, load_profile_value};
 use crate::types::{
     FuseEdge, FuseFinding, FuseNode, FuseProvenance, FuseReport, Issue, PathwayEntry, Provenance,
     Severity,
 };
-use crate::validate::{FindingCode, default_severity, validate};
+use crate::validate::{
+    FindingCode, apply_suppressions, collect, default_severity, promote, resolve_severity,
+    sort_issues, unused_suppressions,
+};
 
+/// One register the manifest composes. Its paths are written relative to the
+/// manifest file and arrive here already resolved by [`load_manifest`].
 #[derive(Debug, Deserialize)]
 pub struct Source {
     pub name: String,
@@ -22,6 +27,8 @@ pub struct Source {
     pub target: PathBuf,
 }
 
+/// A fuse manifest as loaded: every path resolved against the manifest's own
+/// directory, so a caller never joins them again.
 #[derive(Debug, Deserialize)]
 pub struct Manifest {
     pub manifest_version: String,
@@ -52,6 +59,9 @@ fn relative(base: &Path, path: &mut PathBuf, key: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Read a manifest, resolving its relative paths against the manifest's own
+/// directory. Absolute and empty paths are refused: the manifest is meant to
+/// travel with the registers it names.
 pub fn load_manifest(path: &Path) -> Result<Manifest, String> {
     let path =
         std::fs::canonicalize(path).map_err(|e| format!("manifest '{}': {e}", path.display()))?;
@@ -108,11 +118,13 @@ fn qualified_kind(kind: &str) -> Result<(), String> {
     }
 }
 
+/// Read a fuse profile: cross-source `edge_kinds` whose endpoints are
+/// `source:kind` pairs, plus validations. Refuses `node_kinds` — those belong
+/// to the source profiles, and a copy here would drift from them.
 pub fn load_fuse_profile(path: &Path) -> Result<FuseProfile, String> {
-    let raw = load_yaml(path)?;
-    let top = raw
-        .as_object()
-        .ok_or("fuse profile must be a YAML mapping")?;
+    let Value::Object(mut top) = load_yaml(path)? else {
+        return Err("fuse profile must be a YAML mapping".into());
+    };
     const KNOWN: &[&str] = &[
         "name",
         "profile_version",
@@ -132,9 +144,8 @@ pub fn load_fuse_profile(path: &Path) -> Result<FuseProfile, String> {
         );
     }
     let edges: BTreeMap<String, EdgeDeclaration> = serde_json::from_value(
-        top.get("edge_kinds")
-            .ok_or("fuse profile requires 'edge_kinds'")?
-            .clone(),
+        top.remove("edge_kinds")
+            .ok_or("fuse profile requires 'edge_kinds'")?,
     )
     .map_err(|e| format!("fuse profile edge_kinds: {e}"))?;
     for (name, edge) in &edges {
@@ -145,16 +156,20 @@ pub fn load_fuse_profile(path: &Path) -> Result<FuseProfile, String> {
         }
     }
     let mut validations = Vec::new();
-    if let Some(raw) = top.get("validations").filter(|v| !v.is_null()) {
-        for entry in raw.as_array().ok_or("'validations' must be a list")? {
-            let entry = entry
-                .as_object()
-                .filter(|e| e.len() == 1)
-                .ok_or("expected one validation code mapping")?;
-            let (code, config) = entry.iter().next().expect("one entry");
-            let config = config
-                .as_object()
-                .ok_or("validation config must be a mapping")?;
+    if let Some(raw) = top.remove("validations").filter(|v| !v.is_null()) {
+        let Value::Array(entries) = raw else {
+            return Err("'validations' must be a list".into());
+        };
+        for entry in entries {
+            let (code, config) = match entry {
+                Value::Object(entry) if entry.len() == 1 => {
+                    entry.into_iter().next().expect("one entry")
+                }
+                _ => return Err("expected one validation code mapping".into()),
+            };
+            let Value::Object(mut config) = config else {
+                return Err("validation config must be a mapping".into());
+            };
             if let Some(severity) = config.get("severity").filter(|v| !v.is_null()) {
                 severity
                     .as_str()
@@ -185,9 +200,17 @@ pub fn load_fuse_profile(path: &Path) -> Result<FuseProfile, String> {
                         .map_err(|e| format!("fuse profile: {e}"))?;
                 }
             }
-            let mut config = config.clone();
+            if code == "SUPPRESS" {
+                // The same rules as a source profile, checked here so a
+                // CONFIG_ERROR suppression fails before any source runs.
+                let norway = serde_norway::to_value(&config)
+                    .map_err(|e| format!("fuse profile SUPPRESS: {e}"))?;
+                let mapping = norway.as_mapping().expect("an object maps");
+                crate::profile::parse_suppress(mapping)
+                    .map_err(|e| format!("fuse profile: {e}"))?;
+            }
             config.retain(|_, v| !v.is_null());
-            validations.push((code.clone(), config));
+            validations.push((code, config));
         }
     }
     Ok(FuseProfile { edges, validations })
@@ -195,7 +218,8 @@ pub fn load_fuse_profile(path: &Path) -> Result<FuseProfile, String> {
 
 impl FuseProfile {
     fn severity(&self, code: &str, default: Severity) -> Severity {
-        self.validations
+        let override_ = self
+            .validations
             .iter()
             .filter(|(c, _)| c == code)
             .filter_map(|(_, config)| {
@@ -204,15 +228,8 @@ impl FuseProfile {
                     .and_then(Value::as_str)
                     .and_then(Severity::parse)
             })
-            .next_back()
-            .map(|s| {
-                if default == Severity::Hint {
-                    default
-                } else {
-                    s
-                }
-            })
-            .unwrap_or(default)
+            .next_back();
+        resolve_severity(default, override_)
     }
 }
 
@@ -238,6 +255,10 @@ struct TraceFinding {
     line: i64,
     node_id: Option<String>,
     state: Option<String>,
+    /// Decided by the source's own profile in its trace run; carried through
+    /// the merge as-is, never re-derived from the fuse profile.
+    #[serde(default)]
+    suppressed: bool,
 }
 impl TraceFinding {
     fn attributed(self, source: &str, node: Option<&str>) -> FuseFinding {
@@ -252,6 +273,7 @@ impl TraceFinding {
                 .map(|id| qualify(source, id)),
         );
         issue.state = self.state;
+        issue.suppressed = self.suppressed;
         FuseFinding {
             issue,
             source: Some(source.into()),
@@ -295,6 +317,9 @@ pub struct SourceTrace {
     pathways: Vec<TracePathway>,
 }
 
+/// Check one source's `trace --format json` output before it is composed.
+/// Accepts trace versions 1 and 2; a repeated entry, an unknown severity or an
+/// invalid pathway is the source's fault and the error names the source.
 pub fn parse_trace(text: &str, source: &str) -> Result<SourceTrace, String> {
     let check = || -> Result<SourceTrace, String> {
         let trace: SourceTrace = serde_json::from_str(text).map_err(|e| e.to_string())?;
@@ -324,14 +349,13 @@ pub fn parse_trace(text: &str, source: &str) -> Result<SourceTrace, String> {
                 return Err(format!("invalid finding severity '{}'", finding.severity));
             }
         }
-        let mut graph = LatticeGraph::new();
+        let mut names = BTreeSet::new();
         for pathway in &trace.pathways {
             nonempty(&pathway.name, "pathway name")?;
-            if graph.pathway(&pathway.name).is_some() {
+            if !names.insert(pathway.name.as_str()) {
                 return Err(format!("repeated pathway '{}'", pathway.name));
             }
-            graph
-                .set_pathway(&pathway.name, pathway.order.clone(), &pathway.current)
+            check_pathway(&pathway.name, &pathway.order, &pathway.current)
                 .map_err(|e| e.to_string())?;
         }
         Ok(trace)
@@ -364,14 +388,8 @@ fn empty_report(manifest: &Manifest) -> FuseReport {
         ..Default::default()
     }
 }
-fn promote(report: &mut FuseReport, strict: bool) {
-    if strict {
-        for finding in &mut report.findings {
-            if finding.issue.severity == Severity::Warning {
-                finding.issue.severity = Severity::Error;
-            }
-        }
-    }
+fn promote_report(report: &mut FuseReport, strict: bool) {
+    promote(report.findings.iter_mut().map(|f| &mut f.issue), strict);
 }
 fn source_findings(trace: SourceTrace, source: &str) -> Vec<FuseFinding> {
     trace
@@ -446,7 +464,7 @@ pub fn fuse(path: &Path, binary: &Path, strict: bool) -> Result<FuseReport, Stri
             }
         }
         report.findings.extend(failures);
-        promote(&mut report, strict);
+        promote_report(&mut report, strict);
         return Ok(report);
     }
     assemble(
@@ -457,6 +475,9 @@ pub fn fuse(path: &Path, binary: &Path, strict: bool) -> Result<FuseReport, Stri
     )
 }
 
+/// Compose already-parsed traces, one per manifest source in manifest order.
+/// Split from [`fuse`] so a caller that already holds the traces can compose
+/// them without spawning the binary.
 pub fn assemble(
     manifest: &Manifest,
     profile: &FuseProfile,
@@ -502,19 +523,12 @@ pub fn assemble(
     let mut report = empty_report(manifest);
     report.findings.extend(profile_warnings);
     let mut occurrences: HashMap<String, Vec<usize>> = HashMap::new();
-    let mut raw_order = Vec::new();
     let mut raw_targets = Vec::new();
     for (source, trace) in manifest.sources.iter().zip(traces) {
         for node in trace.entries {
             let id = qualify(&source.name, &node.id);
             let kind = qualify(&source.name, &node.kind);
-            let locations = occurrences.entry(node.id.clone()).or_insert_with(|| {
-                raw_order.push(node.id.clone());
-                Vec::new()
-            });
-            locations.push(report.nodes.len());
             for edge in node.edges {
-                raw_targets.push(edge.tgt.clone());
                 report.edges.push(FuseEdge {
                     src: id.clone(),
                     tgt: qualify(&source.name, &edge.tgt),
@@ -525,12 +539,17 @@ pub fn assemble(
                     target_kind: None,
                     target_source: None,
                 });
+                raw_targets.push(edge.tgt);
             }
             report.findings.extend(
                 node.findings
                     .into_iter()
                     .map(|f| f.attributed(&source.name, Some(&node.id))),
             );
+            occurrences
+                .entry(node.id)
+                .or_default()
+                .push(report.nodes.len());
             report.nodes.push(FuseNode {
                 id,
                 kind,
@@ -552,11 +571,19 @@ pub fn assemble(
                 current: p.current,
             }));
     }
-    for raw in raw_order {
-        let indices = &occurrences[&raw];
-        if indices.len() < 2 {
-            continue;
-        }
+    // Everything from here on is the command's own: the fuse profile's SUPPRESS
+    // entries reach these findings and no source's.
+    let merged = report.findings.len();
+    // Reported in the order the IDs were first met: a node's first index rises
+    // with insertion, so sorting on it recovers that order without a second
+    // list of the IDs.
+    let mut duplicates: Vec<(&str, &[usize])> = occurrences
+        .iter()
+        .filter(|(_, indices)| indices.len() >= 2)
+        .map(|(raw, indices)| (raw.as_str(), indices.as_slice()))
+        .collect();
+    duplicates.sort_unstable_by_key(|(_, indices)| indices[0]);
+    for (raw, indices) in duplicates {
         let locations: Vec<_> = indices
             .iter()
             .map(|i| report.nodes[*i].provenance.clone())
@@ -572,7 +599,7 @@ pub fn assemble(
                 "CROSS_SOURCE_DUPLICATE_ID",
                 format!("node ID '{raw}' occurs in sources {sources}"),
                 locations[0].location.clone(),
-                Some(raw),
+                Some(raw.to_string()),
             ),
             source: None,
             locations,
@@ -632,8 +659,7 @@ pub fn assemble(
             });
         }
     }
-    validate_composed(&mut report, profile, &kind_patterns)?;
-    promote(&mut report, strict);
+    validate_composed(&mut report, profile, &kind_patterns, merged, strict)?;
     Ok(report)
 }
 
@@ -643,10 +669,16 @@ fn compose_profile(document: &Value) -> Result<Profile, String> {
     load_profile_value(norway, "fuse").map_err(|e| format!("fuse profile: {e}"))
 }
 
+/// Run the standard validators over the composed graph, then the tail of the
+/// finding pipeline once over every fuse-collected finding (`merged..`):
+/// stale-suppression detection, `--strict`, suppression. Source findings are
+/// promoted alongside but keep the suppression their own profile decided.
 fn validate_composed(
     report: &mut FuseReport,
     profile: &FuseProfile,
     kind_patterns: &HashMap<String, String>,
+    merged: usize,
+    strict: bool,
 ) -> Result<(), String> {
     let mut graph = LatticeGraph::new();
     let mut nodes = Map::new();
@@ -656,18 +688,20 @@ fn validate_composed(
         .map(|(name, edge)| (name.clone(), edge.allowed.clone()))
         .collect();
     for node in &report.nodes {
-        let id_pattern = kind_patterns
-            .get(&node.kind)
-            .and_then(|pattern| {
-                node.kind
-                    .split_once(':')
-                    .map(|(source, _)| format!("{}:(?:{})", regex::escape(source), pattern))
-            })
-            .unwrap_or_else(|| ".*".into());
-        nodes.insert(
-            node.kind.clone(),
-            json!({"id_pattern": id_pattern, "orphan_ok": true}),
-        );
+        if !nodes.contains_key(&node.kind) {
+            let id_pattern = kind_patterns
+                .get(&node.kind)
+                .and_then(|pattern| {
+                    node.kind
+                        .split_once(':')
+                        .map(|(source, _)| format!("{}:(?:{})", regex::escape(source), pattern))
+                })
+                .unwrap_or_else(|| ".*".into());
+            nodes.insert(
+                node.kind.clone(),
+                json!({"id_pattern": id_pattern, "orphan_ok": true}),
+            );
+        }
         graph
             .add_node(
                 &node.id,
@@ -680,9 +714,11 @@ fn validate_composed(
     for edge in &report.edges {
         if let Some(target) = &edge.target_kind {
             let pairs = edges.entry(edge.kind.clone()).or_default();
-            let pair = (edge.source_kind.clone(), target.clone());
-            if !pairs.contains(&pair) {
-                pairs.push(pair);
+            if !pairs
+                .iter()
+                .any(|(s, t)| s == &edge.source_kind && t == target)
+            {
+                pairs.push((edge.source_kind.clone(), target.clone()));
             }
             graph.add_edge(
                 EdgeSpec {
@@ -746,17 +782,41 @@ fn validate_composed(
         "validations": validations,
     });
     let standard = compose_profile(&document)?;
-    for issue in validate(&graph, &standard, false) {
+    let mut composed = collect(&graph, &standard);
+    sort_issues(&mut composed);
+    let source_of: HashMap<&str, &str> = report
+        .nodes
+        .iter()
+        .map(|n| (n.id.as_str(), n.provenance.source.as_str()))
+        .collect();
+    for issue in composed {
         let source = issue
             .node_id
-            .as_ref()
-            .and_then(|id| report.nodes.iter().find(|n| &n.id == id))
-            .map(|n| n.provenance.source.clone());
+            .as_deref()
+            .and_then(|id| source_of.get(id))
+            .map(|source| (*source).to_string());
         report.findings.push(FuseFinding {
             issue,
             source,
             locations: Vec::new(),
         });
     }
+    let unused = unused_suppressions(
+        report.findings[merged..].iter().map(|f| &f.issue),
+        &standard,
+        Provenance::new("<fuse-profile>", 0),
+    );
+    report
+        .findings
+        .extend(unused.into_iter().map(|issue| FuseFinding {
+            issue,
+            source: None,
+            locations: Vec::new(),
+        }));
+    promote_report(report, strict);
+    apply_suppressions(
+        report.findings[merged..].iter_mut().map(|f| &mut f.issue),
+        &standard,
+    );
     Ok(())
 }

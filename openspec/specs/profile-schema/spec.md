@@ -6,7 +6,7 @@ attributes, and validation configuration — the contract between adapters and c
 ## Requirements
 ### Requirement: Profile YAML structure
 A profile SHALL be a single YAML file containing: `name` (string), `profile_version`
-(string, semver), `node_kinds` (map), `edge_kinds` (map), and optionally `validations`
+(string, three-part numeric version X.Y.Z), `node_kinds` (map), `edge_kinds` (map), and optionally `validations`
 (list). Top-level keys core does not recognise SHALL be preserved verbatim rather than
 rejected, so a profile can carry adapter-specific settings core has no opinion about.
 
@@ -227,7 +227,8 @@ edge of that kind whose endpoints both exist and have declared kinds then produc
 - **THEN** the loader raises an error identifying the undefined kind
 
 ### Requirement: Profile version
-Every profile SHALL carry a `profile_version` key (semver string). Core SHALL reject a
+Every profile SHALL carry a `profile_version` key (three-part numeric version string,
+X.Y.Z where each component is a non-negative integer without leading zeros). Core SHALL reject a
 profile whose `profile_version` major exceeds the supported range.
 
 #### Scenario: Supported version
@@ -238,11 +239,57 @@ profile whose `profile_version` major exceeds the supported range.
 - **WHEN** a profile declares `profile_version: "2.0.0"` and core supports only major 1
 - **THEN** core raises an error: unsupported profile version
 
+### Requirement: Suppress configuration in profiles
+The `validations` list SHALL accept entries keyed by `SUPPRESS`. Each entry
+SHALL declare:
+
+- `code` (string, required): the finding code to suppress.
+- `node_ids` (list of strings, optional): specific node IDs to suppress. When
+  absent, all findings of the code are suppressed.
+
+Multiple `SUPPRESS` entries SHALL be accepted. Entries for the same code merge
+their `node_ids` lists (union). A `SUPPRESS` entry with no `node_ids`
+supersedes any ID-specific entry for the same code.
+
+The loader SHALL reject a `SUPPRESS` entry missing `code`, or with `code` not
+a string, or with `node_ids` not a list of strings. The loader SHALL also
+reject a `SUPPRESS` entry with `code: "CONFIG_ERROR"` — a profile that
+silences configuration errors would defeat the invariant that unreadable
+input is reported, never dropped.
+
+`SUPPRESS` is a selector over findings, not a validator's configuration, so
+severity overrides and pathway bindings for a code attach to that code's own
+`validations` entry, never to a `SUPPRESS` entry (see the validation
+configuration schema requirement).
+
+Verified by: `cargo test --test profile_schema suppress`
+
+#### Scenario: Valid suppress entry loads
+- **WHEN** the profile declares `- SUPPRESS: {code: VACANCY, node_ids: [UN-1]}`
+- **THEN** the profile loads with one suppress entry
+
+#### Scenario: Suppress-all loads
+- **WHEN** the profile declares `- SUPPRESS: {code: UNREFERENCED}`
+- **THEN** the profile loads with a suppress-all entry for that code
+
+#### Scenario: Missing code is rejected
+- **WHEN** the profile declares `- SUPPRESS: {node_ids: [X]}`
+- **THEN** the loader rejects the profile
+
+#### Scenario: node_ids of the wrong shape is rejected
+- **WHEN** the profile declares `- SUPPRESS: {code: VACANCY, node_ids: "UN-1"}`
+- **THEN** the loader rejects the profile naming `node_ids` and `got string`
+
+#### Scenario: CONFIG_ERROR suppression is rejected
+- **WHEN** the profile declares `- SUPPRESS: {code: CONFIG_ERROR}`
+- **THEN** the loader rejects the profile
+
 ### Requirement: Validation configuration schema
 Each entry in `validations` maps a validator code to its configuration. Core SHALL accept
 only the keys that code defines — `COVERAGE` takes `severity`, `target_kind`, `edge_kind`;
 `SUMMARY` takes `severity`, `node_kind`, `status_attr`, `group_by_attr`;
-`CONSTRAINT` takes `severity`, `kind`, `when`, `expect`, `reject`, `message` — and SHALL
+`CONSTRAINT` takes `severity`, `kind`, `when`, `expect`, `reject`, `message`;
+`SUPPRESS` takes `code`, `node_ids` — and SHALL
 reject an unknown key rather than ignoring it. A code core does not know SHALL accept
 `severity` alone, so a profile can set the severity of a third-party validator.
 
@@ -250,6 +297,11 @@ In addition, any entry — for a code core implements or one it does not — SHA
 pathway-binding keys `pathway` and `position_attr`, subject to the pathway-binding requirements
 above. The binding is orthogonal to what the code means, so it is available to adapter
 codes on the same terms as built-in ones.
+
+`SUPPRESS` is the one entry that is not a code's configuration: it selects findings
+by the `code` it names. It SHALL NOT accept `severity`, `pathway`, or
+`position_attr` — a severity or binding on a selector would be a setting with
+nothing to act on, and the loader SHALL reject it as an unknown key like any other.
 
 Rejecting unknown keys turns a typo in a profile into a load error instead of a silently
 inert setting.
@@ -266,6 +318,15 @@ inert setting.
 #### Scenario: Adapter code takes a pathway binding
 - **WHEN** a profile binds a pathway to `OBLIGATION_UNBACKED`, a code core does not implement
 - **THEN** the profile loads and the binding applies to adapter issues carrying that code
+
+#### Scenario: SUPPRESS with an unknown key rejected
+- **WHEN** a profile declares `SUPPRESS` with `code: VACANCY` and a `node_id` key
+  (mistyped singular)
+- **THEN** the loader raises an error naming the offending key
+
+#### Scenario: SUPPRESS does not take severity or a pathway binding
+- **WHEN** a profile declares `SUPPRESS` with `code: VACANCY` and `severity: info`
+- **THEN** the loader raises an error naming `severity` as an unknown key for `SUPPRESS`
 
 #### Scenario: CONSTRAINT config with all keys loads
 - **WHEN** a profile declares `CONSTRAINT` with `kind`, `when`, `expect`, `reject`, `message`, and `severity`
@@ -286,6 +347,14 @@ inert setting.
 #### Scenario: CONSTRAINT with unknown condition operator rejected
 - **WHEN** a profile declares `CONSTRAINT` with `expect: { status: { between: [1, 5] } }`
 - **THEN** the loader emits a `CONFIG_ERROR` naming the unknown operator
+
+#### Scenario: Ordering operator rejects non-comparable value
+- **WHEN** a profile declares `CONSTRAINT` with `expect: { count: { lt: [1, 2] } }`
+- **THEN** the loader emits a `CONFIG_ERROR`: ordering operators (`lt`, `gt`, `lte`, `gte`) require an integer or string value
+
+#### Scenario: Ordering operator rejects float value
+- **WHEN** a profile declares `CONSTRAINT` with `expect: { count: { gte: 2.5 } }`
+- **THEN** the loader emits a `CONFIG_ERROR`: ordering operators require an integer or string value
 
 #### Scenario: CONSTRAINT missing kind rejected
 - **WHEN** a profile declares `CONSTRAINT` with `expect` but no `kind`
@@ -509,7 +578,7 @@ Verified by: `cargo test --test native_messages`
 
 ### Requirement: Node kind orphan policy flag
 A node kind MAY declare `orphan_ok: true`, exempting nodes of that kind from the
-`ORPHAN_NODE` validator. The value SHALL be a boolean; any other type SHALL be rejected
+`UNREFERENCED`/`UNTRACED` validators. The value SHALL be a boolean; any other type SHALL be rejected
 at load time naming the kind and the value's type in the native vocabulary. Absence
 means `false` — the exemption is opt-in, and an existing profile's behaviour does not
 change by omission.
@@ -530,7 +599,7 @@ Verified by: `cargo test --test profile_schema orphan_ok`
 
 #### Scenario: Absent flag defaults to false
 - **WHEN** a node kind declares no `orphan_ok` key
-- **THEN** nodes of that kind are subject to `ORPHAN_NODE` as before
+- **THEN** nodes of that kind are subject to `UNREFERENCED`/`UNTRACED` as before
 
 ### Requirement: Edge kinds support cross_source flag
 An edge kind declaration in a profile SHALL accept an optional `cross_source: true`

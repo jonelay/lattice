@@ -7,7 +7,15 @@
         "traces_to": []
       },
       "edges": [],
-      "findings": [],
+      "findings": [
+        {
+          "code": "UNTRACED",
+          "file": "docs/register.md",
+          "line": 6,
+          "message": "node 'BN-1' has no outgoing edges",
+          "severity": "warning"
+        }
+      ],
       "id": "BN-1",
       "kind": "need",
       "provenance": {
@@ -24,10 +32,17 @@
       "edges": [],
       "findings": [
         {
-          "code": "ORPHAN_NODE",
+          "code": "UNREFERENCED",
           "file": "docs/register.md",
           "line": 12,
-          "message": "node 'BN-2' has no edges",
+          "message": "node 'BN-2' has no incoming edges",
+          "severity": "warning"
+        },
+        {
+          "code": "UNTRACED",
+          "file": "docs/register.md",
+          "line": 12,
+          "message": "node 'BN-2' has no outgoing edges",
           "severity": "warning"
         }
       ],
@@ -57,7 +72,15 @@
           }
         }
       ],
-      "findings": [],
+      "findings": [
+        {
+          "code": "UNREFERENCED",
+          "file": "docs/register.md",
+          "line": 20,
+          "message": "node 'UN-1' has no incoming edges",
+          "severity": "warning"
+        }
+      ],
       "id": "UN-1",
       "kind": "need",
       "provenance": {
@@ -84,7 +107,15 @@
           }
         }
       ],
-      "findings": [],
+      "findings": [
+        {
+          "code": "UNREFERENCED",
+          "file": "docs/register.md",
+          "line": 24,
+          "message": "node 'UN-2' has no incoming edges",
+          "severity": "warning"
+        }
+      ],
       "id": "UN-2",
       "kind": "need",
       "provenance": {
@@ -133,6 +164,13 @@
       },
       "edges": [],
       "findings": [
+        {
+          "code": "UNTRACED",
+          "file": "docs/register.md",
+          "line": 58,
+          "message": "node 'REQ-0002' has no outgoing edges",
+          "severity": "warning"
+        },
         {
           "code": "EDITORIAL_WARNING",
           "file": "docs/register.md",
@@ -198,10 +236,17 @@
           "state": "unknown"
         },
         {
-          "code": "ORPHAN_NODE",
+          "code": "UNREFERENCED",
           "file": "docs/register.md",
           "line": 72,
-          "message": "node 'REQ-0004' has no edges",
+          "message": "node 'REQ-0004' has no incoming edges",
+          "severity": "warning"
+        },
+        {
+          "code": "UNTRACED",
+          "file": "docs/register.md",
+          "line": 72,
+          "message": "node 'REQ-0004' has no outgoing edges",
           "severity": "warning"
         }
       ],
@@ -227,6 +272,13 @@
           "message": "node 'REQ-0005' (kind 'req') is not deep-covered: uncovered children: 'REQ-0006'",
           "severity": "warning",
           "state": "unknown"
+        },
+        {
+          "code": "UNTRACED",
+          "file": "docs/register.md",
+          "line": 79,
+          "message": "node 'REQ-0005' has no outgoing edges",
+          "severity": "warning"
         }
       ],
       "id": "REQ-0005",
@@ -277,7 +329,15 @@
         "text": "A parent requirement shall become deep-covered when every child is covered."
       },
       "edges": [],
-      "findings": [],
+      "findings": [
+        {
+          "code": "UNTRACED",
+          "file": "docs/register.md",
+          "line": 93,
+          "message": "node 'REQ-0007' has no outgoing edges",
+          "severity": "warning"
+        }
+      ],
       "id": "REQ-0007",
       "kind": "req",
       "provenance": {
@@ -317,7 +377,15 @@
         "text": "A second parent shall demonstrate that deep rollup is repeatable."
       },
       "edges": [],
-      "findings": [],
+      "findings": [
+        {
+          "code": "UNTRACED",
+          "file": "docs/register.md",
+          "line": 108,
+          "message": "node 'REQ-0009' has no outgoing edges",
+          "severity": "warning"
+        }
+      ],
       "id": "REQ-0009",
       "kind": "req",
       "provenance": {
@@ -426,7 +494,15 @@
           }
         }
       ],
-      "findings": [],
+      "findings": [
+        {
+          "code": "UNREFERENCED",
+          "file": "docs/spec/01-coverage.md",
+          "line": 6,
+          "message": "node '01-1.1' has no incoming edges",
+          "severity": "warning"
+        }
+      ],
       "id": "01-1.1",
       "kind": "spec-goal",
       "provenance": {
@@ -469,7 +545,15 @@
           }
         }
       ],
-      "findings": [],
+      "findings": [
+        {
+          "code": "UNREFERENCED",
+          "file": "docs/spec/01-coverage.md",
+          "line": 28,
+          "message": "node '01-1.2' has no incoming edges",
+          "severity": "warning"
+        }
+      ],
       "id": "01-1.2",
       "kind": "spec-goal",
       "provenance": {
@@ -503,7 +587,15 @@
           }
         }
       ],
-      "findings": [],
+      "findings": [
+        {
+          "code": "UNREFERENCED",
+          "file": "docs/spec/01-coverage.md",
+          "line": 51,
+          "message": "node '01-1.3' has no incoming edges",
+          "severity": "warning"
+        }
+      ],
       "id": "01-1.3",
       "kind": "spec-goal",
       "provenance": {
@@ -538,6 +630,13 @@
         }
       ],
       "findings": [
+        {
+          "code": "UNREFERENCED",
+          "file": "docs/spec/01-coverage.md",
+          "line": 73,
+          "message": "node '01-1.4' has no incoming edges",
+          "severity": "warning"
+        },
         {
           "code": "EDGE_CONSTRAINT",
           "file": "docs/spec/01-coverage.md",
@@ -581,6 +680,13 @@
       ],
       "findings": [
         {
+          "code": "UNREFERENCED",
+          "file": "docs/spec/02-reporting.md",
+          "line": 14,
+          "message": "node '02-2.1' has no incoming edges",
+          "severity": "warning"
+        },
+        {
           "code": "DESIGN_NOTE",
           "file": "docs/spec/02-reporting.md",
           "line": 15,
@@ -604,10 +710,17 @@
       "edges": [],
       "findings": [
         {
-          "code": "ORPHAN_NODE",
+          "code": "UNREFERENCED",
           "file": "docs/spec/02-reporting.md",
           "line": 42,
-          "message": "node '02-2.2' has no edges",
+          "message": "node '02-2.2' has no incoming edges",
+          "severity": "warning"
+        },
+        {
+          "code": "UNTRACED",
+          "file": "docs/spec/02-reporting.md",
+          "line": 42,
+          "message": "node '02-2.2' has no outgoing edges",
           "severity": "warning"
         }
       ],
@@ -815,7 +928,15 @@
         "text": "A maintainer can review a compact but behaviorally broad baseline diff."
       },
       "edges": [],
-      "findings": [],
+      "findings": [
+        {
+          "code": "UNTRACED",
+          "file": "docs/register.md",
+          "line": 196,
+          "message": "node 'SC-001' has no outgoing edges",
+          "severity": "warning"
+        }
+      ],
       "id": "SC-001",
       "kind": "sc",
       "provenance": {
@@ -830,7 +951,15 @@
         "text": "A release gate detects byte-level changes in plain, JSON, and rich trace output."
       },
       "edges": [],
-      "findings": [],
+      "findings": [
+        {
+          "code": "UNTRACED",
+          "file": "docs/register.md",
+          "line": 203,
+          "message": "node 'SC-002' has no outgoing edges",
+          "severity": "warning"
+        }
+      ],
       "id": "SC-002",
       "kind": "sc",
       "provenance": {
@@ -847,10 +976,17 @@
       "edges": [],
       "findings": [
         {
-          "code": "ORPHAN_NODE",
+          "code": "UNREFERENCED",
           "file": "docs/register.md",
           "line": 210,
-          "message": "node 'SC-003' has no edges",
+          "message": "node 'SC-003' has no incoming edges",
+          "severity": "warning"
+        },
+        {
+          "code": "UNTRACED",
+          "file": "docs/register.md",
+          "line": 210,
+          "message": "node 'SC-003' has no outgoing edges",
           "severity": "warning"
         }
       ],

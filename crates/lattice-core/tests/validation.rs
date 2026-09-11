@@ -72,10 +72,10 @@ fn an_issue_carries_severity_code_provenance_and_message() {
     }));
     let issues = validate(&graph, &kinds_profile(), false);
 
-    let orphan = find(&issues, "ORPHAN_NODE");
-    assert_eq!(orphan.severity, Severity::Warning);
-    assert_eq!(orphan.provenance, Provenance::new("REQS.md", 42));
-    assert!(orphan.message.contains("REQ-0001"));
+    let unreferenced = find(&issues, "UNREFERENCED");
+    assert_eq!(unreferenced.severity, Severity::Warning);
+    assert_eq!(unreferenced.provenance, Provenance::new("REQS.md", 42));
+    assert!(unreferenced.message.contains("REQ-0001"));
 }
 
 #[test]
@@ -400,11 +400,11 @@ fn strict_promotes_warnings_but_not_infos() {
     let profile = kinds_profile();
 
     let relaxed = validate(&graph, &profile, false);
-    assert_eq!(find(&relaxed, "ORPHAN_NODE").severity, Severity::Warning);
+    assert_eq!(find(&relaxed, "UNREFERENCED").severity, Severity::Warning);
     assert!(!relaxed.iter().any(|i| i.severity == Severity::Error));
 
     let strict = validate(&graph, &profile, true);
-    assert_eq!(find(&strict, "ORPHAN_NODE").severity, Severity::Error);
+    assert_eq!(find(&strict, "UNREFERENCED").severity, Severity::Error);
     assert_eq!(find(&strict, "NOTE").severity, Severity::Info);
 }
 
@@ -429,14 +429,14 @@ fn strict_does_not_promote_a_pathway_demoted_finding() {
 
 #[test]
 fn a_profile_override_applies_to_a_built_in_code() {
-    let yaml = format!("{KINDS_PROFILE}validations:\n  - ORPHAN_NODE:\n      severity: info\n");
+    let yaml = format!("{KINDS_PROFILE}validations:\n  - UNREFERENCED:\n      severity: info\n");
     let profile = profile_from(&yaml).unwrap();
     let graph = ingest(json!({
         "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t"}))],
     }));
     assert_eq!(
-        find(&validate(&graph, &profile, false), "ORPHAN_NODE").severity,
+        find(&validate(&graph, &profile, false), "UNREFERENCED").severity,
         Severity::Info
     );
 }
@@ -530,7 +530,7 @@ fn an_adapter_issue_appears_beside_the_graph_findings() {
     let issues = validate(&graph, &kinds_profile(), false);
 
     assert!(codes(&issues).contains(&"PARSE_ERROR"));
-    assert!(codes(&issues).contains(&"ORPHAN_NODE"));
+    assert!(codes(&issues).contains(&"UNREFERENCED"));
     assert_eq!(
         find(&issues, "PARSE_ERROR").provenance,
         Provenance::new("REQS.md", 12)
@@ -577,9 +577,9 @@ fn pathway_profile() -> Profile {
 /// One `req` node whose `trigger` is as given, carrying one bound finding, on an
 /// pathway whose current position is `M0`.
 ///
-/// A second node and an edge join it, so the bound finding is the graph's only
-/// one — otherwise an incidental `ORPHAN_NODE` would answer the strict case
-/// instead of the demotion under test.
+/// A second node and bidirectional edges join them, so the bound finding is the
+/// graph's only one — otherwise an incidental `UNREFERENCED`/`UNTRACED` would
+/// answer the strict case instead of the demotion under test.
 fn pathway_graph(trigger: Value) -> LatticeGraph {
     let mut attrs = json!({"text": "t"});
     if !trigger.is_null() {
@@ -590,7 +590,9 @@ fn pathway_graph(trigger: Value) -> LatticeGraph {
         "pathways": [{"name": "phase", "order": ["CB", "M0", "M4"], "current": "M0"}],
         "nodes": [req("REQ-0001", attrs), req("REQ-0002", json!({"text": "t"}))],
         "edges": [{"src": "REQ-0001", "tgt": "REQ-0002", "kind": "derives",
-                   "provenance": {"file": "REQS.md", "line": 42}}],
+                   "provenance": {"file": "REQS.md", "line": 42}},
+                  {"src": "REQ-0002", "tgt": "REQ-0001", "kind": "derives",
+                   "provenance": {"file": "REQS.md", "line": 43}}],
         "issues": [{"severity": "warning", "code": "OBLIGATION_UNBACKED",
                     "message": "m", "provenance": {"file": "REQS.md", "line": 42},
                     "node_id": "REQ-0001"}],
@@ -660,7 +662,7 @@ fn an_unbound_code_is_untouched_by_the_pathway_pass() {
         "nodes": [req("REQ-0001", json!({"text": "t", "trigger": "M4"}))],
     }));
     let issues = validate(&graph, &pathway_profile(), false);
-    assert_eq!(find(&issues, "ORPHAN_NODE").severity, Severity::Warning);
+    assert_eq!(find(&issues, "UNREFERENCED").severity, Severity::Warning);
 }
 
 // Requirement: Findings the pathway pass cannot resolve
@@ -714,7 +716,7 @@ fn two_codes_bound_to_one_missing_pathway_each_report() {
     let yaml = format!(
         "{KINDS_PROFILE}pathways: [phase]\nvalidations:\n\
          \x20 - OBLIGATION_UNBACKED:\n      pathway: phase\n      position_attr: trigger\n\
-         \x20 - ORPHAN_NODE:\n      pathway: phase\n      position_attr: trigger\n"
+         \x20 - UNREFERENCED:\n      pathway: phase\n      position_attr: trigger\n"
     );
     let profile = profile_from(&yaml).unwrap();
     let graph = ingest(json!({
@@ -735,7 +737,11 @@ fn two_codes_bound_to_one_missing_pathway_each_report() {
             .iter()
             .any(|i| i.message.contains("OBLIGATION_UNBACKED"))
     );
-    assert!(unresolved.iter().any(|i| i.message.contains("ORPHAN_NODE")));
+    assert!(
+        unresolved
+            .iter()
+            .any(|i| i.message.contains("UNREFERENCED"))
+    );
 }
 
 // Requirement: Severity resolution is shared by every command
@@ -761,18 +767,40 @@ fn validate_and_the_adapter_issue_channel_agree_on_a_demoted_severity() {
 // Requirement: Orphan detection
 
 #[test]
-fn a_well_formed_node_produces_no_finding_but_the_orphan_one() {
+fn a_well_formed_node_produces_no_finding_but_the_directional_orphan_ones() {
     let graph = ingest(json!({
         "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t", "status": "done",
                                          "tags": ["a"], "count": 3}))],
     }));
     let issues = validate(&graph, &kinds_profile(), false);
-    assert_eq!(codes(&issues), ["ORPHAN_NODE"], "{issues:?}");
+    let mut found = codes(&issues);
+    found.sort();
+    assert_eq!(found, ["UNREFERENCED", "UNTRACED"], "{issues:?}");
 }
 
 #[test]
-fn a_connected_node_is_not_an_orphan() {
+fn a_fully_connected_node_gets_no_directional_orphan_finding() {
+    let graph = ingest(json!({
+        "interface_version": "1.0",
+        "nodes": [req("REQ-0001", json!({"text": "t"})),
+                  req("REQ-0002", json!({"text": "t"}))],
+        "edges": [{"src": "REQ-0001", "tgt": "REQ-0002", "kind": "derives",
+                   "provenance": {"file": "REQS.md", "line": 1}},
+                  {"src": "REQ-0002", "tgt": "REQ-0001", "kind": "derives",
+                   "provenance": {"file": "REQS.md", "line": 2}}],
+    }));
+    let issues = validate(&graph, &kinds_profile(), false);
+    assert!(
+        !issues
+            .iter()
+            .any(|i| i.code == "UNREFERENCED" || i.code == "UNTRACED"),
+        "{issues:?}"
+    );
+}
+
+#[test]
+fn a_node_with_only_outgoing_edges_is_unreferenced() {
     let graph = ingest(json!({
         "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t"})),
@@ -781,9 +809,33 @@ fn a_connected_node_is_not_an_orphan() {
                    "provenance": {"file": "REQS.md", "line": 1}}],
     }));
     let issues = validate(&graph, &kinds_profile(), false);
+    let unreferenced: Vec<_> = issues.iter().filter(|i| i.code == "UNREFERENCED").collect();
+    assert_eq!(unreferenced.len(), 1);
+    assert_eq!(unreferenced[0].node_id.as_deref(), Some("REQ-0001"));
     assert!(
-        !issues.iter().any(|i| i.code == "ORPHAN_NODE"),
-        "{issues:?}"
+        !issues
+            .iter()
+            .any(|i| i.code == "UNTRACED" && i.node_id.as_deref() == Some("REQ-0001"))
+    );
+}
+
+#[test]
+fn a_node_with_only_incoming_edges_is_untraced() {
+    let graph = ingest(json!({
+        "interface_version": "1.0",
+        "nodes": [req("REQ-0001", json!({"text": "t"})),
+                  req("REQ-0002", json!({"text": "t"}))],
+        "edges": [{"src": "REQ-0001", "tgt": "REQ-0002", "kind": "derives",
+                   "provenance": {"file": "REQS.md", "line": 1}}],
+    }));
+    let issues = validate(&graph, &kinds_profile(), false);
+    let untraced: Vec<_> = issues.iter().filter(|i| i.code == "UNTRACED").collect();
+    assert_eq!(untraced.len(), 1);
+    assert_eq!(untraced[0].node_id.as_deref(), Some("REQ-0002"));
+    assert!(
+        !issues
+            .iter()
+            .any(|i| i.code == "UNREFERENCED" && i.node_id.as_deref() == Some("REQ-0002"))
     );
 }
 
@@ -957,21 +1009,23 @@ fn strict_still_promotes_a_finding_that_is_due() {
 
 #[test]
 fn a_demotion_to_hint_is_honoured() {
-    let yaml = format!("{KINDS_PROFILE}validations:\n  - ORPHAN_NODE:\n      severity: hint\n");
+    let yaml = format!("{KINDS_PROFILE}validations:\n  - UNREFERENCED:\n      severity: hint\n");
     let profile = profile_from(&yaml).unwrap();
     let graph = ingest(json!({
         "interface_version": "1.0",
         "nodes": [req("REQ-0001", json!({"text": "t"}))],
     }));
     assert_eq!(
-        find(&validate(&graph, &profile, false), "ORPHAN_NODE").severity,
+        find(&validate(&graph, &profile, false), "UNREFERENCED").severity,
         Severity::Hint
     );
 }
 
 #[test]
 fn strict_does_not_promote_a_hint_finding() {
-    let yaml = format!("{KINDS_PROFILE}validations:\n  - ORPHAN_NODE:\n      severity: hint\n");
+    let yaml = format!(
+        "{KINDS_PROFILE}validations:\n  - UNREFERENCED:\n      severity: hint\n  - UNTRACED:\n      severity: hint\n"
+    );
     let profile = profile_from(&yaml).unwrap();
     let graph = ingest(json!({
         "interface_version": "1.0",
@@ -979,7 +1033,8 @@ fn strict_does_not_promote_a_hint_finding() {
     }));
     let issues = validate(&graph, &profile, true);
 
-    assert_eq!(find(&issues, "ORPHAN_NODE").severity, Severity::Hint);
+    assert_eq!(find(&issues, "UNREFERENCED").severity, Severity::Hint);
+    assert_eq!(find(&issues, "UNTRACED").severity, Severity::Hint);
     assert!(
         !issues.iter().any(|i| i.severity == Severity::Error),
         "{:?}",
@@ -989,7 +1044,7 @@ fn strict_does_not_promote_a_hint_finding() {
 
 // Requirement: Per-kind orphan exemption
 
-/// The kinds profile with `test` exempted from ORPHAN_NODE.
+/// The kinds profile with `test` exempted from orphan findings.
 fn orphan_ok_profile() -> Profile {
     let yaml = KINDS_PROFILE.replace(
         "  test:\n    id_pattern: \"^T-\\\\d+$\"",
@@ -1000,7 +1055,7 @@ fn orphan_ok_profile() -> Profile {
 }
 
 #[test]
-fn an_orphan_ok_kind_raises_no_orphan_node() {
+fn an_orphan_ok_kind_raises_no_directional_orphan_findings() {
     let graph = ingest(json!({
         "interface_version": "1.0",
         "nodes": [{"id": "T-1", "kind": "test", "attrs": {},
@@ -1008,7 +1063,9 @@ fn an_orphan_ok_kind_raises_no_orphan_node() {
     }));
     let issues = validate(&graph, &orphan_ok_profile(), false);
     assert!(
-        !issues.iter().any(|i| i.code == "ORPHAN_NODE"),
+        !issues
+            .iter()
+            .any(|i| i.code == "UNREFERENCED" || i.code == "UNTRACED"),
         "{:?}",
         codes(&issues)
     );
@@ -1023,8 +1080,10 @@ fn orphan_ok_on_one_kind_leaves_the_others_checked() {
                   req("REQ-0001", json!({"text": "t"}))],
     }));
     let issues = validate(&graph, &orphan_ok_profile(), false);
-    let orphan = find(&issues, "ORPHAN_NODE");
-    assert_eq!(orphan.node_id.as_deref(), Some("REQ-0001"));
+    let unreferenced = find(&issues, "UNREFERENCED");
+    assert_eq!(unreferenced.node_id.as_deref(), Some("REQ-0001"));
+    let untraced = find(&issues, "UNTRACED");
+    assert_eq!(untraced.node_id.as_deref(), Some("REQ-0001"));
 }
 
 // Requirement: Coverage evidence state
@@ -1527,6 +1586,28 @@ fn constraint_invalid_regex_rejected() {
     assert!(profile_from(&yaml).is_err());
 }
 
+#[test]
+fn ordering_op_rejects_non_comparable_values() {
+    for op in ["lt", "gt", "lte", "gte"] {
+        let cases = [
+            ("[1, 2]", "list"),
+            ("2.5", "float"),
+            ("true", "bool"),
+            ("null", "null"),
+            ("{a: 1}", "mapping"),
+        ];
+        for (value, label) in cases {
+            let yaml = constraint_profile(&format!(
+                "      kind: req\n      expect:\n        count: {{{op}: {value}}}\n"
+            ));
+            assert!(
+                profile_from(&yaml).is_err(),
+                "{op} should reject {label} value {value}"
+            );
+        }
+    }
+}
+
 // Integration: pathway demotion and strict
 
 #[test]
@@ -1574,4 +1655,279 @@ fn constraint_strict_promotion() {
         Severity::Error,
         "strict should promote warning to error"
     );
+}
+
+// Requirement: Finding suppression
+
+/// `need` nodes with `orphan_ok`, so the only findings are the VACANCYs the
+/// dangling `derives` edges produce — one per source node, `node_id` = source.
+const SUPPRESS_PROFILE: &str = r#"
+name: t
+profile_version: "1.0.0"
+node_kinds:
+  need:
+    id_pattern: "^UN-\\d+$"
+    orphan_ok: true
+edge_kinds:
+  derives:
+    allowed: [[need, need]]
+"#;
+
+fn suppress_profile(validations: &str) -> Profile {
+    profile_from(&format!("{SUPPRESS_PROFILE}validations:\n{validations}"))
+        .expect("the suppress scenarios' profile loads")
+}
+
+/// One VACANCY per listed node: each has a `derives` edge to a target that is
+/// never declared.
+fn vacancies_for(ids: &[&str]) -> LatticeGraph {
+    let nodes: Vec<Value> = ids
+        .iter()
+        .enumerate()
+        .map(|(i, id)| {
+            json!({"id": id, "kind": "need", "attrs": {},
+                   "provenance": {"file": "needs.md", "line": i + 1}})
+        })
+        .collect();
+    let edges: Vec<Value> = ids
+        .iter()
+        .enumerate()
+        .map(|(i, id)| {
+            json!({"src": id, "tgt": "UN-999", "kind": "derives",
+                   "provenance": {"file": "needs.md", "line": i + 1}})
+        })
+        .collect();
+    ingest(json!({"interface_version": "1.0", "nodes": nodes, "edges": edges}))
+}
+
+fn suppressed_ids(issues: &[Issue], code: &str) -> Vec<String> {
+    issues
+        .iter()
+        .filter(|i| i.code == code && i.suppressed)
+        .map(|i| i.node_id.clone().unwrap_or_default())
+        .collect()
+}
+
+#[test]
+fn suppress_all_findings_of_a_code() {
+    let profile = suppress_profile("  - SUPPRESS: {code: VACANCY}\n");
+    let issues = validate(&vacancies_for(&["UN-1", "UN-2", "UN-3"]), &profile, false);
+    let vacancies: Vec<&Issue> = issues.iter().filter(|i| i.code == "VACANCY").collect();
+    assert_eq!(vacancies.len(), 3, "suppression reports, never drops");
+    assert!(vacancies.iter().all(|i| i.suppressed));
+    assert!(!codes(&issues).contains(&"SUPPRESS_UNUSED"));
+}
+
+#[test]
+fn suppress_specific_node_ids() {
+    let profile = suppress_profile("  - SUPPRESS: {code: VACANCY, node_ids: [UN-1, UN-2]}\n");
+    let issues = validate(&vacancies_for(&["UN-1", "UN-2", "UN-3"]), &profile, false);
+    assert_eq!(suppressed_ids(&issues, "VACANCY"), ["UN-1", "UN-2"]);
+    let un3 = issues
+        .iter()
+        .find(|i| i.node_id.as_deref() == Some("UN-3"))
+        .unwrap();
+    assert!(!un3.suppressed);
+    assert!(!codes(&issues).contains(&"SUPPRESS_UNUSED"));
+}
+
+#[test]
+fn suppress_all_supersedes_an_id_specific_entry() {
+    let profile = suppress_profile(
+        "  - SUPPRESS: {code: VACANCY, node_ids: [UN-1]}\n  - SUPPRESS: {code: VACANCY}\n",
+    );
+    let issues = validate(&vacancies_for(&["UN-1", "UN-2"]), &profile, false);
+    assert_eq!(suppressed_ids(&issues, "VACANCY"), ["UN-1", "UN-2"]);
+    assert!(!codes(&issues).contains(&"SUPPRESS_UNUSED"));
+}
+
+#[test]
+fn a_suppressed_finding_keeps_its_resolved_fields() {
+    let graph = vacancies_for(&["UN-1"]);
+    let plain = validate(&graph, &suppress_profile(""), false);
+    let suppressed = validate(
+        &graph,
+        &suppress_profile("  - SUPPRESS: {code: VACANCY}\n"),
+        false,
+    );
+    let before = find(&plain, "VACANCY");
+    let after = find(&suppressed, "VACANCY");
+    assert_eq!(after.severity, Severity::Error);
+    assert_eq!(after.code, before.code);
+    assert_eq!(after.message, before.message);
+    assert_eq!(after.provenance, before.provenance);
+    assert_eq!(after.node_id, before.node_id);
+    assert!(after.suppressed && !before.suppressed);
+}
+
+#[test]
+fn a_suppressed_finding_does_not_gate() {
+    let profile = suppress_profile("  - SUPPRESS: {code: VACANCY}\n");
+    let issues = validate(&vacancies_for(&["UN-1", "UN-2"]), &profile, false);
+    assert!(issues.iter().all(|i| i.severity == Severity::Error));
+    assert!(!issues.iter().any(Issue::gates));
+}
+
+#[test]
+fn strict_does_not_unsuppress() {
+    let profile =
+        suppress_profile("  - VACANCY: {severity: warning}\n  - SUPPRESS: {code: VACANCY}\n");
+    let issues = validate(&vacancies_for(&["UN-1"]), &profile, true);
+    let vacancy = find(&issues, "VACANCY");
+    assert_eq!(vacancy.severity, Severity::Error, "strict still promotes");
+    assert!(vacancy.suppressed, "but never takes suppression back");
+    assert!(!vacancy.gates());
+}
+
+#[test]
+fn config_error_suppression_is_rejected_at_load() {
+    let error = profile_from(&format!(
+        "{SUPPRESS_PROFILE}validations:\n  - SUPPRESS: {{code: CONFIG_ERROR}}\n"
+    ))
+    .expect_err("silencing CONFIG_ERROR is a load error");
+    assert!(error.0.contains("CONFIG_ERROR"), "{}", error.0);
+}
+
+// Requirement: SUPPRESS_UNUSED built-in code
+
+#[test]
+fn suppress_unused_for_an_unmatched_code() {
+    let profile = suppress_profile("  - SUPPRESS: {code: TYPO_CODE}\n");
+    let issues = validate(&vacancies_for(&["UN-1"]), &profile, false);
+    let unused = find(&issues, "SUPPRESS_UNUSED");
+    assert_eq!(unused.severity, Severity::Info);
+    assert!(unused.message.contains("TYPO_CODE"), "{}", unused.message);
+    assert!(
+        unused.message.contains("not a built-in code"),
+        "{}",
+        unused.message
+    );
+    assert!(
+        unused.message.contains("no finding carried it"),
+        "{}",
+        unused.message
+    );
+    assert!(!unused.suppressed);
+    assert!(!find(&issues, "VACANCY").suppressed, "a typo fails open");
+}
+
+#[test]
+fn suppress_unused_for_a_dormant_built_in_code() {
+    let profile = suppress_profile("  - SUPPRESS: {code: VACANCY}\n");
+    let graph = ingest(json!({
+        "interface_version": "1.0",
+        "nodes": [{"id": "UN-1", "kind": "need", "attrs": {},
+                   "provenance": {"file": "needs.md", "line": 1}}],
+    }));
+    let issues = validate(&graph, &profile, false);
+    assert_eq!(codes(&issues), ["SUPPRESS_UNUSED"]);
+    let unused = &issues[0];
+    assert!(
+        unused.message.contains("'VACANCY' is a built-in code"),
+        "{}",
+        unused.message
+    );
+    assert!(
+        unused.message.contains("no finding carried it"),
+        "{}",
+        unused.message
+    );
+}
+
+#[test]
+fn suppress_unused_for_node_ids_the_code_never_named() {
+    let profile = suppress_profile("  - SUPPRESS: {code: VACANCY, node_ids: [UN-1]}\n");
+    let issues = validate(&vacancies_for(&["UN-2", "UN-3"]), &profile, false);
+    let unused = find(&issues, "SUPPRESS_UNUSED");
+    assert!(unused.message.contains("\"UN-1\""), "{}", unused.message);
+    assert!(
+        unused
+            .message
+            .contains("findings carried it this run, but none for those node_ids"),
+        "{}",
+        unused.message
+    );
+    assert!(suppressed_ids(&issues, "VACANCY").is_empty());
+}
+
+#[test]
+fn suppress_unused_names_only_the_unmatched_node_ids() {
+    let profile = suppress_profile("  - SUPPRESS: {code: VACANCY, node_ids: [UN-1, UN-2]}\n");
+    let issues = validate(&vacancies_for(&["UN-1"]), &profile, false);
+    let unused = find(&issues, "SUPPRESS_UNUSED");
+    assert!(unused.message.contains("[\"UN-2\"]"), "{}", unused.message);
+    assert_eq!(suppressed_ids(&issues, "VACANCY"), ["UN-1"]);
+}
+
+#[test]
+fn suppress_unused_names_the_profile_as_provenance() {
+    let profile = suppress_profile("  - SUPPRESS: {code: TYPO_CODE}\n");
+    let issues = validate(&vacancies_for(&["UN-1"]), &profile, false);
+    let unused = find(&issues, "SUPPRESS_UNUSED");
+    assert_eq!(unused.node_id, None);
+    assert_eq!(unused.provenance, Provenance::new("<profile>", 0));
+}
+
+#[test]
+fn suppress_unused_is_overridable_and_strict_promotable() {
+    let profile = suppress_profile(
+        "  - SUPPRESS_UNUSED: {severity: warning}\n  - SUPPRESS: {code: TYPO_CODE}\n",
+    );
+    let graph = vacancies_for(&[]);
+    let lenient = validate(&graph, &profile, false);
+    assert_eq!(
+        find(&lenient, "SUPPRESS_UNUSED").severity,
+        Severity::Warning
+    );
+    let strict = validate(&graph, &profile, true);
+    let unused = find(&strict, "SUPPRESS_UNUSED");
+    assert_eq!(unused.severity, Severity::Error);
+    assert!(unused.gates());
+}
+
+#[test]
+fn suppress_unused_is_itself_suppressible_in_one_pass() {
+    let profile = suppress_profile(
+        "  - SUPPRESS: {code: SUPPRESS_UNUSED}\n  \
+         - SUPPRESS: {code: TYPO_ONE}\n  \
+         - SUPPRESS: {code: TYPO_TWO}\n",
+    );
+    let issues = validate(&vacancies_for(&[]), &profile, false);
+    let unused: Vec<&Issue> = issues
+        .iter()
+        .filter(|i| i.code == "SUPPRESS_UNUSED")
+        .collect();
+    assert_eq!(
+        unused.len(),
+        2,
+        "one per stale entry, none for the self-reference"
+    );
+    assert!(unused.iter().all(|i| i.suppressed));
+    assert!(unused.iter().any(|i| i.message.contains("TYPO_ONE")));
+    assert!(unused.iter().any(|i| i.message.contains("TYPO_TWO")));
+}
+
+#[test]
+fn a_self_referencing_suppress_with_nothing_stale_reports_itself_once() {
+    // Deterministic and one-pass: the entry matched nothing, so it is stale;
+    // the finding saying so is then suppressed by that same entry.
+    let profile = suppress_profile("  - SUPPRESS: {code: SUPPRESS_UNUSED}\n");
+    let issues = validate(&vacancies_for(&[]), &profile, false);
+    assert_eq!(codes(&issues), ["SUPPRESS_UNUSED"]);
+    assert!(issues[0].suppressed);
+}
+
+#[test]
+fn suppression_reaches_adapter_issues() {
+    let profile = suppress_profile("  - SUPPRESS: {code: PARSE_ERROR}\n");
+    let graph = ingest(json!({
+        "interface_version": "1.0",
+        "nodes": [],
+        "issues": [{"severity": "error", "code": "PARSE_ERROR", "message": "m",
+                    "provenance": {"file": "needs.md", "line": 3}, "node_id": null}],
+    }));
+    let issues = validate(&graph, &profile, false);
+    let parse = find(&issues, "PARSE_ERROR");
+    assert!(parse.suppressed);
+    assert!(!issues.iter().any(Issue::gates));
 }

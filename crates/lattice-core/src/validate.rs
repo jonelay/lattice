@@ -6,8 +6,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use serde_json::Value;
 
 use crate::document::type_name;
-use crate::graph::LatticeGraph;
-use crate::profile::{ConditionOp, Profile, ValidationConfig};
+use crate::graph::{EdgeIndex, LatticeGraph};
+use crate::profile::{AttrType, Comparable, ConditionOp, Profile, ValidationConfig};
 use crate::types::{Issue, Provenance, Severity};
 
 #[derive(Clone, Copy)]
@@ -25,9 +25,11 @@ pub(crate) enum FindingCode {
     Vacancy,
     EdgeConstraint,
     IdFormat,
-    OrphanNode,
+    Unreferenced,
+    Untraced,
     SuggestedEdge,
     SuggestionUnresolved,
+    SuppressUnused,
     UnknownKind,
 }
 
@@ -47,9 +49,11 @@ impl FindingCode {
             Self::Vacancy => "VACANCY",
             Self::EdgeConstraint => "EDGE_CONSTRAINT",
             Self::IdFormat => "ID_FORMAT",
-            Self::OrphanNode => "ORPHAN_NODE",
+            Self::Unreferenced => "UNREFERENCED",
+            Self::Untraced => "UNTRACED",
             Self::SuggestedEdge => "SUGGESTED_EDGE",
             Self::SuggestionUnresolved => "SUGGESTION_UNRESOLVED",
+            Self::SuppressUnused => "SUPPRESS_UNUSED",
             Self::UnknownKind => "UNKNOWN_KIND",
         }
     }
@@ -69,9 +73,11 @@ impl FindingCode {
             "VACANCY" => Some(Self::Vacancy),
             "EDGE_CONSTRAINT" => Some(Self::EdgeConstraint),
             "ID_FORMAT" => Some(Self::IdFormat),
-            "ORPHAN_NODE" => Some(Self::OrphanNode),
+            "UNREFERENCED" => Some(Self::Unreferenced),
+            "UNTRACED" => Some(Self::Untraced),
             "SUGGESTED_EDGE" => Some(Self::SuggestedEdge),
             "SUGGESTION_UNRESOLVED" => Some(Self::SuggestionUnresolved),
+            "SUPPRESS_UNUSED" => Some(Self::SuppressUnused),
             "UNKNOWN_KIND" => Some(Self::UnknownKind),
             _ => None,
         }
@@ -96,6 +102,9 @@ pub(crate) fn default_severity(code: FindingCode) -> Severity {
         FindingCode::CoverageUnknown
         | FindingCode::SuggestedEdge
         | FindingCode::SuggestionUnresolved => Severity::Hint,
+        // Info, not hint: a profile may promote it to warning so `--strict`
+        // gates stale suppressions, and hint would foreclose that.
+        FindingCode::SuppressUnused => Severity::Info,
         // Explicitly warning, not via the fallthrough: hint is never promotable,
         // so a hint default here would foreclose gating on deep coverage for
         // every profile permanently (coverage-query spec).
@@ -103,19 +112,24 @@ pub(crate) fn default_severity(code: FindingCode) -> Severity {
         | FindingCode::PathwayUnresolved
         | FindingCode::Coverage
         | FindingCode::CoverageDeep
-        | FindingCode::OrphanNode => Severity::Warning,
+        | FindingCode::Unreferenced
+        | FindingCode::Untraced => Severity::Warning,
     }
 }
 
-fn severity_for(code: FindingCode, profile: &Profile) -> Severity {
-    let default = default_severity(code);
-    match profile.validation_overrides().get(code.as_str()).copied() {
-        // Nothing promotes from hint: an override trying is reported as a
-        // CONFIG_ERROR where validate collects them, and changes nothing here.
+pub(crate) fn resolve_severity(default: Severity, override_: Option<Severity>) -> Severity {
+    match override_ {
         Some(o) if default == Severity::Hint && o != Severity::Hint => default,
         Some(o) => o,
         None => default,
     }
+}
+
+fn severity_for(code: FindingCode, profile: &Profile) -> Severity {
+    resolve_severity(
+        default_severity(code),
+        profile.validation_overrides().get(code.as_str()).copied(),
+    )
 }
 
 fn issue(
@@ -167,22 +181,20 @@ fn is_iso_date(value: &str) -> bool {
     (1..=days_in_month).contains(&day)
 }
 
-fn check_type(value: &Value, expected: &str) -> bool {
+fn check_type(value: &Value, expected: AttrType) -> bool {
     match expected {
-        "string" | "enum" => value.is_string(),
-        "date" => value.as_str().is_some_and(is_iso_date),
-        "int" => value.is_i64() || value.is_u64(),
-        "bool" => value.is_boolean(),
-        "list" => value.is_array(),
-        _ => true,
+        AttrType::String | AttrType::Enum => value.is_string(),
+        AttrType::Date => value.as_str().is_some_and(is_iso_date),
+        AttrType::Int => value.is_i64() || value.is_u64(),
+        AttrType::Bool => value.is_boolean(),
+        AttrType::List => value.is_array(),
     }
 }
 
-fn expected_type_name(expected: &str) -> &str {
-    if expected == "date" {
-        "date (YYYY-MM-DD)"
-    } else {
-        expected
+fn expected_type_name(expected: AttrType) -> &'static str {
+    match expected {
+        AttrType::Date => "date (YYYY-MM-DD)",
+        other => other.as_str(),
     }
 }
 
@@ -239,78 +251,63 @@ fn apply_overrides(issues: &[Issue], profile: &Profile) -> Vec<Issue> {
 /// `info` when promotion looks at it and survives. Starts from each issue's
 /// effective severity rather than recomputing it, or an adapter code with no
 /// shipped default would silently drop to the warning fallback.
-fn resolve_axes(issues: Vec<Issue>, graph: &LatticeGraph, profile: &Profile) -> Vec<Issue> {
+fn resolve_axes(issues: &mut Vec<Issue>, graph: &LatticeGraph, profile: &Profile) {
     if profile.pathway_bindings().is_empty() {
-        return issues;
+        return;
     }
 
     // One finding per binding, not per issue: the mismatch is a property of the
     // pairing, and repeating it per finding would bury the findings it reports
     // about. Keyed on the code too, so two codes bound to one missing pathway each
     // say so — a single finding could name only one of them.
-    let mut unresolved: BTreeMap<(String, String), Issue> = BTreeMap::new();
-    let mut resolved: Vec<Issue> = Vec::with_capacity(issues.len());
+    let mut unresolved: BTreeMap<(&str, &str), Issue> = BTreeMap::new();
 
-    for issue in issues {
-        let Some(binding) = profile.pathway_bindings().get(&issue.code) else {
-            resolved.push(issue);
+    for issue in issues.iter_mut() {
+        let Some((code, binding)) = profile.pathway_bindings().get_key_value(&issue.code) else {
             continue;
         };
 
         let Some(pathway) = graph.pathway(&binding.pathway) else {
             unresolved
-                .entry((issue.code.clone(), binding.pathway.clone()))
+                .entry((code, &binding.pathway))
                 .or_insert_with(|| {
                     Issue::new(
                         severity_for(FindingCode::PathwayUnresolved, profile),
                         FindingCode::PathwayUnresolved.as_str(),
                         format!(
-                            "profile binds '{}' to pathway '{}', which the target does not declare",
-                            issue.code, binding.pathway
+                            "profile binds '{code}' to pathway '{}', which the target does not declare",
+                            binding.pathway
                         ),
                         Provenance::new("<profile>", 0),
                         None,
                     )
                 });
-            resolved.push(issue);
             continue;
         };
 
-        let Some(node_id) = issue.node_id.as_deref() else {
-            resolved.push(issue);
-            continue;
-        };
-        let Some(node) = graph.node(node_id) else {
-            resolved.push(issue);
+        let Some(node) = issue.node_id.as_deref().and_then(|id| graph.node(id)) else {
             continue;
         };
         let Some(Value::String(position)) = node.attrs.get(&binding.position_attr) else {
-            resolved.push(issue);
             continue;
         };
 
         if pathway.is_member(position) && !pathway.is_after(position) {
-            resolved.push(issue);
             continue;
         }
 
-        let mut demoted = issue;
-        demoted.severity = Severity::Info;
-        resolved.push(demoted);
+        issue.severity = Severity::Info;
     }
 
-    resolved.extend(unresolved.into_values());
-    resolved
+    issues.extend(unresolved.into_values());
 }
 
 /// Adapter issues at the severities the profile and its pathways decide.
 #[must_use]
 pub fn resolve_adapter_issues(graph: &LatticeGraph, profile: &Profile) -> Vec<Issue> {
-    resolve_axes(
-        apply_overrides(graph.adapter_issues(), profile),
-        graph,
-        profile,
-    )
+    let mut issues = apply_overrides(graph.adapter_issues(), profile);
+    resolve_axes(&mut issues, graph, profile);
+    issues
 }
 
 /// A config key's value: `Ok(Some)` for a string, `Ok(None)` when the key is
@@ -319,13 +316,13 @@ pub fn resolve_adapter_issues(graph: &LatticeGraph, profile: &Profile) -> Vec<Is
 /// Wrong type and absence are distinct on purpose — reading a mistyped value
 /// as "missing" (or stringifying it into a kind check) would report the wrong
 /// fault, and a declared config must never fail in silence.
-pub(crate) fn config_str(
-    config: &ValidationConfig,
+pub(crate) fn config_str<'c>(
+    config: &'c ValidationConfig,
     key: &str,
-) -> Result<Option<String>, &'static str> {
+) -> Result<Option<&'c str>, &'static str> {
     match config.get(key) {
         None => Ok(None),
-        Some(serde_norway::Value::String(s)) => Ok(Some(s.clone())),
+        Some(serde_norway::Value::String(s)) => Ok(Some(s)),
         Some(other) => Err(crate::profile::name(other)),
     }
 }
@@ -342,13 +339,13 @@ enum KindSpace {
 /// its siblings — one missing or mistyped key never masks another's fault
 /// (validation spec, config typing). Returns one slot per requested key,
 /// `None` where the key was missing, mistyped, or named an undeclared kind.
-fn read_kind_keys(
+fn read_kind_keys<'c, const N: usize>(
     code: &str,
-    config: &ValidationConfig,
-    keys: &[(&'static str, KindSpace)],
+    config: &'c ValidationConfig,
+    keys: [(&'static str, KindSpace); N],
     profile: &Profile,
     issues: &mut Vec<Issue>,
-) -> Vec<Option<String>> {
+) -> [Option<&'c str>; N] {
     let config_error = |message: String, issues: &mut Vec<Issue>| {
         issues.push(issue(
             FindingCode::ConfigError,
@@ -359,12 +356,11 @@ fn read_kind_keys(
         ));
     };
     let mut missing = Vec::new();
-    let mut out = Vec::new();
-    for (key, space) in keys {
+    let out = keys.map(|(key, space)| {
         let value = match config_str(config, key) {
             Ok(Some(value)) => Some(value),
             Ok(None) => {
-                missing.push(*key);
+                missing.push(key);
                 None
             }
             Err(got) => {
@@ -375,10 +371,10 @@ fn read_kind_keys(
                 None
             }
         };
-        out.push(value.filter(|value| {
+        value.filter(|value| {
             let (declared, noun) = match space {
-                KindSpace::Node => (profile.node_kinds().contains_key(value), "node"),
-                KindSpace::Edge => (profile.edge_kinds().contains_key(value), "edge"),
+                KindSpace::Node => (profile.node_kinds().contains_key(*value), "node"),
+                KindSpace::Edge => (profile.edge_kinds().contains_key(*value), "edge"),
             };
             if !declared {
                 config_error(
@@ -387,8 +383,8 @@ fn read_kind_keys(
                 );
             }
             declared
-        }));
-    }
+        })
+    });
     if !missing.is_empty() {
         config_error(
             format!(
@@ -401,20 +397,16 @@ fn read_kind_keys(
     out
 }
 
-fn compare_ints(left: &serde_json::Number, right: &serde_json::Number) -> Option<Ordering> {
-    let integer = |number: &serde_json::Number| {
-        number
-            .as_i64()
-            .map(i128::from)
-            .or_else(|| number.as_u64().map(i128::from))
-    };
-    Some(integer(left)?.cmp(&integer(right)?))
-}
-
-fn compare_values(left: &Value, right: &Value) -> Option<Ordering> {
+fn compare_value_to_comparable(left: &Value, right: &Comparable) -> Option<Ordering> {
     match (left, right) {
-        (Value::String(left), Value::String(right)) => Some(left.cmp(right)),
-        (Value::Number(left), Value::Number(right)) => compare_ints(left, right),
+        (Value::String(l), Comparable::Str(r)) => Some(l.as_str().cmp(r.as_str())),
+        (Value::Number(n), Comparable::Int(r)) => {
+            let l = n
+                .as_i64()
+                .map(i128::from)
+                .or_else(|| n.as_u64().map(i128::from))?;
+            Some(l.cmp(r))
+        }
         _ => None,
     }
 }
@@ -430,19 +422,19 @@ pub(crate) fn eval_condition(
         ConditionOp::In(values) => attrs.get(&cond.attr).is_some_and(|v| values.contains(v)),
         ConditionOp::Lt(expected) => attrs
             .get(&cond.attr)
-            .and_then(|value| compare_values(value, expected))
+            .and_then(|value| compare_value_to_comparable(value, expected))
             .is_some_and(Ordering::is_lt),
         ConditionOp::Gt(expected) => attrs
             .get(&cond.attr)
-            .and_then(|value| compare_values(value, expected))
+            .and_then(|value| compare_value_to_comparable(value, expected))
             .is_some_and(Ordering::is_gt),
         ConditionOp::Lte(expected) => attrs
             .get(&cond.attr)
-            .and_then(|value| compare_values(value, expected))
+            .and_then(|value| compare_value_to_comparable(value, expected))
             .is_some_and(Ordering::is_le),
         ConditionOp::Gte(expected) => attrs
             .get(&cond.attr)
-            .and_then(|value| compare_values(value, expected))
+            .and_then(|value| compare_value_to_comparable(value, expected))
             .is_some_and(Ordering::is_ge),
         ConditionOp::Matches(regex) => attrs
             .get(&cond.attr)
@@ -468,10 +460,10 @@ fn condition_op_desc(cond: &crate::profile::Condition) -> String {
         ConditionOp::Eq(v) => format!("expected eq {v}"),
         ConditionOp::Not(v) => format!("expected not {v}"),
         ConditionOp::In(_) => "expected in [...]".to_string(),
-        ConditionOp::Lt(v) => format!("expected lt {v}"),
-        ConditionOp::Gt(v) => format!("expected gt {v}"),
-        ConditionOp::Lte(v) => format!("expected lte {v}"),
-        ConditionOp::Gte(v) => format!("expected gte {v}"),
+        ConditionOp::Lt(c) => format!("expected lt {c}"),
+        ConditionOp::Gt(c) => format!("expected gt {c}"),
+        ConditionOp::Lte(c) => format!("expected lte {c}"),
+        ConditionOp::Gte(c) => format!("expected gte {c}"),
         ConditionOp::Matches(_) => "expected matches pattern".to_string(),
         ConditionOp::Present(b) => format!("expected present={b}"),
     }
@@ -494,14 +486,267 @@ fn first_failing_condition(
     None
 }
 
+pub(crate) struct CoverageContext<'a> {
+    pub covered: HashSet<&'a str>,
+    pub source_kinds: BTreeSet<&'a str>,
+    pub population: usize,
+    pub unattributed: usize,
+}
+
+/// Unlike `connected` (EdgeIndex), coverage counts only edges whose endpoints
+/// the register actually declared: an edge from a source that does not exist
+/// is not evidence that the target is verified. Attribution asks less than
+/// coverage does: an outgoing edge of this kind shows the author attributed
+/// the node, even when its target dangles.
+pub(crate) fn coverage_context<'a>(
+    graph: &'a LatticeGraph,
+    profile: &'a Profile,
+    target: &str,
+    edge_kind_name: &str,
+) -> CoverageContext<'a> {
+    let mut covered: HashSet<&str> = HashSet::new();
+    let mut attributed: HashSet<&str> = HashSet::new();
+    for edge in graph.iter_edges() {
+        if edge.kind != edge_kind_name {
+            continue;
+        }
+        attributed.insert(edge.src.as_str());
+        if graph.has_node(&edge.tgt) && graph.has_node(&edge.src) {
+            covered.insert(edge.tgt.as_str());
+        }
+    }
+    let edge_kind = &profile.edge_kinds()[edge_kind_name];
+    let source_kinds: BTreeSet<&str> = edge_kind
+        .allowed
+        .iter()
+        .filter(|(_, t)| *t == target)
+        .map(|(s, _)| s.as_str())
+        .collect();
+    let (mut population, mut unattributed) = (0, 0);
+    for node in graph
+        .iter_nodes()
+        .filter(|n| source_kinds.contains(n.kind.as_str()))
+    {
+        population += 1;
+        if !attributed.contains(node.id.as_str()) {
+            unattributed += 1;
+        }
+    }
+    CoverageContext {
+        covered,
+        source_kinds,
+        population,
+        unattributed,
+    }
+}
+
+impl CoverageContext<'_> {
+    /// While any admitted source carries no edge of the kind, "no incoming
+    /// edge" cannot distinguish a gap from a missing attribution, so the
+    /// per-node state is unknown rather than unverified.
+    pub(crate) fn state(&self) -> &'static str {
+        if self.unattributed == 0 {
+            "unverified"
+        } else {
+            "unknown"
+        }
+    }
+
+    /// The base population rides along: "287 carry no edge" over an
+    /// unstated 1939 reads as an unwired layer, not a 14.8% gap.
+    pub(crate) fn emit_unknown(
+        &self,
+        edge_kind_name: &str,
+        target: &str,
+        qualifier: &str,
+        profile: &Profile,
+        issues: &mut Vec<Issue>,
+    ) {
+        if self.unattributed == 0 {
+            return;
+        }
+        let kinds = self
+            .source_kinds
+            .iter()
+            .map(|k| format!("'{k}'"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let noun = if self.source_kinds.len() == 1 {
+            "kind"
+        } else {
+            "kinds"
+        };
+        let population = self.population;
+        let unattributed = self.unattributed;
+        let pct = unattributed as f64 * 100.0 / population as f64;
+        issues.push(issue(
+            FindingCode::CoverageUnknown,
+            format!(
+                "{unattributed} of {population} node(s) of {noun} {kinds} ({pct:.1}%) \
+                 carry no outgoing '{edge_kind_name}' edge; {qualifier}coverage state for \
+                 '{target}' is unknown"
+            ),
+            Provenance::new("<profile>", 0),
+            profile,
+            None,
+        ));
+    }
+}
+
 /// Check a graph against its profile and return every issue found.
 ///
 /// Covers ID syntax, unknown kinds, attribute schemas, edge endpoint pairs,
 /// dangling references and the profile's configured validations. Collects rather
 /// than stopping, so one malformed node never hides the rest; `strict` promotes
-/// warnings to errors after collection.
+/// warnings to errors after collection, and the profile's SUPPRESS entries are
+/// applied last, so a suppressed finding is reported but never gates.
 #[must_use]
 pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Issue> {
+    let mut issues = collect(graph, profile);
+    finish(
+        &mut issues,
+        profile,
+        Provenance::new("<profile>", 0),
+        strict,
+    );
+    sort_issues(&mut issues);
+    issues
+}
+
+/// The tail of the pipeline over findings already at their resolved severities:
+/// stale-suppression detection, `--strict` promotion, then suppression. Split
+/// from `collect` so a caller that merges in findings of its own — fuse — can
+/// run the tail once over the union.
+pub(crate) fn finish(issues: &mut Vec<Issue>, profile: &Profile, origin: Provenance, strict: bool) {
+    let unused = unused_suppressions(issues.iter(), profile, origin);
+    issues.extend(unused);
+    promote(issues.iter_mut(), strict);
+    apply_suppressions(issues.iter_mut(), profile);
+}
+
+pub(crate) fn promote<'a>(issues: impl IntoIterator<Item = &'a mut Issue>, strict: bool) {
+    if !strict {
+        return;
+    }
+    for issue in issues {
+        if issue.severity == Severity::Warning {
+            issue.severity = Severity::Error;
+        }
+    }
+}
+
+/// Mark every finding a SUPPRESS entry selects. Runs after promotion on purpose:
+/// suppression declares the finding structurally expected, and `--strict` is a
+/// severity policy, not a way to take that declaration back.
+pub(crate) fn apply_suppressions<'a>(
+    issues: impl IntoIterator<Item = &'a mut Issue>,
+    profile: &Profile,
+) {
+    for issue in issues {
+        let Some(entry) = profile.suppressions().iter().find(|s| s.code == issue.code) else {
+            continue;
+        };
+        issue.suppressed = match &entry.node_ids {
+            None => true,
+            Some(ids) => issue.node_id.as_ref().is_some_and(|id| ids.contains(id)),
+        };
+    }
+}
+
+/// One `SUPPRESS_UNUSED` per entry whose selector matched nothing this run.
+///
+/// Runs once, before suppression, so a `SUPPRESS_UNUSED` entry is judged
+/// against the findings the other entries produced here: it is used when any
+/// of them is stale, and is never asked about itself twice. The message says
+/// only what the core knows — a code it never saw may be a typo or an adapter
+/// code that stayed dormant, and it cannot tell which.
+pub(crate) fn unused_suppressions<'a>(
+    issues: impl IntoIterator<Item = &'a Issue>,
+    profile: &Profile,
+    origin: Provenance,
+) -> Vec<Issue> {
+    let issues: Vec<&Issue> = issues.into_iter().collect();
+    let unused_code = FindingCode::SuppressUnused.as_str();
+    let (self_entry, entries): (Vec<_>, Vec<_>) = profile
+        .suppressions()
+        .iter()
+        .partition(|entry| entry.code == unused_code);
+
+    let mut out: Vec<Issue> = Vec::new();
+    for entry in entries {
+        if let Some(message) = unused_message(entry, issues.iter().copied()) {
+            out.push(issue(
+                FindingCode::SuppressUnused,
+                message,
+                origin.clone(),
+                profile,
+                None,
+            ));
+        }
+    }
+    for entry in self_entry {
+        if let Some(message) = unused_message(entry, issues.iter().copied().chain(&out)) {
+            out.push(issue(
+                FindingCode::SuppressUnused,
+                message,
+                origin.clone(),
+                profile,
+                None,
+            ));
+        }
+    }
+    out
+}
+
+fn unused_message<'a>(
+    entry: &crate::profile::SuppressConfig,
+    issues: impl IntoIterator<Item = &'a Issue>,
+) -> Option<String> {
+    let code = entry.code.as_str();
+    let mut carried = false;
+    let mut matched: BTreeSet<&str> = BTreeSet::new();
+    for issue in issues.into_iter().filter(|i| i.code == code) {
+        carried = true;
+        if let Some(id) = issue.node_id.as_deref() {
+            matched.insert(id);
+        }
+    }
+    let unmatched: Vec<&str> = match &entry.node_ids {
+        None if carried => return None,
+        None => Vec::new(),
+        Some(ids) => ids
+            .iter()
+            .map(String::as_str)
+            .filter(|id| !matched.contains(id))
+            .collect(),
+    };
+    if entry.node_ids.is_some() && unmatched.is_empty() {
+        return None;
+    }
+    let builtin = if FindingCode::from_str(code).is_some() {
+        "a built-in code"
+    } else {
+        "not a built-in code"
+    };
+    let selector = if unmatched.is_empty() {
+        String::new()
+    } else {
+        format!(" for node_ids {unmatched:?}")
+    };
+    let seen = if carried {
+        "findings carried it this run, but none for those node_ids"
+    } else {
+        "no finding carried it this run"
+    };
+    Some(format!(
+        "SUPPRESS entry for '{code}' matched no finding{selector}: '{code}' is {builtin}; {seen}"
+    ))
+}
+
+/// Every finding at its resolved severity — profile overrides and pathway
+/// demotion applied — before `--strict`, stale-suppression detection and
+/// suppression. Unsorted.
+pub(crate) fn collect(graph: &LatticeGraph, profile: &Profile) -> Vec<Issue> {
     let mut issues: Vec<Issue> = Vec::new();
 
     for (code, &severity) in profile.validation_overrides() {
@@ -521,15 +766,7 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
         }
     }
 
-    // Both endpoints of every edge count as connected, whether or not the
-    // register declared them. An edge is evidence the node is referred to, which
-    // is the question ORPHAN_NODE asks; whether the endpoint resolves is
-    // VACANCY's question, and answering it here would report one fault twice.
-    let mut connected: HashSet<&str> = HashSet::new();
-    for edge in graph.iter_edges() {
-        connected.insert(&edge.src);
-        connected.insert(&edge.tgt);
-    }
+    let edge_index = EdgeIndex::build(graph);
 
     let mut unknown_kind_nodes: HashSet<&str> = HashSet::new();
 
@@ -573,13 +810,13 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
                 continue;
             };
 
-            if !check_type(value, &schema.kind) {
+            if !check_type(value, schema.kind) {
                 issues.push(issue(
                     FindingCode::AttrType,
                     format!(
                         "node '{}': attr '{attr_name}' expected type '{}', got {}",
                         node.id,
-                        expected_type_name(&schema.kind),
+                        expected_type_name(schema.kind),
                         type_name(value)
                     ),
                     node.provenance.clone(),
@@ -589,7 +826,7 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
                 continue;
             }
 
-            if schema.kind == "enum"
+            if schema.kind == AttrType::Enum
                 && let Some(allowed) = &schema.values
             {
                 let text = value.as_str().unwrap_or_default();
@@ -608,8 +845,8 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
                 }
             }
 
-            if schema.kind == "list"
-                && let (Some(items_type), Some(array)) = (&schema.items, value.as_array())
+            if schema.kind == AttrType::List
+                && let (Some(items_type), Some(array)) = (schema.items, value.as_array())
             {
                 for (index, item) in array.iter().enumerate() {
                     if !check_type(item, items_type) {
@@ -631,14 +868,25 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
             }
         }
 
-        if !connected.contains(node.id.as_str()) && !node_kind.orphan_ok {
-            issues.push(issue(
-                FindingCode::OrphanNode,
-                format!("node '{}' has no edges", node.id),
-                node.provenance.clone(),
-                profile,
-                Some(node.id.clone()),
-            ));
+        if !node_kind.orphan_ok {
+            if !edge_index.has_incoming(&node.id) {
+                issues.push(issue(
+                    FindingCode::Unreferenced,
+                    format!("node '{}' has no incoming edges", node.id),
+                    node.provenance.clone(),
+                    profile,
+                    Some(node.id.clone()),
+                ));
+            }
+            if !edge_index.has_outgoing(&node.id) {
+                issues.push(issue(
+                    FindingCode::Untraced,
+                    format!("node '{}' has no outgoing edges", node.id),
+                    node.provenance.clone(),
+                    profile,
+                    Some(node.id.clone()),
+                ));
+            }
         }
     }
 
@@ -728,71 +976,25 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
         let where_conditions =
             crate::profile::parse_condition_block(config.get("where"), "COVERAGE", "where")
                 .expect("profile loading validated COVERAGE where conditions");
-        let mut keys = read_kind_keys(
+        let [Some(target), Some(edge_name)] = read_kind_keys(
             "COVERAGE",
             config,
-            &[
+            [
                 ("target_kind", KindSpace::Node),
                 ("edge_kind", KindSpace::Edge),
             ],
             profile,
             &mut issues,
-        );
-        let edge_kind_name = keys.pop().unwrap();
-        let target_kind = keys.pop().unwrap();
-        let (Some(target), Some(edge_name)) = (target_kind, edge_kind_name) else {
+        ) else {
             continue;
         };
 
-        // Unlike `connected` above, coverage counts only edges whose endpoints the
-        // register actually declared: an edge from a source that does not exist is
-        // not evidence that the target is verified.
-        let mut covered: HashSet<&str> = HashSet::new();
-        // Attribution asks less than coverage does: an outgoing edge of this kind
-        // shows the author attributed the node, even when its target dangles —
-        // the dangling reference is its own finding, not an unmarked source.
-        let mut attributed: HashSet<&str> = HashSet::new();
-        for edge in graph.iter_edges() {
-            if edge.kind != edge_name {
-                continue;
-            }
-            attributed.insert(edge.src.as_str());
-            if graph.has_node(&edge.tgt) && graph.has_node(&edge.src) {
-                covered.insert(edge.tgt.as_str());
-            }
-        }
-
-        // The unattributed population: nodes of a kind this edge kind admits as
-        // a source toward the config's target kind, with no outgoing edge of it.
-        // While any exist, "no incoming edge" cannot distinguish a gap from a
-        // missing attribution, so the per-node state is unknown.
-        let edge_kind = &profile.edge_kinds()[&edge_name];
-        let source_kinds: BTreeSet<&str> = edge_kind
-            .allowed
-            .iter()
-            .filter(|(_, t)| *t == target)
-            .map(|(s, _)| s.as_str())
-            .collect();
-        let population = graph
-            .iter_nodes()
-            .filter(|n| source_kinds.contains(n.kind.as_str()))
-            .count();
-        let unattributed = graph
-            .iter_nodes()
-            .filter(|n| {
-                source_kinds.contains(n.kind.as_str()) && !attributed.contains(n.id.as_str())
-            })
-            .count();
-        let state = if unattributed == 0 {
-            "unverified"
-        } else {
-            "unknown"
-        };
+        let ctx = coverage_context(graph, profile, target, edge_name);
 
         for node in graph.iter_nodes() {
             if node.kind == target
                 && eval_conditions(&where_conditions, &node.attrs, true)
-                && !covered.contains(node.id.as_str())
+                && !ctx.covered.contains(node.id.as_str())
             {
                 let mut finding = issue(
                     FindingCode::Coverage,
@@ -804,37 +1006,12 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
                     profile,
                     Some(node.id.clone()),
                 );
-                finding.state = Some(state.to_string());
+                finding.state = Some(ctx.state().to_string());
                 issues.push(finding);
             }
         }
 
-        if unattributed > 0 {
-            let kinds = source_kinds
-                .iter()
-                .map(|k| format!("'{k}'"))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let noun = if source_kinds.len() == 1 {
-                "kind"
-            } else {
-                "kinds"
-            };
-            // The base population rides along: "287 carry no edge" over an
-            // unstated 1939 reads as an unwired layer, not a 14.8% gap.
-            let pct = unattributed as f64 * 100.0 / population as f64;
-            issues.push(issue(
-                FindingCode::CoverageUnknown,
-                format!(
-                    "{unattributed} of {population} node(s) of {noun} {kinds} ({pct:.1}%) \
-                     carry no outgoing '{edge_name}' edge; coverage state for '{target}' \
-                     is unknown"
-                ),
-                Provenance::new("<profile>", 0),
-                profile,
-                None,
-            ));
-        }
+        ctx.emit_unknown(edge_name, target, "", profile, &mut issues);
     }
 
     let deep_configs = profile
@@ -845,21 +1022,17 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
         let where_conditions =
             crate::profile::parse_condition_block(config.get("where"), "COVERAGE_DEEP", "where")
                 .expect("profile loading validated COVERAGE_DEEP where conditions");
-        let mut keys = read_kind_keys(
+        let [Some(target), Some(via), Some(evidence)] = read_kind_keys(
             "COVERAGE_DEEP",
             config,
-            &[
+            [
                 ("target_kind", KindSpace::Node),
                 ("via", KindSpace::Edge),
                 ("evidence", KindSpace::Edge),
             ],
             profile,
             &mut issues,
-        );
-        let evidence = keys.pop().unwrap();
-        let via = keys.pop().unwrap();
-        let target_kind = keys.pop().unwrap();
-        let (Some(target), Some(via), Some(evidence)) = (target_kind, via, evidence) else {
+        ) else {
             continue;
         };
 
@@ -869,21 +1042,17 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
             .map(|n| n.id.as_str())
             .collect();
 
-        // Same evidence rules as COVERAGE: a dangling edge is not evidence,
-        // but its source still counts as attributed.
-        let mut evidenced: HashSet<&str> = HashSet::new();
-        let mut attributed: HashSet<&str> = HashSet::new();
+        let ctx = coverage_context(graph, profile, target, evidence);
+
         // Children keyed by parent — `via` edge targets are the parents. Only
         // target-kind endpoints join the rollup: a foreign-kind or dangling
         // source has no evidence semantics here and contributes no child.
+        // When via == evidence the original single-pass gave evidence priority;
+        // preserve that by skipping evidence edges here.
         let mut children: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
         for edge in graph.iter_edges() {
-            if edge.kind == evidence {
-                attributed.insert(edge.src.as_str());
-                if graph.has_node(&edge.src) && graph.has_node(&edge.tgt) {
-                    evidenced.insert(edge.tgt.as_str());
-                }
-            } else if edge.kind == via
+            if edge.kind == via
+                && edge.kind != evidence
                 && targets.contains(edge.src.as_str())
                 && targets.contains(edge.tgt.as_str())
             {
@@ -903,7 +1072,7 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
         let mut covered: HashSet<&str> = targets
             .iter()
             .copied()
-            .filter(|t| evidenced.contains(*t))
+            .filter(|t| ctx.covered.contains(*t))
             .collect();
         let mut parents_of: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
         let mut remaining: HashMap<&str, usize> = HashMap::new();
@@ -985,29 +1154,6 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
             }
         }
 
-        let evidence_kind = &profile.edge_kinds()[&evidence];
-        let source_kinds: BTreeSet<&str> = evidence_kind
-            .allowed
-            .iter()
-            .filter(|(_, t)| *t == target)
-            .map(|(s, _)| s.as_str())
-            .collect();
-        let population = graph
-            .iter_nodes()
-            .filter(|n| source_kinds.contains(n.kind.as_str()))
-            .count();
-        let unattributed = graph
-            .iter_nodes()
-            .filter(|n| {
-                source_kinds.contains(n.kind.as_str()) && !attributed.contains(n.id.as_str())
-            })
-            .count();
-        let state = if unattributed == 0 {
-            "unverified"
-        } else {
-            "unknown"
-        };
-
         for node in graph.iter_nodes() {
             if node.kind != target
                 || !eval_conditions(&where_conditions, &node.attrs, true)
@@ -1045,34 +1191,11 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
                 profile,
                 Some(node.id.clone()),
             );
-            finding.state = Some(state.to_string());
+            finding.state = Some(ctx.state().to_string());
             issues.push(finding);
         }
 
-        if unattributed > 0 {
-            let kinds = source_kinds
-                .iter()
-                .map(|k| format!("'{k}'"))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let noun = if source_kinds.len() == 1 {
-                "kind"
-            } else {
-                "kinds"
-            };
-            let pct = unattributed as f64 * 100.0 / population as f64;
-            issues.push(issue(
-                FindingCode::CoverageUnknown,
-                format!(
-                    "{unattributed} of {population} node(s) of {noun} {kinds} ({pct:.1}%) \
-                     carry no outgoing '{evidence}' edge; deep coverage state for \
-                     '{target}' is unknown"
-                ),
-                Provenance::new("<profile>", 0),
-                profile,
-                None,
-            ));
-        }
+        ctx.emit_unknown(evidence, target, "deep ", profile, &mut issues);
     }
 
     for constraint in profile.constraint_configs() {
@@ -1107,17 +1230,7 @@ pub fn validate(graph: &LatticeGraph, profile: &Profile, strict: bool) -> Vec<Is
 
     issues.extend(apply_overrides(graph.adapter_issues(), profile));
 
-    let mut issues = resolve_axes(issues, graph, profile);
-
-    if strict {
-        for issue in &mut issues {
-            if issue.severity == Severity::Warning {
-                issue.severity = Severity::Error;
-            }
-        }
-    }
-
-    sort_issues(&mut issues);
+    resolve_axes(&mut issues, graph, profile);
     issues
 }
 
@@ -1138,7 +1251,11 @@ mod default_severity_tests {
 
     #[test]
     fn warning_finding_codes_have_explicit_defaults() {
-        assert_eq!(default_severity(FindingCode::OrphanNode), Severity::Warning);
+        assert_eq!(
+            default_severity(FindingCode::Unreferenced),
+            Severity::Warning
+        );
+        assert_eq!(default_severity(FindingCode::Untraced), Severity::Warning);
         assert_eq!(default_severity(FindingCode::Coverage), Severity::Warning);
         assert_eq!(
             default_severity(FindingCode::PathwayUnresolved),

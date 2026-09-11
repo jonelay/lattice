@@ -1,37 +1,25 @@
 # lattice
 
-Validate and query typed node/edge registers — requirements, the specs that satisfy
-them, the tests that verify them — held as plain text in the repo that owns them. A
-Rust core runs validation (vacancies, orphans, coverage, ID format) and
-traversal queries (reachability, path, diff between two git revisions), in three
-output formats, with three-valued exit codes. Domain vocabulary lives in YAML
-**profiles**: node kinds, edge kinds, ID patterns, validations — see
-[docs/profiles.md](docs/profiles.md) for how to write one. **Adapters**
-are standalone programs that read a register's own format and emit a serialized graph
-over a versioned interface. Derived state — coverage, status rollups, orphans — is
-computed on demand and never stored.
+A crystal lattice is a repeating structure; a defect is where the pattern breaks.
+Lattice reads plain-text registers — requirements, specs, tests — builds a typed graph
+against a declared structure, and reports every deviation — vacancies, missing coverage,
+broken references — on demand, storing nothing.
 
-grep will find a string, but not that REQ-0042 has no test covering it, or that a
-cross-reference points at an ID that no longer resolves. Those questions need a typed
-graph. Git stays the storage layer and the authority: lattice reads the repo's files —
-the working tree, a data branch, or two revisions for a diff — builds the graph in
-memory, checks it against the rules the profile declares, answers, and exits. It has no store of its own, and it never writes
-back into the repo.
+Traceability belongs in the repo, not in a database that exports to it. A YAML
+**profile** declares the structure: node kinds, edge kinds, ID patterns, validations.
+An **adapter** reads the register's format. The review surface is `git diff`.
+See [docs/glossary.md](docs/glossary.md) for the full vocabulary.
 
-It addresses what the commercial requirements-management suites address — traceability
-from requirements through specs to test evidence — with the architecture inverted.
-Those are databases that own the data and export to git; lattice is a lens over files
-git already owns, so requirements stay as markdown tables, or TOML, or whatever the
-repo already uses. That gives up managed workflow states, role-based access,
-baselines-as-snapshots, and the GUI a regulated environment pays a license for. In
-exchange, the review surface is `git diff` and the authority is the file you edited.
+## Getting started
 
-The problem it exists for: every in-house requirements system surveyed drifted at the
-same point — hand-maintained derived state. See [PROPOSAL.md](PROPOSAL.md) for
-architecture, profiles, sequencing and the three scope tests.
-[docs/glossary.md](docs/glossary.md) defines every term lattice uses.
+From a [release](https://github.com/jonelay/lattice/releases) binary:
 
-## Usage
+```sh
+lattice validate --profile profiles/openspec.yaml \
+    --adapter ./adapters/openspec --target .
+```
+
+Or build from source:
 
 ```sh
 cargo build --release
@@ -39,39 +27,54 @@ target/release/lattice validate --profile profiles/openspec.yaml \
     --adapter ./adapters/openspec --target .
 ```
 
-The core is a Rust binary; an adapter is any program that takes `--profile` and
-`--target` and writes an interface document to stdout. Five adapters are Rust
-binaries (`crates/adapter-*/`); two are stdlib-only Python behind entry-point
-scripts in `adapters/`. `uv pip install -e '.[test]'` is only for the Python
-adapter test suite.
+Try more commands on this repo's own register:
 
-`validate` reports findings, `summary` the configured status rollup, `trace` the full
-per-node report with edges and attached findings, `query` the traversals —
-`reaches`, `reached-by`, `path`, `orphans`, `counts`, and `diff` between two
-revisions, with the adapter run live at each — `fuse` composes multiple source
-traces into a unified graph with source-qualified IDs and cross-source edge
-resolution — and `resolve` prints the resolved profile document an adapter or
-sidecar reads. All take `--format=plain|json|rich` (default: rich on a TTY, plain
-otherwise) and share the exit-code contract: 0 clean, 1 error-severity findings,
-2 lattice could not run at all. `validate` and `trace` take `--strict`, promoting
-warnings to errors.
+```sh
+lattice trace --profile profiles/openspec.yaml \
+    --adapter ./adapters/openspec --target . --format plain
 
-Six adapters ship here: `openspec` (Python — this repo's self-audit),
-`entomologist` (Rust — a git-backed issue tracker whose register lives on an
-orphan branch), `md` (Rust — reads `|`-delimited markdown tables), `github` and
-`gitlab` (Rust — read issues via `gh api` / `glab api`), and `toml` (Rust —
-profile-configurable array-of-tables dispatch, headers, and axes, kept as a
-format-agnosticism gate). A suggestion sidecar, `adapters/lattice-suggest`,
-ranks candidate `verifies` edges by text similarity; the core renders its output
-as hints, and a human decides what becomes a marker edit.
+lattice query reaches REQ-014 --profile profiles/openspec.yaml \
+    --adapter ./adapters/openspec --target .
+
+lattice coverage --profile profiles/openspec.yaml \
+    --adapter ./adapters/openspec --target .
+```
+
+To write your own profile, see [docs/profiles.md](docs/profiles.md). For adapter
+configuration, see [docs/adapters.md](docs/adapters.md).
+
+## Commands
+
+| Command | Does |
+|---|---|
+| `validate` | report findings |
+| `trace` | full per-node report with edges and findings |
+| `summary` | configured rollup, or structural counts when unconfigured |
+| `coverage` | per-kind node/edge connectivity counts and percentages |
+| `query reaches/reached-by` | transitive reachability (`--check-resolved` for tainted-reach) |
+| `query path` | shortest path between two nodes |
+| `query orphans` | nodes with no incoming or outgoing edges |
+| `query counts` | per-kind node and edge tallies |
+| `query at` | trace a single node |
+| `query diff` | structural diff between two git revisions |
+| `fuse` | compose multiple sources into one graph; see [docs/fuse.md](docs/fuse.md) |
+| `resolve` | print the resolved profile document |
+
+All commands take `--format=plain|json|rich` (default: rich on TTY). Exit codes: 0 clean,
+1 error-severity findings, 2 could not run. `validate` and `trace` take `--strict`.
+`SUPPRESS` entries in the profile silence expected findings without hiding them from JSON.
+
+## Adapters
+
+Six ship here: `openspec` (Python), `entomologist`, `md`, `toml`, `github`, `gitlab`
+(Rust, `crates/adapter-*/`). A suggestion sidecar (`adapters/lattice-suggest`) proposes
+edges by text similarity.
 
 ## Development
 
-Development runs through the OpenSpec `opsx` workflow: `openspec/specs/` is the
-normative contract, and in-flight changes live under `openspec/changes/`.
-[CHANGELOG.md](CHANGELOG.md) records the released surface and the pre-1.0 versioning
-policy. Run the test suites with `cargo test` and, after `cargo build`,
-`.venv/bin/python -m pytest -q`.
+Development runs through OpenSpec: `openspec/specs/` is the normative contract.
+[CHANGELOG.md](CHANGELOG.md) records the released surface. Test with `cargo test` and,
+after `cargo build`, `.venv/bin/python -m pytest -q`.
 
 ## License
 

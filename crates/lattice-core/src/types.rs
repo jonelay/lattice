@@ -89,6 +89,11 @@ pub struct Issue {
     /// `None` serializes as an absent key, never as null, so findings that
     /// never had a state stay byte-identical to before the field existed.
     pub state: Option<String>,
+    /// Set by a profile SUPPRESS entry after severity resolution. A suppressed
+    /// finding keeps every other field, stays in JSON output, and is left out
+    /// of the exit-code decision and the human-facing formats. `false`
+    /// serializes as an absent key, for the same reason `state` does.
+    pub suppressed: bool,
 }
 
 impl Issue {
@@ -106,7 +111,16 @@ impl Issue {
             provenance,
             node_id,
             state: None,
+            suppressed: false,
         }
+    }
+
+    /// True when this finding moves the exit code: error severity and not
+    /// suppressed. The one place the two conditions are combined, so no
+    /// command counts a suppressed error by reading `severity` alone.
+    #[must_use]
+    pub fn gates(&self) -> bool {
+        self.severity == Severity::Error && !self.suppressed
     }
 
     /// The total order findings are reported in: location, then code, then identity.
@@ -125,6 +139,34 @@ impl Issue {
     }
 }
 
+/// What `summary` has to show, which depends on whether the profile said what
+/// a summary means. A `SUMMARY` config selects the status rollup; without one
+/// the command falls back to structural statistics rather than refusing.
+#[derive(Debug)]
+pub enum SummaryReport {
+    Configured(StatusRollup),
+    Structural(StructuralSummary),
+}
+
+/// Zero-config summary payload: counts by kind and finding tallies.
+///
+/// Every kind the profile declares gets an entry even at zero, so an empty
+/// register reads as "declared but unused" rather than as "unknown".
+#[derive(Debug)]
+pub struct StructuralSummary {
+    pub node_counts: BTreeMap<String, i64>,
+    pub edge_counts: BTreeMap<String, i64>,
+    pub finding_counts: Vec<FindingTally>,
+}
+
+/// How many findings one code produced at one severity.
+#[derive(Debug, PartialEq, Eq)]
+pub struct FindingTally {
+    pub code: String,
+    pub severity: Severity,
+    pub count: i64,
+}
+
 /// Status rollup payload: one row per group, counts keyed by status.
 ///
 /// `status_keys` is carried beside the counts rather than derived from them: the
@@ -132,13 +174,13 @@ impl Issue {
 /// register holds, so a status no node currently carries still gets a zero
 /// column instead of vanishing.
 #[derive(Debug)]
-pub struct SummaryReport {
+pub struct StatusRollup {
     pub group_key: String,
     pub status_keys: Vec<String>,
     pub groups: Vec<(String, BTreeMap<String, i64>)>,
 }
 
-impl SummaryReport {
+impl StatusRollup {
     /// Column totals, including the `total` column itself.
     #[must_use]
     pub fn totals(&self) -> BTreeMap<String, i64> {
@@ -155,11 +197,14 @@ impl SummaryReport {
     }
 }
 
-/// A node named in a query answer: its ID and declared kind, nothing more.
+/// A node named in a query answer: its ID and declared kind.
 #[derive(Debug, PartialEq, Eq)]
 pub struct NodeRef {
     pub id: String,
     pub kind: String,
+    /// `Some(true)` when every path the walk found to this node crosses an
+    /// undeclared endpoint; `None` when the walk was not asked to tell.
+    pub tainted: Option<bool>,
 }
 
 /// An edge named in a query answer, as the (src, kind, tgt) triple it is.
@@ -276,6 +321,28 @@ pub struct CountsReport {
     pub edges: BTreeMap<String, i64>,
 }
 
+/// Coverage answer: per-kind edge-direction statistics, ordered by kind name.
+/// Declared kinds appear even at zero, on the same terms as `CountsReport`.
+#[derive(Debug)]
+pub struct CoverageReport {
+    pub kinds: Vec<KindCoverage>,
+}
+
+/// How many nodes of one kind exist and how many any edge enters or leaves.
+///
+/// Percentages ride along rather than being left to the reader: they are the
+/// figure the report exists to give, and every consumer would otherwise round
+/// them differently.
+#[derive(Debug, PartialEq)]
+pub struct KindCoverage {
+    pub kind: String,
+    pub total: i64,
+    pub incoming: i64,
+    pub outgoing: i64,
+    pub incoming_pct: f64,
+    pub outgoing_pct: f64,
+}
+
 /// Two-revision diff answer: what the register gained, lost, and changed
 /// between two live adapter runs. Provenance is excluded from every identity
 /// here, so a declaration that merely moved lines does not appear.
@@ -287,9 +354,12 @@ pub struct DiffReport {
     pub nodes_removed: Vec<NodeRef>,
     /// Present at both revisions with a different kind or attrs; the kind
     /// shown is revision B's.
-    pub nodes_changed: Vec<NodeRef>,
+    pub nodes_changed: Vec<NodeChangedRef>,
     pub edges_added: Vec<EdgeRef>,
     pub edges_removed: Vec<EdgeRef>,
+    /// Present at both revisions under the same (src, tgt, kind) with
+    /// different attrs. Parallel edges pair up in document order.
+    pub edges_changed: Vec<EdgeChangedRef>,
     /// Axes added, removed, or with a different order or current position.
     pub pathways_changed: Vec<String>,
 }
@@ -303,8 +373,31 @@ impl DiffReport {
             && self.nodes_changed.is_empty()
             && self.edges_added.is_empty()
             && self.edges_removed.is_empty()
+            && self.edges_changed.is_empty()
             && self.pathways_changed.is_empty()
     }
+}
+
+/// A node whose kind or attrs differ between the two diffed revisions: its ID,
+/// revision B's kind, and both attr maps, so the reader sees what changed,
+/// not just that something did.
+#[derive(Debug, PartialEq, Eq)]
+pub struct NodeChangedRef {
+    pub id: String,
+    pub kind: String,
+    pub attrs_a: serde_json::Map<String, serde_json::Value>,
+    pub attrs_b: serde_json::Map<String, serde_json::Value>,
+}
+
+/// An edge whose attrs differ between the two diffed revisions: the identity
+/// tuple and both attr maps, on the same terms as [`NodeChangedRef`].
+#[derive(Debug, PartialEq, Eq)]
+pub struct EdgeChangedRef {
+    pub src: String,
+    pub tgt: String,
+    pub kind: String,
+    pub attrs_a: serde_json::Map<String, serde_json::Value>,
+    pub attrs_b: serde_json::Map<String, serde_json::Value>,
 }
 
 /// One outgoing edge in a trace report, retaining attrs and provenance.
@@ -421,11 +514,7 @@ impl FuseReport {
     pub fn exit_code(&self) -> u8 {
         if !self.could_run {
             2
-        } else if self
-            .findings
-            .iter()
-            .any(|f| f.issue.severity == Severity::Error)
-        {
+        } else if self.findings.iter().any(|f| f.issue.gates()) {
             1
         } else {
             0

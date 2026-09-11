@@ -9,6 +9,7 @@ use common::{Case, MINIMAL_PROFILE};
 use serde_json::json;
 
 /// A interface document declaring two `req` nodes the suggestions can name.
+/// Both edges run in both directions so neither node is UNREFERENCED or UNTRACED.
 const TWO_NODES: &str = r#"{
   "interface_version": "1.1",
   "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {},
@@ -16,7 +17,9 @@ const TWO_NODES: &str = r#"{
             {"id": "REQ-2", "kind": "req", "attrs": {},
              "provenance": {"file": "reqs.md", "line": 9}}],
   "edges": [{"src": "REQ-1", "tgt": "REQ-2", "kind": "derives",
-             "provenance": {"file": "reqs.md", "line": 3}}]
+             "provenance": {"file": "reqs.md", "line": 3}},
+            {"src": "REQ-2", "tgt": "REQ-1", "kind": "derives",
+             "provenance": {"file": "reqs.md", "line": 9}}]
 }"#;
 
 fn suggestion(src: &str, tgt: &str, score: f64, basis: &str) -> serde_json::Value {
@@ -190,8 +193,8 @@ fn suggestion_ordering_is_deterministic_across_runs() {
 /// The overlay adds findings; it never rewrites the ones the register produced.
 #[test]
 fn overlay_ordering_leaves_the_registers_findings_unchanged() {
-    // A lone node with no edges is an orphan, so this register has findings of
-    // its own for the overlay to sort in among.
+    // A lone node with no edges is unreferenced and untraced, so this register
+    // has findings of its own for the overlay to sort in among.
     let lone = r#"{
       "interface_version": "1.1",
       "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {},

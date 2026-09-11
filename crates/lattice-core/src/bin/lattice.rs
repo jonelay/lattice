@@ -82,6 +82,12 @@ enum Command {
         #[arg(long)]
         strict: bool,
     },
+    /// Per-kind counts of nodes with incoming and outgoing edges. A report,
+    /// not a validation pass: exit 0 or 2, never 1.
+    Coverage {
+        #[command(flatten)]
+        common: Common,
+    },
     /// Print the resolved profile document an adapter or a sidecar reads.
     ///
     /// The handoff the core already writes for `--adapter`, on stdout instead of
@@ -110,6 +116,9 @@ enum QueryCommand {
         /// Restrict returned nodes by an attribute condition (repeatable).
         #[arg(long = "filter", value_parser = query::parse_filter)]
         filters: Vec<Condition>,
+        /// Mark each node tainted when every path to it crosses an undeclared endpoint.
+        #[arg(long = "check-resolved")]
+        check_resolved: bool,
     },
     /// Nodes that transitively reach a node along incoming edges.
     ReachedBy {
@@ -123,6 +132,9 @@ enum QueryCommand {
         /// Restrict returned nodes by an attribute condition (repeatable).
         #[arg(long = "filter", value_parser = query::parse_filter)]
         filters: Vec<Condition>,
+        /// Mark each node tainted when every path to it crosses an undeclared endpoint.
+        #[arg(long = "check-resolved")]
+        check_resolved: bool,
     },
     /// One shortest path between two nodes, if evidence connects them.
     Path {
@@ -352,6 +364,7 @@ fn main() -> ExitCode {
     let common = match &command {
         Command::Validate { common, .. }
         | Command::Summary { common }
+        | Command::Coverage { common }
         | Command::Trace { common, .. } => common,
         Command::Query(query) => query.common(),
         Command::Resolve { .. } | Command::Fuse { .. } => unreachable!("handled above"),
@@ -400,7 +413,7 @@ fn main() -> ExitCode {
             if !rendered.is_empty() {
                 echo(&rendered, Stream::Stdout);
             }
-            exit_for(issues.iter().any(|i| i.severity == Severity::Error))
+            exit_for(issues.iter().any(Issue::gates))
         }
 
         Command::Summary { .. } => {
@@ -417,15 +430,29 @@ fn main() -> ExitCode {
                 // To stderr, so stdout stays a parseable rollup payload.
                 echo(&render(&adapter_issues, &format), Stream::Stderr);
             }
-            exit_for(adapter_issues.iter().any(|i| i.severity == Severity::Error))
+            exit_for(adapter_issues.iter().any(Issue::gates))
         }
 
         Command::Trace { strict, .. } => {
             let issues = validate(&graph, &profile, strict);
-            let has_errors = issues.iter().any(|i| i.severity == Severity::Error);
+            let has_errors = issues.iter().any(Issue::gates);
             let report = build_trace_report(&profile, &graph, issues, VERSION);
             echo(&render(&report, &format), Stream::Stdout);
             exit_for(has_errors)
+        }
+
+        // Answered on the query contract: adapter issues go to stderr and never
+        // move the exit code, because a report produces no findings.
+        Command::Coverage { .. } => {
+            echo(
+                &render(&query::coverage(&graph, &profile), &format),
+                Stream::Stdout,
+            );
+            let adapter_issues = resolve_adapter_issues(&graph, &profile);
+            if !adapter_issues.is_empty() {
+                echo(&render(&adapter_issues, &format), Stream::Stderr);
+            }
+            ExitCode::SUCCESS
         }
 
         Command::Query(command) => run_query(&command, &profile, &graph, &format),
@@ -451,6 +478,7 @@ fn run_query(
             id,
             edge_kinds,
             filters,
+            check_resolved,
             ..
         } => query::reach(
             graph,
@@ -459,12 +487,14 @@ fn run_query(
             &kinds(edge_kinds),
             Direction::Forward,
             filters,
+            *check_resolved,
         )
         .map(|r| render(&r, format)),
         QueryCommand::ReachedBy {
             id,
             edge_kinds,
             filters,
+            check_resolved,
             ..
         } => query::reach(
             graph,
@@ -473,6 +503,7 @@ fn run_query(
             &kinds(edge_kinds),
             Direction::Reverse,
             filters,
+            *check_resolved,
         )
         .map(|r| render(&r, format)),
         QueryCommand::Path {

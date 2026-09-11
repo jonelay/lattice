@@ -78,10 +78,18 @@ along incoming edges. A repeatable `--edge-kind <kind>` flag SHALL restrict
 traversal to the named edge kinds; by default all edge kinds are traversed.
 An `--edge-kind` naming a kind the profile does not declare SHALL exit 2.
 The start node itself is not part of the answer. Results SHALL be ordered by
-node ID. An edge endpoint that was never declared as a node is not reported
-as reached — reachability covers declared nodes only. Attribute filters apply after
-the walk, so a non-matching intermediate node does not prevent matching descendants
-from being reached.
+node ID. An edge endpoint that was never declared as a node is traversed
+through but not reported as reached — reachability covers declared nodes
+only. Attribute filters apply after the walk, so a non-matching intermediate
+node does not prevent matching descendants from being reached.
+
+When `--check-resolved` is passed, each node in the answer SHALL carry a
+`tainted` boolean. A node is tainted when every path from the origin to it
+passes through at least one undeclared endpoint; a node with at least one
+path whose every endpoint is declared is not tainted. Undeclared endpoints
+are still not reported. The JSON answer SHALL carry `tainted` per node;
+plain and rich output SHALL mark tainted nodes with a visible suffix. Without
+the flag the answer is unchanged: no `tainted` field and no second walk.
 
 Verified by: `cargo test --test query reach`
 
@@ -101,6 +109,36 @@ Verified by: `cargo test --test query reach`
 - **WHEN** T-1 reaches active N-1 through a non-matching deferred REQ-1 and the query
   carries `--filter status=active`
 - **THEN** the answer includes N-1 and excludes REQ-1
+
+#### Scenario: Clean reach through declared nodes
+- **WHEN** `reaches T-1 --check-resolved` runs and T-1 → REQ-1 → N-1 are all
+  declared nodes
+- **THEN** REQ-1 and N-1 appear with `tainted: false`
+
+#### Scenario: Tainted reach through a vacancy
+- **WHEN** `reaches T-1 --check-resolved` runs and T-1 → REQ-9 → N-1 where
+  REQ-9 is not a declared node
+- **THEN** N-1 appears with `tainted: true` and REQ-9 does not appear
+
+#### Scenario: Taint carries past the first declared node
+- **WHEN** `reaches T-1 --check-resolved` runs and T-1 → REQ-9 → REQ-1 → N-1
+  where only REQ-9 is undeclared
+- **THEN** REQ-1 and N-1 both appear with `tainted: true`
+
+#### Scenario: One clean path is enough
+- **WHEN** T-1 reaches N-1 both via T-1 → REQ-1 → N-1 (all declared) and via
+  T-1 → REQ-9 → N-1 (REQ-9 undeclared)
+- **THEN** N-1 appears with `tainted: false`
+
+#### Scenario: A longer clean path still clears a shorter tainted one
+- **WHEN** T-1 reaches N-1 via T-1 → REQ-9 → N-1 (REQ-9 undeclared) and via
+  the longer T-1 → REQ-1 → REQ-2 → N-1 (all declared)
+- **THEN** N-1 appears with `tainted: false`
+
+#### Scenario: Without the flag there is no tainted field
+- **WHEN** `reaches T-1` runs without `--check-resolved` on a graph with a
+  vacancy on the only path
+- **THEN** the reached node carries no `tainted` field
 
 ### Requirement: Path query
 `lattice query path <src> <tgt>` SHALL report one path from `<src>` to
@@ -222,13 +260,22 @@ Verified by: `cargo test --test query at`
 `lattice query diff <rev-a> <rev-b>` SHALL materialize the target at each
 named git revision, run the adapter against each, and compare the two
 resulting graphs — two live runs, never a comparison against a committed
-snapshot. It SHALL report nodes added, removed, and changed, and edges added
-and removed. Node identity is the ID; a node counts as changed when its kind
-or attrs differ between revisions. Edges compare as a multiset of
-(source, target, kind). Provenance is excluded from comparison on both, so a
+snapshot. It SHALL report nodes added, removed, and changed, edges added,
+removed, and changed, and pathway changes. Node identity is the ID; a node
+counts as changed when its kind or attrs differ between revisions. Edge
+identity for diff purposes is (source, target, kind); an edge counts as
+changed when it exists in both revisions with the same identity tuple but
+different attrs. A changed node or edge is reported with both attr maps
+(`attrs_a`, `attrs_b`), so the reader sees what changed rather than only
+that something did. Provenance is excluded from comparison on both sides, so a
 declaration that merely moved lines does not diff. Pathway changes (order or
 current position) SHALL also be reported. Output is ordered by node ID / edge
 tuple.
+
+When parallel edges share the same identity tuple (multiplicity > 1), the
+diff SHALL match them pairwise in document order. Matched pairs with
+differing attrs appear in `edges_changed`; unmatched excess edges appear in
+`edges_added` or `edges_removed`.
 
 Both revisions SHALL be materialized at the same filesystem path: adapters
 may embed the target path in attrs, so materializing the two revisions at
@@ -247,6 +294,21 @@ Verified by: `cargo test --test query diff`
 #### Scenario: Added node reported
 - **WHEN** rev B declares a node rev A does not
 - **THEN** the diff lists it as added
+
+#### Scenario: Edge attr change is reported
+- **WHEN** rev A has edge `A --verifies {confidence: low}--> B` and rev B has
+  `A --verifies {confidence: high}--> B`
+- **THEN** the diff lists the edge in `edges_changed` with both attribute sets
+
+#### Scenario: Edge structural change is added/removed
+- **WHEN** rev A has edge `A --verifies--> B` and rev B has `A --verifies--> C`
+- **THEN** the diff lists `A→B` as removed and `A→C` as added, not as changed
+
+#### Scenario: Parallel edges with mixed changes
+- **WHEN** rev A has two `A --links--> B` edges with attrs `{w: 1}` and `{w: 2}`,
+  and rev B has two with `{w: 1}` and `{w: 3}`
+- **THEN** the first pair matches (no change), the second pair appears in
+  `edges_changed`
 
 #### Scenario: A target path embedded in attrs does not diff
 - **WHEN** the adapter writes the absolute target path into a node attr and a revision is diffed against itself

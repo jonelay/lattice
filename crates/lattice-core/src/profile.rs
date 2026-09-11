@@ -34,6 +34,11 @@ fn config_keys(code: &str) -> &'static [&'static str] {
     }
 }
 
+/// The one `validations` entry that is a selector over findings rather than a
+/// code's configuration. Takes neither `severity` nor a pathway binding: a
+/// setting on a selector would have nothing to act on.
+const SUPPRESS_KEYS: &[&str] = &["code", "node_ids"];
+
 /// Available on every validation entry, for a code the core implements or one it
 /// does not: the binding is orthogonal to what the code means.
 const PATHWAY_BINDING_KEYS: &[&str] = &["pathway", "position_attr"];
@@ -73,12 +78,57 @@ pub(crate) fn name(value: &Value) -> &'static str {
     }
 }
 
+/// The type an attr declares, parsed once at load so every later check matches
+/// on a variant instead of re-comparing the profile's spelling.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AttrType {
+    Bool,
+    Date,
+    Enum,
+    Int,
+    List,
+    String,
+}
+
+impl AttrType {
+    /// Parse the profile's spelling, or `None` for anything else.
+    pub fn parse(text: &str) -> Option<Self> {
+        match text {
+            "bool" => Some(Self::Bool),
+            "date" => Some(Self::Date),
+            "enum" => Some(Self::Enum),
+            "int" => Some(Self::Int),
+            "list" => Some(Self::List),
+            "string" => Some(Self::String),
+            _ => None,
+        }
+    }
+
+    /// The profile's spelling, which is also what findings quote.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Bool => "bool",
+            Self::Date => "date",
+            Self::Enum => "enum",
+            Self::Int => "int",
+            Self::List => "list",
+            Self::String => "string",
+        }
+    }
+
+    /// True when a `list` attr may declare this as its element type.
+    #[must_use]
+    pub fn is_list_item(self) -> bool {
+        !matches!(self, Self::Enum | Self::List)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct AttrSchema {
-    pub kind: String,
+    pub kind: AttrType,
     pub required: bool,
     pub values: Option<Vec<String>>,
-    pub items: Option<String>,
+    pub items: Option<AttrType>,
 }
 
 #[derive(Debug)]
@@ -107,12 +157,13 @@ pub struct NodeKind {
     /// entries group by. Carried on the kind because `node_kinds` is keyed for
     /// lookup and no longer remembers how it was written.
     pub declared_index: usize,
-    /// Exempts this kind's nodes from `ORPHAN_NODE`. Validation policy only —
-    /// `query orphans` still reports them as the ask-time fact they are.
+    /// Exempts this kind's nodes from `UNREFERENCED`/`UNTRACED`. Validation
+    /// policy only — `query orphans` still reports them as the ask-time fact.
     pub orphan_ok: bool,
 }
 
 impl NodeKind {
+    #[must_use]
     pub fn id_matches(&self, id: &str) -> bool {
         self.id_pattern.is_match(id)
     }
@@ -125,6 +176,7 @@ pub struct EdgeKind {
 }
 
 impl EdgeKind {
+    #[must_use]
     pub fn admits(&self, src_kind: &str, tgt_kind: &str) -> bool {
         self.allowed
             .iter()
@@ -132,7 +184,7 @@ impl EdgeKind {
     }
 }
 
-/// Ties a finding code's severity to a node attr's position on an pathway.
+/// Ties a finding code's severity to a node attr's position on a pathway.
 ///
 /// Carries no demotion target: a demoted finding becomes `info`, always.
 #[derive(Clone, Debug)]
@@ -141,16 +193,32 @@ pub struct PathwayBinding {
     pub position_attr: String,
 }
 
+/// A value that ordering operators (`lt`, `gt`, `lte`, `gte`) can compare.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Comparable {
+    Int(i128),
+    Str(String),
+}
+
+impl std::fmt::Display for Comparable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Int(n) => write!(f, "{n}"),
+            Self::Str(s) => write!(f, "{}", serde_json::Value::String(s.clone())),
+        }
+    }
+}
+
 /// A single condition operator parsed from a CONSTRAINT entry.
 #[derive(Clone, Debug)]
 pub enum ConditionOp {
     Eq(serde_json::Value),
     Not(serde_json::Value),
     In(Vec<serde_json::Value>),
-    Lt(serde_json::Value),
-    Gt(serde_json::Value),
-    Lte(serde_json::Value),
-    Gte(serde_json::Value),
+    Lt(Comparable),
+    Gt(Comparable),
+    Lte(Comparable),
+    Gte(Comparable),
     Matches(Regex),
     Present(bool),
 }
@@ -173,6 +241,16 @@ pub struct ConstraintConfig {
     pub severity: Option<Severity>,
 }
 
+/// A parsed SUPPRESS entry, merged across every entry naming its code.
+///
+/// `node_ids: None` suppresses every finding of the code, and supersedes any
+/// ID-specific entry for the same code.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SuppressConfig {
+    pub code: String,
+    pub node_ids: Option<Vec<String>>,
+}
+
 /// One validation entry's configuration, as declared.
 pub type ValidationConfig = BTreeMap<String, Value>;
 
@@ -186,6 +264,7 @@ pub struct Profile {
     validation_overrides: BTreeMap<String, Severity>,
     validation_configs: BTreeMap<String, Vec<ValidationConfig>>,
     constraint_configs: Vec<ConstraintConfig>,
+    suppressions: Vec<SuppressConfig>,
     pathways: Vec<String>,
     pathway_bindings: BTreeMap<String, PathwayBinding>,
     /// The profile after inheritance resolution (if `extends:` was declared) and
@@ -230,6 +309,11 @@ impl Profile {
     pub fn constraint_configs(&self) -> &[ConstraintConfig] {
         &self.constraint_configs
     }
+
+    /// One entry per suppressed code, in first-declared order.
+    pub fn suppressions(&self) -> &[SuppressConfig] {
+        &self.suppressions
+    }
 }
 
 /// Convert a parsed profile value to JSON, refusing what JSON cannot carry.
@@ -261,6 +345,20 @@ fn to_json(value: &Value) -> Result<serde_json::Value, ProfileError> {
         }
         Value::Tagged(t) => return err(format!("tagged value '{}' has no JSON form", t.tag)),
     })
+}
+
+fn to_comparable(value: &Value) -> Option<Comparable> {
+    match value {
+        Value::String(s) => Some(Comparable::Str(s.clone())),
+        Value::Number(n) => {
+            let v = n
+                .as_i64()
+                .map(i128::from)
+                .or_else(|| n.as_u64().map(i128::from))?;
+            Some(Comparable::Int(v))
+        }
+        _ => None,
+    }
 }
 
 /// Serialize the resolved profile document handed to adapters.
@@ -319,7 +417,12 @@ fn parse_attr(kind_name: &str, attr_name: &str, raw: &Value) -> Result<AttrSchem
 
     let kind = match mapping.get(Value::String("type".into())) {
         None | Some(Value::Null) => return err(format!("{where_}: missing 'type'")),
-        Some(Value::String(text)) => text.clone(),
+        Some(Value::String(text)) => AttrType::parse(text).ok_or_else(|| {
+            ProfileError(format!(
+                "{where_}: unknown type '{text}' (valid: {})",
+                VALID_ATTR_TYPES.join(", ")
+            ))
+        })?,
         Some(other) => {
             return err(format!(
                 "{where_}: 'type' must be a string, got {}",
@@ -327,12 +430,6 @@ fn parse_attr(kind_name: &str, attr_name: &str, raw: &Value) -> Result<AttrSchem
             ));
         }
     };
-    if !VALID_ATTR_TYPES.contains(&kind.as_str()) {
-        return err(format!(
-            "{where_}: unknown type '{kind}' (valid: {})",
-            VALID_ATTR_TYPES.join(", ")
-        ));
-    }
 
     let required = match mapping.get(Value::String("required".into())) {
         None => false,
@@ -346,7 +443,7 @@ fn parse_attr(kind_name: &str, attr_name: &str, raw: &Value) -> Result<AttrSchem
     };
 
     let mut values = None;
-    if kind == "enum" {
+    if kind == AttrType::Enum {
         let raw_values = mapping.get(Value::String("values".into()));
         let Some(Value::Sequence(items)) = raw_values else {
             return err(format!(
@@ -374,7 +471,7 @@ fn parse_attr(kind_name: &str, attr_name: &str, raw: &Value) -> Result<AttrSchem
     }
 
     let mut items_type = None;
-    if kind == "list" {
+    if kind == AttrType::List {
         let raw_items = mapping.get(Value::String("items".into()));
         let Some(Value::String(text)) = raw_items else {
             return err(format!("{where_}: list type requires 'items'"));
@@ -382,13 +479,13 @@ fn parse_attr(kind_name: &str, attr_name: &str, raw: &Value) -> Result<AttrSchem
         if text.is_empty() {
             return err(format!("{where_}: list type requires 'items'"));
         }
-        if !VALID_LIST_ITEM_TYPES.contains(&text.as_str()) {
+        let Some(item_type) = AttrType::parse(text).filter(|t| t.is_list_item()) else {
             return err(format!(
                 "{where_}: list items type '{text}' is not a valid primitive (valid: {})",
                 VALID_LIST_ITEM_TYPES.join(", ")
             ));
-        }
-        items_type = Some(text.clone());
+        };
+        items_type = Some(item_type);
     }
 
     Ok(AttrSchema {
@@ -454,7 +551,7 @@ fn parse_node_kind(
                     attrs.keys().collect::<Vec<_>>()
                 ));
             };
-            if schema.kind == "list" {
+            if schema.kind == AttrType::List {
                 return err(format!(
                     "{where_}: summary_attr '{text}' is a list, \
                      but the summary column is a short scalar label"
@@ -488,12 +585,16 @@ fn parse_node_kind(
                         attrs.keys().collect::<Vec<_>>()
                     ));
                 };
-                if schema.kind != "string" && schema.kind != "enum" {
+                if !matches!(schema.kind, AttrType::String | AttrType::Enum) {
                     return err(format!(
                         "{where_}: text_attrs '{text}' is {} '{}', \
                          but ranked text must be textual (string or enum)",
-                        if schema.kind == "int" { "an" } else { "a" },
-                        schema.kind
+                        if schema.kind == AttrType::Int {
+                            "an"
+                        } else {
+                            "a"
+                        },
+                        schema.kind.as_str()
                     ));
                 }
                 if names.contains(text) {
@@ -654,13 +755,17 @@ fn check_version(raw: &Value) -> Result<String, ProfileError> {
         ));
     };
     let parts: Vec<&str> = version.split('.').collect();
-    let semver = parts.len() == 3
-        && parts
-            .iter()
-            .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()));
-    if !semver {
+    let valid = parts.len() == 3
+        && parts.iter().all(|p| {
+            !p.is_empty()
+                && p.bytes().all(|b| b.is_ascii_digit())
+                && (p.len() == 1 || !p.starts_with('0'))
+        });
+    if !valid {
         return err(format!(
-            "profile_version '{version}' is not valid semver (expected X.Y.Z)"
+            "profile_version '{version}' is not a valid version \
+             (expected X.Y.Z where each component is a non-negative \
+             integer without leading zeros)"
         ));
     }
     let major: u64 = parts[0].parse().unwrap_or(u64::MAX);
@@ -789,10 +894,21 @@ pub(crate) fn parse_condition_block(
         let op = match op_name.as_str() {
             "eq" => ConditionOp::Eq(to_json(op_val)?),
             "not" => ConditionOp::Not(to_json(op_val)?),
-            "lt" => ConditionOp::Lt(to_json(op_val)?),
-            "gt" => ConditionOp::Gt(to_json(op_val)?),
-            "lte" => ConditionOp::Lte(to_json(op_val)?),
-            "gte" => ConditionOp::Gte(to_json(op_val)?),
+            "lt" | "gt" | "lte" | "gte" => {
+                let comparable = to_comparable(op_val).ok_or_else(|| {
+                    ProfileError(format!(
+                        "{config_name} config: '{block_name}.{attr}.{op_name}' \
+                         must be an integer or a string, got {}",
+                        name(op_val)
+                    ))
+                })?;
+                match op_name.as_str() {
+                    "lt" => ConditionOp::Lt(comparable),
+                    "gt" => ConditionOp::Gt(comparable),
+                    "lte" => ConditionOp::Lte(comparable),
+                    _ => ConditionOp::Gte(comparable),
+                }
+            }
             "in" => {
                 let Value::Sequence(items) = op_val else {
                     return err(format!(
@@ -953,6 +1069,7 @@ pub fn load_profile_value(raw: Value, where_: &str) -> Result<Profile, ProfileEr
     let mut validation_overrides: BTreeMap<String, Severity> = BTreeMap::new();
     let mut validation_configs: BTreeMap<String, Vec<ValidationConfig>> = BTreeMap::new();
     let mut pathway_bindings: BTreeMap<String, PathwayBinding> = BTreeMap::new();
+    let mut suppressions: Vec<SuppressConfig> = Vec::new();
 
     for entry in raw_validations {
         let Value::Mapping(entry) = entry else {
@@ -969,6 +1086,11 @@ pub fn load_profile_value(raw: Value, where_: &str) -> Result<Profile, ProfileEr
                     name(config)
                 ));
             };
+
+            if code == "SUPPRESS" {
+                merge_suppression(&mut suppressions, parse_suppress(config)?);
+                continue;
+            }
 
             // Last-write-wins, matching the Python core: a second `severity:` for
             // one code overwrites the first rather than being reported.
@@ -1147,8 +1269,88 @@ pub fn load_profile_value(raw: Value, where_: &str) -> Result<Profile, ProfileEr
         validation_overrides,
         validation_configs,
         constraint_configs,
+        suppressions,
         pathways: raw_pathways,
         pathway_bindings,
         raw,
     })
+}
+
+/// Parse one SUPPRESS entry, refusing the code that reports a broken profile:
+/// silencing CONFIG_ERROR would defeat "unreadable input is reported, never
+/// dropped".
+pub(crate) fn parse_suppress(
+    config: &serde_norway::Mapping,
+) -> Result<SuppressConfig, ProfileError> {
+    let mut unknown: Vec<String> = config
+        .keys()
+        .map(key_name)
+        .filter(|k| !SUPPRESS_KEYS.contains(&k.as_str()))
+        .collect();
+    if !unknown.is_empty() {
+        unknown.sort();
+        return err(format!(
+            "validation config for 'SUPPRESS': unknown keys {unknown:?} \
+             (valid: {SUPPRESS_KEYS:?})"
+        ));
+    }
+    let code = match config.get(Value::String("code".into())) {
+        None | Some(Value::Null) => {
+            return err("validation config for 'SUPPRESS': missing required key 'code'");
+        }
+        Some(Value::String(text)) => text.clone(),
+        Some(other) => {
+            return err(format!(
+                "validation config for 'SUPPRESS': 'code' must be a string, got {}",
+                name(other)
+            ));
+        }
+    };
+    if code == "CONFIG_ERROR" {
+        return err(
+            "validation config for 'SUPPRESS': CONFIG_ERROR cannot be suppressed; \
+             it reports that the profile itself is broken",
+        );
+    }
+    let node_ids = match config.get(Value::String("node_ids".into())) {
+        None | Some(Value::Null) => None,
+        Some(Value::Sequence(items)) => {
+            let mut ids = Vec::with_capacity(items.len());
+            for item in items {
+                let Value::String(id) = item else {
+                    return err(format!(
+                        "validation config for 'SUPPRESS': 'node_ids' entries must be \
+                         strings, got {}",
+                        name(item)
+                    ));
+                };
+                ids.push(id.clone());
+            }
+            Some(ids)
+        }
+        Some(other) => {
+            return err(format!(
+                "validation config for 'SUPPRESS': 'node_ids' must be a list, got {}",
+                name(other)
+            ));
+        }
+    };
+    Ok(SuppressConfig { code, node_ids })
+}
+
+/// Union the `node_ids` of entries naming one code; a suppress-all wins outright.
+fn merge_suppression(suppressions: &mut Vec<SuppressConfig>, entry: SuppressConfig) {
+    let Some(existing) = suppressions.iter_mut().find(|s| s.code == entry.code) else {
+        suppressions.push(entry);
+        return;
+    };
+    let (Some(ids), Some(new_ids)) = (existing.node_ids.as_mut(), entry.node_ids) else {
+        existing.node_ids = None;
+        return;
+    };
+    for id in new_ids {
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
 }

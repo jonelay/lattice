@@ -1,25 +1,15 @@
-# Writing a profile
+# Profile reference
 
-A profile is the YAML file that tells lattice what your register contains: which kinds of
-node exist, what their IDs look like, which attributes they carry, how they may be
-connected, and which of those rules are worth reporting on. The core ships no vocabulary
-of its own — it does not know what a requirement, an issue or a test is. Everything
-domain-specific arrives from a profile.
+A profile declares which kinds of node exist, what their IDs look like, which attributes
+they carry, how they may be connected, and which rules to validate. The core ships no
+domain vocabulary — everything domain-specific arrives from a profile.
 
-This is the reference for writing one. [glossary.md](glossary.md) defines every term
-lattice uses; `openspec/specs/profile-schema/spec.md` is the normative contract; where
-this guide and that spec disagree, the spec is right.
+[glossary.md](glossary.md) defines terms; `openspec/specs/profile-schema/spec.md` is
+the normative contract.
 
-## What belongs in a profile, and what does not
+## Profiles vs adapters
 
 A profile declares **vocabulary and policy**. An adapter reads **syntax**.
-
-The split matters because it decides where your work goes. If your register is a markdown
-table and you want a new column recognised, that is an adapter change — code. If your
-register already parses and you want a new ID shape accepted, a new node kind, a different
-severity, or a coverage validation, that is a profile change — data, no code at all.
-
-Concretely:
 
 | Question | Answered by |
 |---|---|
@@ -30,17 +20,13 @@ Concretely:
 | What may point at what? | profile (`edge_kinds`) |
 | Which gaps are errors, warnings, or advice? | profile (`validations`) |
 
-There is deliberately no parser DSL. A profile is data, not a programming language written
-in YAML, so a register whose on-disk shape differs from every shipped adapter needs an
-adapter — a standalone program taking `--profile` and `--target` and writing an interface
-document to stdout. `openspec/specs/adapter-contract/spec.md` defines that interface, and
-`crates/adapter-toml/` is a worked example over a non-markdown register.
+A register whose on-disk shape differs from every shipped adapter needs a new adapter —
+a standalone program taking `--profile` and `--target` and writing an interface document
+to stdout. See `openspec/specs/adapter-contract/spec.md` and `crates/adapter-toml/`.
 
-## A minimal profile
+## Minimal profile
 
-Four keys are required: `name`, `profile_version`, `node_kinds`, `edge_kinds`. This is a
-complete, loadable profile for a register of architecture decisions and the documents that
-implement them:
+Four keys are required: `name`, `profile_version`, `node_kinds`, `edge_kinds`:
 
 ```yaml
 name: decisions
@@ -69,175 +55,26 @@ edge_kinds:
       - [decision, decision]
 ```
 
-Check that it loads before wiring an adapter to it:
-
-```sh
-lattice resolve --profile profiles/decisions.yaml
-```
-
-`resolve` prints the resolved profile document — the same handoff the core writes for an
-adapter — so a load error surfaces here rather than halfway through a validation run.
+Check that it loads with `lattice resolve --profile profiles/decisions.yaml` before
+wiring an adapter to it.
 
 ## Top-level keys
 
 | Key | Required | Holds |
 |---|---|---|
 | `name` | yes | the profile's name |
-| `profile_version` | yes | semver string; see [Versioning](#versioning) |
+| `profile_version` | yes | three-part numeric version (X.Y.Z); see [Versioning](#versioning) |
 | `node_kinds` | yes | map of kind name → declaration |
 | `edge_kinds` | yes | map of kind name → declaration |
 | `validations` | no | list of validator configurations |
 | `pathways` | no | list of ordering-pathway names |
 | `extends` | no | path to a parent profile |
 
-**A top-level key the core does not recognise is preserved, not rejected.** This is how a
-profile carries adapter-specific settings the core has no opinion about. Every shipped
-profile uses it for an `adapter:` block:
+**A top-level key the core does not recognise is preserved, not rejected.** The core
+passes unrecognised keys through in the resolved document for the adapter to read. Every
+shipped profile uses this for an `adapter:` block whose shape is adapter-specific.
 
-```yaml
-adapter:
-  paths:
-    requirements: "docs/internal/REQUIREMENTS.md"
-    spec_dir: "docs/internal/spec"
-```
-
-The core never interprets those paths. It passes them through in the resolved document,
-and the adapter reads them. Put anything your adapter needs here; the shape is yours.
-
-### Markdown table adapter configuration
-
-The markdown adapter's original single-table form applies one schema to every markdown
-table selected by `adapter.paths.files`. The profile must declare exactly one node kind:
-
-```yaml
-adapter:
-  paths:
-    files: ["*.md"]
-  table:
-    id_column: "ID"
-    column_map:
-      "Description": summary
-    edge_columns:
-      "Traces To": traces_to
-```
-
-Use `adapter.tables` when one markdown file contains tables with different schemas. Each
-entry selects tables by matching a regular expression against the text of the most recent
-markdown heading, then supplies that table's node kind and column mappings:
-
-```yaml
-adapter:
-  paths:
-    files: ["**/*.md"]
-  tables:
-    - heading: '^Domain [0-9]+$'
-      kind: requirement
-      id_column: "ID"
-      column_map:
-        "Description": summary
-        "Status": status
-      edge_columns:
-        "Traces To": traces_to
-
-    - heading: '^Stakeholders$'
-      kind: stakeholder
-      id_column: "ID"
-      column_map:
-        "Name": name
-        "Role": role
-      edge_columns: {}
-```
-
-Patterns are tried in list order and the first match wins. They see heading text such as
-`Domain 01`, without the leading `##`. The nearest preceding heading at any level is the
-entire context: a `### Notes` heading replaces an earlier `## Requirements` heading rather
-than inheriting from it. A table before any heading has an empty context. In multi-table
-mode, an unmatched table produces a `PARSE_ERROR` and no nodes or edges; in the singular
-form, an implicit empty pattern matches every table for backward compatibility. Every
-`kind` named by `adapter.tables` must also be declared in `node_kinds`.
-
-### TOML adapter configuration
-
-The TOML adapter selects files with glob patterns in `adapter.paths.files` and maps each
-configured top-level array of tables to a node kind. `adapter.tables` is a map keyed by
-the TOML table name; every entry declares the node `kind`, the source key holding its ID
-(`id_key`), attribute mappings (`key_map`), and edge mappings (`edge_keys`):
-
-```yaml
-adapter:
-  paths:
-    files: ["registers/*.toml"]
-  id_prefix: file_stem
-  tables:
-    item:
-      kind: item
-      id_key: id
-      key_map:
-        id: id
-        stage: stage
-      edge_keys:
-        register: belongs_to
-        refs: references
-```
-
-With `adapter.id_prefix: file_stem`, row IDs are qualified as `<file-stem>/<id>`; omit it
-to keep the value of `id_key` unchanged. The only supported prefix mode is `file_stem`.
-
-For a one-file-per-record register, set `adapter.mode: directory`. Each matched `.toml`
-file's root table is then read as one record. `adapter.tables` is still required, but
-only its first entry by key order is used; that entry's map key is ignored and its
-`kind`, `id_key`, `key_map`, and `edge_keys` describe every file-root record:
-
-```yaml
-adapter:
-  mode: directory
-  paths:
-    files: ["records/*.toml"]
-  tables:
-    record:
-      kind: device
-      id_key: id
-      key_map:
-        name: name
-      edge_keys:
-        refs: references
-```
-
-`mode` defaults to `tables`, preserving the array-of-tables behavior above. Directory
-mode supports `id_prefix` and `pathway`, but not `header`: the whole file is already the
-record. A readable target with no files matching the configured globs produces an
-info-severity `NO_MATCHING_FILES` finding.
-
-An optional `adapter.header` reads one singleton table per selected file. It names the
-TOML `table`, output node `kind`, ID source (`id`), and attribute `key_map`. Set `id` to
-`file_stem` to derive the node ID from the filename, or name a key in the header table:
-
-```yaml
-adapter:
-  header:
-    table: register
-    kind: register
-    id: file_stem
-    key_map:
-      register_version: register_version
-      status: status
-```
-
-An optional `adapter.pathway` reads an ordering pathway from one file beneath the target.
-`source_file` identifies that file, `name` names the profile pathway, and `order_key` and
-`current_key` are dotted paths to the ordered values and current value:
-
-```yaml
-adapter:
-  pathway:
-    source_file: registers/index.toml
-    name: stage
-    order_key: register.stage_order
-    current_key: register.current_stage
-```
-
-See `profiles/toml.yaml` for a worked example combining table dispatch, a header node,
-file-stem ID qualification, and a pathway reader.
+Per-adapter `adapter:` block configuration is in [adapters.md](adapters.md).
 
 ## Node kinds
 
@@ -256,37 +93,20 @@ node_kinds:
       rationale: { type: string }
 ```
 
-**`id_pattern`** — a regex the node's ID must match. A node whose ID does not match its
-kind's pattern gets an `ID_FORMAT` finding. Note the doubled backslashes: this is a YAML
-string, so `\d` must be written `\\d`. An invalid regex is a load error naming the kind.
+**`id_pattern`** — regex the node's ID must match (`ID_FORMAT` on mismatch). Double
+backslashes in YAML: `\d` → `\\d`. An invalid regex is a load error.
 
-The pattern is the whole ID policy, and it is where most schema customisation happens.
-Widening `^\\d+\\.\\d+$` to `^\\d+\\.\\d+[a-z]?$` to admit a letter-suffixed insertion is a
-one-character edit with no code change anywhere.
+**`summary_attr`** — attr for the trace output's summary column. Must be declared, not
+a `list`.
 
-**`summary_attr`** — names which attr the trace output uses as its human-readable summary
-column. It must be a declared attr and must not be a `list`. A kind without one renders an
-empty cell.
+**`text_attrs`** — attrs a text-ranking consumer reads, in order. Must be `string` or
+`enum`. Absent means fall back to `summary_attr`; `[]` means no text to rank.
 
-**`text_attrs`** — names which attrs a text-ranking consumer reads, in the order given.
-Each must be declared and must be `string` or `enum` (an enum value is a string at
-runtime); `int`, `bool` and `list` are rejected, because a consumer reading only strings
-would skip them in silence and leave you with a key that does nothing.
+**`text_chunk_line_prefix`** — literal line prefix (not regex) at which a ranking consumer
+subdivides text. Rejected if blank, contains a newline, or the kind has no rankable text.
 
-Absent and empty are different, deliberately. No `text_attrs` means "fall back to
-`summary_attr`". `text_attrs: []` means "this kind offers nothing to rank."
-
-**`text_chunk_line_prefix`** — a **literal** line prefix at which a ranking consumer
-subdivides that kind's text. It is compared with a string prefix test and is never a
-regex: the core validates it and a separate program applies it, and a pattern language
-whose engines differ between the two is not a guarantee. Rejected if it is not a string,
-is empty or whitespace-only, contains a newline, or sits on a kind that offers no rankable
-text.
-
-**`orphan_ok`** — `true` exempts the kind from `ORPHAN_NODE`. Use it where having no edges
-is the normal case rather than a gap: unmarked tests, or a flat issue tracker whose issues
-mostly link to nothing. It is validation policy only — an exempt node still appears in
-`query orphans`, still counts, and still raises every other finding it earns.
+**`orphan_ok`** — `true` exempts the kind from `UNREFERENCED`/`UNTRACED`. Validation
+policy only — exempt nodes still appear in `query orphans`.
 
 ## Attributes
 
@@ -305,18 +125,11 @@ attrs:
 
 - `type` is required; `required` defaults to `false`.
 - `enum` must declare `values`.
-- `date` is an ISO 8601 calendar date string in exact `YYYY-MM-DD` form. Calendar-invalid
-  dates, datetimes, and non-zero-padded dates fail with `ATTR_TYPE`.
-- `list` must declare `items`, naming a **scalar** type only — `string`, `int`, `bool` or `date`.
-  Lists of lists and lists of enums are rejected, which keeps list validation one flat pass.
-- A kind with no `attrs` key loads with an empty map. A kind that carries no typed
-  attributes needs no placeholder.
+- `date` is `YYYY-MM-DD` exactly. Calendar-invalid dates and datetimes fail `ATTR_TYPE`.
+- `list` must declare `items` as a scalar type (`string`, `int`, `bool`, `date`).
+- A kind with no `attrs` key loads with an empty map.
 
-Violations surface as `ATTR_REQUIRED`, `ATTR_TYPE`, `ATTR_ENUM` and `ATTR_LIST_ITEMS`.
-
-Declaring an enum here rather than in the adapter is the point of the split: a state your
-tracker adds later becomes an `ATTR_ENUM` finding you can see, never an adapter that
-silently rejects or rewrites it.
+Violations: `ATTR_REQUIRED`, `ATTR_TYPE`, `ATTR_ENUM`, `ATTR_LIST_ITEMS`.
 
 ## Edge kinds
 
@@ -334,27 +147,14 @@ edge_kinds:
       - [req, req]
 ```
 
-An edge outside the allowed pairs gets an `EDGE_CONSTRAINT` finding carrying the source
-node's ID. A pair naming a kind not in `node_kinds` is a load error.
+An edge outside the allowed pairs gets `EDGE_CONSTRAINT`. A pair naming a kind not in
+`node_kinds` is a load error. An edge kind with no `allowed` key permits nothing.
 
-**`cross_source`** — `true` marks an edge kind whose targets may live in another source.
-When a target does not resolve in a standalone run, its `VACANCY` is retained at
-hint severity instead of the configured or default severity. The program composition
-layer resolves the same plain target ID against its source-qualified allowed pairs.
-Absent means `false`; source-local edge kinds keep the existing behavior.
+**`cross_source: true`** — marks an edge kind whose targets may live in another source.
+Unresolved targets get `VACANCY` at hint severity instead of the default, for later
+resolution during fuse composition.
 
-```yaml
-edge_kinds:
-  external_verifies:
-    cross_source: true
-```
-
-**An edge kind with no `allowed` key permits nothing.** It loads, but every edge of that
-kind whose endpoints both exist with declared kinds produces `EDGE_CONSTRAINT`. If you
-mean "any pairing", enumerate the pairings.
-
-Edges may name endpoints that were never declared as nodes. That is not silently tolerated
-and not treated as a node either — it surfaces as `VACANCY`.
+Edges naming undeclared endpoints surface as `VACANCY`.
 
 ## Validations
 
@@ -368,19 +168,16 @@ validations:
       edge_kind: verifies
       severity: warning
 
-  - ORPHAN_NODE:
+  - UNREFERENCED:
+      severity: info
+  - UNTRACED:
       severity: info
 ```
 
-Every entry is honoured independently. A profile may configure the same code more than
-once — two `COVERAGE` rules over different edge kinds both run — and a later entry never
-replaces an earlier one. Silently discarding a declared configuration is the failure this
-tool exists to prevent.
+Every entry is honoured independently — the same code may appear more than once (e.g. two
+`COVERAGE` rules over different edge kinds). Unknown keys are rejected, not ignored.
 
-**Unknown keys are rejected, not ignored.** `target_kinds` where you meant `target_kind` is
-a load error rather than a setting that quietly does nothing.
-
-### The built-in codes
+### Finding codes
 
 | Code | Fires when | Default |
 |---|---|---|
@@ -394,70 +191,52 @@ a load error rather than a setting that quietly does nothing.
 | `ATTR_LIST_ITEMS` | list element does not match `items` | error |
 | `CONFIG_ERROR` | validation config is malformed or names an undeclared kind | error |
 | `CONSTRAINT` | a node fails a cross-field constraint declared in the profile | warning |
-| `ORPHAN_NODE` | node has no incoming or outgoing edges | warning |
+| `UNREFERENCED` | node has no incoming edges | warning |
+| `UNTRACED` | node has no outgoing edges | warning |
 | `COVERAGE` | target node has no incoming edge of the configured kind | warning |
 | `COVERAGE_DEEP` | target uncovered under the rollup rule | warning |
 | `SOURCE_MISSING` | a cited path does not resolve on disk (adapter-emitted) | warning |
 | `PATHWAY_UNRESOLVED` | a pathway binding names a pathway the graph does not carry | warning |
 | `PATHWAY_INVALID` | a register's declared pathway does not hold (adapter-emitted) | warning |
+| `SUPPRESS_UNUSED` | a `SUPPRESS` entry matched no finding this run | info |
 | `COVERAGE_UNKNOWN` | evidence-bearing nodes exist that attribute to nothing | hint |
 | `SUGGESTED_EDGE` | the suggestion sidecar proposes an edge | hint |
 | `SUGGESTION_UNRESOLVED` | a suggestion names something that does not resolve | hint |
 
-The three hint-tier codes are overlay output — advice rendered alongside findings. They
-never affect the exit code and cannot be promoted; see [Severities](#severities).
+Hint-tier codes cannot be promoted; see [Severities](#severities).
 
-Configuration keys by code:
+Configuration keys per code:
 
 - `COVERAGE` — `target_kind`, `edge_kind`, `where`, `severity`
 - `COVERAGE_DEEP` — `target_kind`, `via`, `evidence`, `where`, `severity`
 - `CONSTRAINT` — `kind`, `when`, `expect`, `reject`, `message`, `severity`
 - `SUMMARY` — `node_kind`, `status_attr`, `group_by_attr`, `severity`
-- any other code — `severity` alone
-
-That last line is what lets a profile set the severity of a validator the core does not
-implement, including codes your own adapter emits.
+- `SUPPRESS` — `code`, `node_ids` (no `severity`; see [Suppressing findings](#suppressing-findings))
+- any other code (including adapter-emitted) — `severity` alone
 
 ### Deep coverage
 
-`COVERAGE` is flat: does this node have an incoming edge of that kind? `COVERAGE_DEEP` is
-a rollup — a node is covered if it has direct evidence, **or** it has children and every
-one of them is covered.
+`COVERAGE` is flat: does this node have an incoming edge of that kind? `COVERAGE_DEEP`
+is a rollup — covered by direct evidence **or** by every child being covered. Computed
+as a least fixed point; childless targets with no evidence and evidence-free cycles stay
+uncovered.
 
-Both coverage validators accept an optional `where` block using the same condition syntax
-as `CONSTRAINT`. It limits which target-kind nodes are checked. Omitting it checks every
-target, as before.
-
-```yaml
-  - COVERAGE:
-      target_kind: req
-      edge_kind: verifies
-      where:
-        status: {not: "deferred"}
-```
+Both accept an optional `where` block (same syntax as `CONSTRAINT`) to limit which
+target-kind nodes are checked:
 
 ```yaml
   - COVERAGE_DEEP:
       target_kind: req
-      via: derives        # edge kind whose *targets* are the parents
+      via: derives
       evidence: verifies
       where:
         status: {not: "deferred"}
-      severity: warning
 ```
 
-Use it wherever requirements decompose. A flat validation reads a parent covered only through
-its children as a false positive; the rollup does not. It is computed per run as a least
-fixed point and stored nowhere, so a childless target with no evidence stays uncovered and
-an evidence-free cycle stays uncovered. `where` filters only the targets that may produce a
-finding; non-matching target-kind nodes remain in the traversal and can still carry coverage
-between descendants and ancestors.
+### SUMMARY
 
-### SUMMARY is not a finding
-
-`SUMMARY` is the one entry in `validations` that reports nothing. It configures the
-`lattice summary` command's status rollup, and that command **cannot run without it** —
-a profile with no `SUMMARY` block makes `lattice summary` exit 2.
+`SUMMARY` configures `lattice summary`'s status rollup. Without it, summary falls back
+to a structural report (node/edge/finding counts by kind).
 
 ```yaml
   - SUMMARY:
@@ -466,17 +245,12 @@ a profile with no `SUMMARY` block makes `lattice summary` exit 2.
       group_by_attr: file
 ```
 
-The rollup has one row per distinct value of `group_by_attr`, with a column for each value
-of the `status_attr` enum. Above, that is one row per spec file and one column per status.
+One row per distinct `group_by_attr` value, one column per `status_attr` enum value.
 
-A non-string value for `node_kind`, `status_attr` or `group_by_attr` makes `lattice
-summary` exit 2 with an error rather than producing a partial table.
+### CONSTRAINT
 
-### Cross-field constraints
-
-`CONSTRAINT` lets a profile express per-node invariants as data. Each entry declares
-which node kind to check, an optional guard (`when`), and one or both of `expect` (all
-conditions must hold) and `reject` (no condition may hold).
+Per-node invariants. Each entry declares the node kind, an optional guard (`when`), and
+one or both of `expect` (all must hold) and `reject` (none may hold).
 
 ```yaml
   - CONSTRAINT:
@@ -491,11 +265,10 @@ conditions must hold) and `reject` (no condition may hold).
       severity: warning
 ```
 
-The `when` block is a guard: if any condition fails, the rule is silently skipped for
-that node. Then `expect` and `reject` are checked — a failure in either emits a
-`CONSTRAINT` finding. A rule must declare at least one of `expect` or `reject`.
+`when` is a guard — if any condition fails, the rule is skipped. A rule must declare
+at least one of `expect` or `reject`.
 
-The condition operators are:
+Condition operators:
 
 | Operator | Meaning |
 |---|---|
@@ -511,37 +284,49 @@ The condition operators are:
 | `present: false` | attr does not exist |
 
 Comparison is type-aware: a string `"42"` does not match an integer `42`. Ordering
-operators compare integers numerically and strings lexically, which gives chronological
-ordering for validated `YYYY-MM-DD` dates. Missing attrs, mixed types, floats, and other
-JSON values do not compare. An unknown operator is a load error, not a silently inert
-condition.
+operators (`lt`, `gt`, `lte`, `gte`) require an integer or a string as the threshold
+value; arrays, objects, booleans, nulls, and floats are rejected at load time.
+Integers compare numerically and strings compare lexically, which gives chronological
+ordering for validated `YYYY-MM-DD` dates. At evaluation time, a missing attr or a
+type mismatch between the node's attr and the threshold does not compare (the
+condition evaluates as unsatisfied). An unknown operator is a load error.
 
 Multiple `CONSTRAINT` entries are honoured independently, following the same repeated-code
 contract as `COVERAGE`. Pathway demotion and `--strict` promotion apply normally.
 
 ### Severities
 
-Four tiers: `error`, `warning`, `info`, `hint`.
+Four tiers: `error`, `warning`, `info`, `hint`. `--strict` promotes `warning` → `error`
+only. Exit codes: 0 clean, 1 error-severity findings, 2 lattice could not run.
 
-`--strict` promotes `warning` to `error` and reaches exactly that tier — never `info`,
-never `hint`. Exit codes are 0 clean, 1 error-severity findings, 2 lattice could not run at
-all.
+An override may demote any code, including to `hint`. **Hint cannot be promoted** — an
+attempt is reported as `CONFIG_ERROR` and the finding stays at `hint`.
 
-An override may demote any code, including to `hint`. **An override may not promote a
-finding that arrives at `hint`.** Hint marks advice the tool cannot stand behind as a
-warning, and promoting it would launder advice into a gate; an attempt is reported as
-`CONFIG_ERROR` naming the code, once, and the finding stays at `hint`.
+### SUPPRESS
 
-The rule is stated over the severity a finding *arrives at*, not over its shipped default,
-because the core has no default for a code it does not implement.
+Declares a finding as structurally expected without hiding it from JSON.
 
-## Ordering pathways
+```yaml
+  - SUPPRESS:
+      code: VACANCY
+      node_ids: [UN-1, UN-2]   # optional; omit to suppress all findings of the code
+  - SUPPRESS:
+      code: UNTRACED
+```
 
-A pathway lets a finding's severity depend on how far the target has actually progressed —
-so that a reference to something from a stage the register has not reached yet reads as
-advice rather than as a gap.
+A suppressed finding never counts toward exit code 1, is omitted from `plain`/`rich`,
+and stays in `json` with `"suppressed": true`. Entries for the same code merge their
+`node_ids`; one without `node_ids` supersedes ID-specific entries.
 
-Declare the pathway, then bind a code to it:
+Suppression runs **after** `--strict` promotion. `CONFIG_ERROR` cannot be suppressed.
+
+**Stale entries** produce `SUPPRESS_UNUSED` (info). Override to `warning` and `--strict`
+gates on stale config. `SUPPRESS_UNUSED` is itself suppressible.
+
+## Pathways
+
+Findings bound to a pathway are demoted to `info` when the target has not reached the
+bound stage.
 
 ```yaml
 pathways:
@@ -553,30 +338,19 @@ validations:
       position_attr: stage
 ```
 
-`pathways` is a list of bare names and nothing else. It must not carry the ordered positions or
-the current position: those are target state, read from the register by the adapter at
-ingest. A copy held in the profile would advance without lattice noticing, which is the
-hand-maintained derived state the tool exists to eliminate.
+`pathways` is a list of bare names. The ordered positions and current position are read
+from the register by the adapter, never declared in the profile.
 
-Rules worth knowing before you write one:
-
-- `pathway` and `position_attr` are required together. A partial binding is a load error,
-  because a setting that silently does nothing is indistinguishable from one that works.
-- `pathway` must name a pathway in the same profile's `pathways` list.
-- One binding per code. A second is a load error naming the duplicated code — with two
-  bindings there would be two answers for one finding and no rule to choose. Repeated
-  *non-binding* configuration of the same code is still honoured.
-- A demoted finding becomes `info`, always. There is no configurable target: demotion to
-  `warning` would be promoted straight back by `--strict`.
-
-Bindings work on codes the core does not implement, on the same terms, so an adapter's own
-codes can be bound too.
+- `pathway` and `position_attr` are required together; a partial binding is a load error.
+- `pathway` must name a pathway in the profile's `pathways` list.
+- One binding per code (a second is a load error).
+- Demoted findings become `info`, always.
+- Bindings work on adapter-emitted codes too.
 
 ## Inheritance
 
-`extends` names a single parent profile, resolved relative to the file that declares it.
-The parent merges into the child before any structural validation, and `extends` is
-stripped from the result.
+`extends` names a parent profile (relative path). Merged before validation, stripped
+from the result.
 
 ```yaml
 name: decisions-strict
@@ -584,50 +358,23 @@ profile_version: "1.1.0"
 extends: decisions.yaml
 
 validations:
-  - ORPHAN_NODE:
+  - UNREFERENCED:
+      severity: error
+  - UNTRACED:
       severity: error
 ```
 
-Merge rules:
-
-- **Scalars** — the child wins.
-- **Lists** — the child replaces the parent's list whole. There is no element merging: a
-  child restating `allowed` or `validations` owns that list entirely.
-- **Mappings** — recursive deep merge. A child kind declaring only a new `id_pattern`
-  keeps the parent's `attrs`.
-
-`profile_version` comes from the child alone. A child that omits it is rejected even when
-the parent declares one, because the child is the document of record for compatibility.
-
-Chains (A extends B extends C) work; cycles, self-extension, a non-string `extends`, a
-missing parent file, and a parent that is not a YAML mapping are all load errors.
-
-Node-kind order in the merged result is parent-first, then child-only additions. A child
-kind overriding a parent kind keeps the parent's position. Order matters because it sets
-`declared_index`, which controls trace grouping.
+Merge: scalars — child wins. Lists — child replaces whole. Mappings — recursive deep
+merge. `profile_version` comes from the child alone. Chains work; cycles are load errors.
+Node-kind order is parent-first, child additions after.
 
 ## Versioning
 
-`profile_version` is a semver string, required in every profile. The core rejects a profile
-whose major version exceeds what it supports.
+`profile_version` is X.Y.Z (no leading zeros), required. The core rejects a major version
+it does not support. **Node IDs are public** — widening an `id_pattern` is safe;
+renumbering breaks downstream references.
 
-Bump it when you change what the profile means — and note that **node IDs are public**.
-They are the join key for anything downstream, so changing an `id_pattern` in a way that
-changes existing IDs breaks every reference to them. Widening a pattern to admit a new
-shape is additive and safe; renumbering is not.
-
-## What is not configurable, and why
-
-- **The parser.** No profile-driven grammar. Registers whose on-disk shape differs need an
-  adapter.
-- **Pathway values.** The ordered positions and the current position are read from the
-  register, never declared in the profile.
-- **Promotion out of `hint`.** See [Severities](#severities).
-- **Caching.** Nothing computed is written back. Coverage, rollups and orphans are derived
-  on demand, every run. A profile key that stored a computed answer would be the drift this
-  tool exists to catch.
-
-## Checking your work
+## Verification
 
 ```sh
 lattice resolve  --profile profiles/yours.yaml
@@ -635,10 +382,6 @@ lattice validate --profile profiles/yours.yaml --adapter ./adapters/yours \
     --target /path/to/register-repo --format plain
 ```
 
-`resolve` catches load errors on their own. `validate` exercises the profile against real
-data.
-
-**A finding count of zero proves nothing on its own.** Zero dangling references over zero
-edges is satisfied by an adapter that built no edges at all. Check the edge count beside
-the finding count — `lattice query counts` reports per-kind node and edge tallies, showing
-declared kinds even at zero.
+`resolve` catches load errors. `validate` exercises the profile against real data.
+A finding count of zero proves nothing on its own — check the edge count beside it
+with `lattice query counts`.

@@ -9,6 +9,7 @@
 mod common;
 
 use common::{MINIMAL_PROFILE, profile_from, profile_from_files};
+use lattice_core::profile::AttrType;
 
 /// The message of a load that was expected to fail.
 fn load_error(yaml: &str) -> String {
@@ -65,7 +66,7 @@ edge_kinds: {}
     assert!(req.id_matches("REQ-0001"));
     assert!(!req.id_matches("REQ-1"));
     let text = &req.attrs["text"];
-    assert_eq!(text.kind, "string");
+    assert_eq!(text.kind, AttrType::String);
     assert!(text.required);
 }
 
@@ -451,7 +452,7 @@ edge_kinds: {}
 fn enum_attr_records_its_values() {
     let profile = profile_from(&attr_profile("{type: enum, values: [done, todo]}")).unwrap();
     let attr = &profile.node_kinds()["req"].attrs["status"];
-    assert_eq!(attr.kind, "enum");
+    assert_eq!(attr.kind, AttrType::Enum);
     assert_eq!(
         attr.values.as_deref(),
         Some(["done".to_string(), "todo".to_string()].as_slice())
@@ -462,15 +463,15 @@ fn enum_attr_records_its_values() {
 fn list_attr_records_its_item_type() {
     let profile = profile_from(&attr_profile("{type: list, items: date}")).unwrap();
     let attr = &profile.node_kinds()["req"].attrs["status"];
-    assert_eq!(attr.kind, "list");
-    assert_eq!(attr.items.as_deref(), Some("date"));
+    assert_eq!(attr.kind, AttrType::List);
+    assert_eq!(attr.items, Some(AttrType::Date));
 }
 
 #[test]
 fn date_attr_is_accepted_without_subfields() {
     let profile = profile_from(&attr_profile("{type: date}")).unwrap();
     let attr = &profile.node_kinds()["req"].attrs["status"];
-    assert_eq!(attr.kind, "date");
+    assert_eq!(attr.kind, AttrType::Date);
     assert_eq!(attr.values, None);
     assert_eq!(attr.items, None);
 }
@@ -683,9 +684,15 @@ fn a_non_string_version_is_rejected() {
 }
 
 #[test]
-fn a_non_semver_version_is_rejected() {
+fn a_non_numeric_triplet_version_is_rejected() {
     let error = load_error(&MINIMAL_PROFILE.replace("1.0.0", "1.0"));
-    assert!(error.contains("is not valid semver"), "{error}");
+    assert!(error.contains("is not a valid version"), "{error}");
+}
+
+#[test]
+fn a_version_with_leading_zeros_is_rejected() {
+    let error = load_error(&MINIMAL_PROFILE.replace("1.0.0", "01.0.0"));
+    assert!(error.contains("is not a valid version"), "{error}");
 }
 
 // Requirement: Profile YAML structure
@@ -720,7 +727,7 @@ fn validations_declared_as_a_mapping_is_rejected() {
 
 #[test]
 fn an_invalid_severity_override_names_the_valid_ones() {
-    let yaml = format!("{MINIMAL_PROFILE}validations:\n  - ORPHAN_NODE:\n      severity: loud\n");
+    let yaml = format!("{MINIMAL_PROFILE}validations:\n  - UNREFERENCED:\n      severity: loud\n");
     let error = load_error(&yaml);
     assert!(error.contains("invalid severity 'loud'"), "{error}");
     assert!(error.contains("error, info, warning"), "{error}");
@@ -728,10 +735,10 @@ fn an_invalid_severity_override_names_the_valid_ones() {
 
 #[test]
 fn a_severity_override_on_a_built_in_code_is_recorded() {
-    let yaml = format!("{MINIMAL_PROFILE}validations:\n  - ORPHAN_NODE:\n      severity: info\n");
+    let yaml = format!("{MINIMAL_PROFILE}validations:\n  - UNREFERENCED:\n      severity: info\n");
     let profile = profile_from(&yaml).unwrap();
     assert_eq!(
-        profile.validation_overrides()["ORPHAN_NODE"],
+        profile.validation_overrides()["UNREFERENCED"],
         lattice_core::types::Severity::Info
     );
 }
@@ -770,7 +777,7 @@ fn an_unknown_attr_type_names_the_valid_ones() {
 fn a_bare_type_name_is_shorthand_for_a_typed_attr() {
     let profile = profile_from(&attr_profile("string")).unwrap();
     let attr = &profile.node_kinds()["req"].attrs["status"];
-    assert_eq!(attr.kind, "string");
+    assert_eq!(attr.kind, AttrType::String);
     assert!(
         !attr.required,
         "shorthand cannot say required, so it is not"
@@ -887,12 +894,12 @@ fn scalar_child_wins() {
 #[test]
 fn list_replaces_whole() {
     let parent = format!(
-        "{PARENT_PROFILE}validations:\n  - ORPHAN_NODE:\n      severity: info\n\
+        "{PARENT_PROFILE}validations:\n  - UNREFERENCED:\n      severity: info\n\
          \x20 - VACANCY:\n      severity: warning\n"
     );
     let child = "extends: parent.yaml\nname: child\nprofile_version: \"1.0.0\"\n\
                  node_kinds: {}\nedge_kinds: {}\n\
-                 validations:\n  - ORPHAN_NODE:\n      severity: error\n";
+                 validations:\n  - UNREFERENCED:\n      severity: error\n";
     let profile = profile_from_files(&[("child.yaml", child), ("parent.yaml", &parent)]).unwrap();
     assert_eq!(
         profile.validation_overrides().len(),
@@ -900,7 +907,7 @@ fn list_replaces_whole() {
         "child's single validation replaces parent's two"
     );
     assert_eq!(
-        profile.validation_overrides()["ORPHAN_NODE"],
+        profile.validation_overrides()["UNREFERENCED"],
         lattice_core::types::Severity::Error
     );
 }
@@ -1187,4 +1194,131 @@ fn chunk_line_prefix_containing_a_carriage_return_is_rejected() {
                 title: {type: string, required: true}\nedge_kinds: {}\n";
     let error = load_error(yaml);
     assert!(error.contains("text_chunk_line_prefix"), "{error}");
+}
+
+// Requirement: Suppress configuration in profiles
+
+#[test]
+fn suppress_entry_with_node_ids_loads() {
+    let profile = profile_from(&format!(
+        "{MINIMAL_PROFILE}validations:\n  - SUPPRESS: {{code: VACANCY, node_ids: [UN-1]}}\n"
+    ))
+    .expect("a suppress entry loads");
+    let suppressions = profile.suppressions();
+    assert_eq!(suppressions.len(), 1);
+    assert_eq!(suppressions[0].code, "VACANCY");
+    assert_eq!(
+        suppressions[0].node_ids.as_deref(),
+        Some(&["UN-1".to_string()][..])
+    );
+}
+
+#[test]
+fn suppress_all_entry_loads() {
+    let profile = profile_from(&format!(
+        "{MINIMAL_PROFILE}validations:\n  - SUPPRESS: {{code: UNREFERENCED}}\n"
+    ))
+    .expect("a suppress-all entry loads");
+    let suppressions = profile.suppressions();
+    assert_eq!(suppressions.len(), 1);
+    assert_eq!(suppressions[0].code, "UNREFERENCED");
+    assert_eq!(suppressions[0].node_ids, None);
+}
+
+#[test]
+fn suppress_entries_for_one_code_merge_their_node_ids() {
+    let profile = profile_from(&format!(
+        "{MINIMAL_PROFILE}validations:\n  \
+         - SUPPRESS: {{code: VACANCY, node_ids: [UN-1]}}\n  \
+         - SUPPRESS: {{code: VACANCY, node_ids: [UN-2, UN-1]}}\n"
+    ))
+    .unwrap();
+    let suppressions = profile.suppressions();
+    assert_eq!(suppressions.len(), 1);
+    assert_eq!(
+        suppressions[0].node_ids.as_deref(),
+        Some(&["UN-1".to_string(), "UN-2".to_string()][..])
+    );
+}
+
+#[test]
+fn suppress_all_supersedes_an_id_specific_entry_for_the_same_code() {
+    let profile = profile_from(&format!(
+        "{MINIMAL_PROFILE}validations:\n  \
+         - SUPPRESS: {{code: VACANCY, node_ids: [UN-1]}}\n  \
+         - SUPPRESS: {{code: VACANCY}}\n"
+    ))
+    .unwrap();
+    let suppressions = profile.suppressions();
+    assert_eq!(suppressions.len(), 1);
+    assert_eq!(suppressions[0].node_ids, None);
+}
+
+#[test]
+fn suppress_missing_code_is_rejected() {
+    let error = load_error(&format!(
+        "{MINIMAL_PROFILE}validations:\n  - SUPPRESS: {{node_ids: [X]}}\n"
+    ));
+    assert!(error.contains("SUPPRESS"), "{error}");
+    assert!(error.contains("code"), "{error}");
+}
+
+#[test]
+fn suppress_code_of_the_wrong_type_is_rejected() {
+    let error = load_error(&format!(
+        "{MINIMAL_PROFILE}validations:\n  - SUPPRESS: {{code: 7}}\n"
+    ));
+    assert!(
+        error.contains("'code' must be a string, got int"),
+        "{error}"
+    );
+}
+
+#[test]
+fn suppress_node_ids_of_the_wrong_shape_is_rejected() {
+    let error = load_error(&format!(
+        "{MINIMAL_PROFILE}validations:\n  - SUPPRESS: {{code: VACANCY, node_ids: \"UN-1\"}}\n"
+    ));
+    assert!(error.contains("node_ids"), "{error}");
+    assert!(error.contains("got string"), "{error}");
+
+    let error = load_error(&format!(
+        "{MINIMAL_PROFILE}validations:\n  - SUPPRESS: {{code: VACANCY, node_ids: [1]}}\n"
+    ));
+    assert!(error.contains("node_ids"), "{error}");
+    assert!(error.contains("got int"), "{error}");
+}
+
+#[test]
+fn suppress_config_error_is_rejected() {
+    let error = load_error(&format!(
+        "{MINIMAL_PROFILE}validations:\n  - SUPPRESS: {{code: CONFIG_ERROR}}\n"
+    ));
+    assert!(error.contains("CONFIG_ERROR"), "{error}");
+}
+
+#[test]
+fn suppress_with_an_unknown_key_is_rejected() {
+    let error = load_error(&format!(
+        "{MINIMAL_PROFILE}validations:\n  - SUPPRESS: {{code: VACANCY, node_id: [UN-1]}}\n"
+    ));
+    assert!(error.contains("node_id"), "{error}");
+    assert!(error.contains("unknown key"), "{error}");
+}
+
+#[test]
+fn suppress_takes_no_severity_or_pathway_binding() {
+    let error = load_error(&format!(
+        "{MINIMAL_PROFILE}validations:\n  - SUPPRESS: {{code: VACANCY, severity: info}}\n"
+    ));
+    assert!(error.contains("SUPPRESS"), "{error}");
+    assert!(error.contains("severity"), "{error}");
+    assert!(error.contains("unknown key"), "{error}");
+
+    let error = load_error(&format!(
+        "{MINIMAL_PROFILE}pathways: [phase]\nvalidations:\n  \
+         - SUPPRESS: {{code: VACANCY, pathway: phase, position_attr: phase}}\n"
+    ));
+    assert!(error.contains("pathway"), "{error}");
+    assert!(error.contains("unknown key"), "{error}");
 }

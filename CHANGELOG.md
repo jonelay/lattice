@@ -11,7 +11,97 @@ Patch bumps (0.x.y) do not change public surfaces.**
 See `openspec/specs/trace-report/spec.md` for which trace-JSON fields are
 public and what each version axis governs.
 
-## [Unreleased]
+## [0.7.0] — 2026-09-10
+
+### Added
+- **`--check-resolved` on `query reaches` and `query reached-by`.** Each
+  reached node gains a `tainted` boolean: true when every path from the
+  origin to it crosses an undeclared endpoint, false when at least one path
+  is declared end to end. Undeclared endpoints are still traversed through
+  and still never reported. JSON carries `tainted` per node; plain and rich
+  append ` (tainted)` to the node's line, and rich adds a tainted tally to
+  its footer. Without the flag the answer is byte-identical to before and no
+  second walk runs.
+- **`lattice coverage` subcommand.** Per node kind: total nodes, how many
+  have at least one incoming edge, how many have at least one outgoing
+  edge, and each as a percentage rounded to one decimal. Every declared
+  kind appears even at zero, plus any undeclared kind the register
+  carries, ordered by name. An edge counts whether or not its far endpoint
+  resolves, the same terms as `query orphans`; a dangling endpoint is not
+  a node of any kind. JSON carries a `kinds` array of `kind`, `total`,
+  `incoming`, `outgoing`, `incoming_pct`, `outgoing_pct`. A report, not a
+  validation pass: no `--strict`, adapter issues go to stderr, exit 0 or
+  2, never 1.
+- **`query diff` reports edge attr changes.** An edge present at both
+  revisions under the same (src, tgt, kind) with different attrs lands in a
+  new `edges_changed` section carrying both attr maps. Parallel edges pair
+  up in document order; unmatched surplus stays in
+  `edges_added`/`edges_removed`. Previously an attr-only change on an edge
+  was invisible to diff. `nodes_changed` entries gain the same `attrs_a`
+  and `attrs_b` keys (additive; `id` and `kind` are unchanged).
+- **`lattice summary` works without a `SUMMARY` config.** A profile that
+  declares none gets a structural report instead of exit 2: node counts by
+  kind, edge counts by kind, and finding tallies by code and severity from
+  an internal validation pass (never `--strict`). Suppressed findings are
+  left out of the tallies. JSON carries `node_counts`, `edge_counts`, and
+  `finding_counts`; the configured rollup's output is unchanged. Finding
+  severity in the tallies never affects the exit code — only adapter
+  issues do, as before.
+- **Finding suppression.** A profile's `validations` list accepts
+  `SUPPRESS: {code, node_ids?}` entries. A suppressed finding keeps its
+  resolved severity, code, message and provenance, never counts toward
+  exit code 1, is omitted from `plain` and `rich`, and stays in `json`
+  with `"suppressed": true`. Unsuppressed findings carry no `suppressed`
+  key, so existing JSON consumers see no change. Suppression runs after
+  `--strict` promotion; strict does not unsuppress. `CONFIG_ERROR`
+  cannot be suppressed (load error). Entries for one code merge their
+  `node_ids`; a suppress-all supersedes ID-specific entries.
+- **`SUPPRESS_UNUSED` finding code** (info). Emitted once per `SUPPRESS`
+  entry whose `(code, node_ids)` selector matched no finding this run,
+  with the profile as provenance. Overridable and strict-promotable, so
+  a profile can gate on stale suppressions; itself suppressible in one
+  deterministic pass.
+- **Suppression in `lattice fuse`.** A source finding's `suppressed`
+  flag survives the merge. Fuse-profile `SUPPRESS` entries apply to
+  cross-source and composed-graph findings, with `node_ids` matched
+  against composed `source:id`; stale entries report against
+  `<fuse-profile>`. Trace-JSON findings gain an optional `suppressed`
+  key (absent when false), so `trace_version` is unchanged.
+
+### Changed
+- **BREAKING: configured summary JSON key `files` renamed to `groups`.**
+  The array of per-group rows in `lattice summary --format json` was named
+  after phase-sweep's grouping attr; rows are keyed by whatever
+  `group_by_attr` the profile names, and the payload key now says so.
+  `totals` and the row shape are unchanged. Update consumers reading
+  `.files` to read `.groups`.
+- **BREAKING: `ORPHAN_NODE` retired, replaced by directional codes.**
+  `UNREFERENCED` (no incoming edges) and `UNTRACED` (no outgoing edges)
+  replace the undirected `ORPHAN_NODE`. A fully disconnected node now
+  receives both findings. Nodes that previously had edges in only one
+  direction (e.g. a root requirement with outgoing traces but no incoming
+  edges) were "connected" under the old semantics and raised no finding;
+  they now receive the appropriate directional finding. Registers relying
+  on `--strict` may see new exit-code failures for these nodes — add
+  `orphan_ok` or a severity override to suppress. Profiles overriding
+  `ORPHAN_NODE` severity should override both `UNREFERENCED` and `UNTRACED`
+  instead — an override naming `ORPHAN_NODE` becomes a silent no-op.
+  `orphan_ok: true` suppresses both new codes.
+- **BREAKING: `axes` renamed to `pathways` throughout.** The profile key
+  `axes:` is now `pathways:`, the per-validation binding key `axis:` is now
+  `pathway:`, and finding codes `AXIS_UNRESOLVED` and `AXIS_INVALID` are
+  now `PATHWAY_UNRESOLVED` and `PATHWAY_INVALID`. The `position_attr`
+  binding key is unchanged. Profiles using `axes:` or overriding the old
+  codes need updating.
+
+### Fixed
+- **Ordering condition operators reject non-comparable values at load.**
+  `lt`, `gt`, `lte`, `gte` in `CONSTRAINT` entries now require an integer
+  or a string as the threshold. Arrays, objects, booleans, nulls, and floats
+  previously parsed without error but silently never matched at evaluation —
+  the condition evaluated as unsatisfied with no diagnostic. A profile using
+  such a value now fails to load with a `CONFIG_ERROR`. This is a load-time
+  change only; evaluation behaviour for valid profiles is unchanged.
 
 ## [0.6.0] — 2026-09-09
 

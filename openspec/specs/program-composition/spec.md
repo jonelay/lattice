@@ -37,7 +37,9 @@ Verified by: `cargo test -p lattice-core --test fuse -- manifest`
 The command SHALL load the fuse profile referenced by the manifest. The fuse
 profile SHALL declare `edge_kinds` with allowed endpoint pairs using
 source-qualified kind names (`source:kind` with colon separator), and optionally
-`validations` for cross-source checks.
+`validations` for cross-source checks. The `validations` list MAY include
+`SUPPRESS` entries on the same terms as a source profile (see the
+profile-schema capability).
 
 The fuse profile SHALL NOT declare `node_kinds` — those are owned by source
 profiles.
@@ -52,6 +54,10 @@ Verified by: `cargo test -p lattice-core --test fuse -- rejects_bad_profiles`
 #### Scenario: Fuse profile declares node_kinds
 - **WHEN** the fuse profile contains a `node_kinds` section
 - **THEN** the command exits 2 — node kinds belong to source profiles
+
+#### Scenario: Fuse profile with a SUPPRESS entry loads
+- **WHEN** the fuse profile declares `- SUPPRESS: {code: VACANCY}` in `validations`
+- **THEN** the fuse profile loads and the entry applies to the composed run
 
 ### Requirement: Run each source through lattice trace
 The command SHALL run `lattice trace --format json --profile <profile> --adapter
@@ -135,7 +141,7 @@ Verified by: `cargo test -p lattice-core --test fuse -- duplicates_ambiguity`
 The command SHALL construct a temporary profile from the composed graph's node
 kinds and the fuse profile's edge kinds and validations, then run the standard
 `validate` pass on the composed graph. Findings from standard validators (such as
-ORPHAN_NODE) SHALL carry source attribution derived from the node's provenance.
+UNREFERENCED, UNTRACED) SHALL carry source attribution derived from the node's provenance.
 For node kinds emitted by source traces, the temporary profile SHALL qualify the
 source profile's `id_pattern` so that it validates composed IDs while preserving
 the source profile's validation of the raw ID. Node kinds added only from fuse
@@ -151,7 +157,7 @@ entries MAY include `where:` conditions, consistent with standard profiles.
 `--strict` SHALL promote warnings to errors after all findings are collected,
 consistent with single-source behavior.
 
-Verified by: `cargo test -p lattice-core --test fuse -- standard_constraints duplicates_ambiguity coverage_undeclared coverage_last_wins coverage_unknown coverage_where composed_ids`
+Verified by: `cargo test -p lattice-core --test fuse -- standard_constraints duplicates_ambiguity coverage_undeclared coverage_repeated coverage_unknown coverage_where composed_ids`
 
 #### Scenario: Standard validators produce findings on composed graph
 - **WHEN** the fuse profile declares a CONSTRAINT validation and a composed
@@ -186,14 +192,70 @@ Verified by: `cargo test -p lattice-core --test fuse -- standard_constraints dup
 - **WHEN** a COVERAGE validation includes a `where:` condition
 - **THEN** only target nodes matching the condition are checked for coverage
 
-#### Scenario: Repeated COVERAGE entries use last-wins severity
+#### Scenario: Repeated COVERAGE entries share per-code severity
 - **WHEN** two COVERAGE entries target the same kind with different severities
-- **THEN** the last severity wins, consistent with standard profile semantics
+- **THEN** both checks run and the last-declared severity applies to all
+  COVERAGE findings, per the standard per-code severity rule
 
 #### Scenario: Strict promotes warnings after collection
 - **WHEN** `--strict` is passed and the composed graph has warning-severity
   findings
 - **THEN** those findings are promoted to error severity
+
+### Requirement: Suppression in program composition
+Suppression applies at two levels, each after its own finding collection.
+
+A source profile's `SUPPRESS` entries apply within that source's own `lattice
+trace` run, per the validation capability, so the findings a source
+contributes to the merge arrive already marked. The command SHALL preserve a
+source finding's `suppressed` flag through the merge; it SHALL NOT unsuppress
+a finding a source profile suppressed, and SHALL NOT re-derive that decision
+from the fuse profile.
+
+The fuse profile's `SUPPRESS` entries apply to the findings the command itself
+collects — cross-source resolution findings (`CROSS_SOURCE_DUPLICATE_ID`,
+`AMBIGUOUS_CROSS_REF`, `VACANCY`) and the standard-validator findings on the
+composed graph. A fuse-level `node_ids` entry SHALL match against composed IDs
+(`source:raw_id`), because that is the `node_id` the findings carry.
+Suppression runs after `--strict` promotion and before the exit-code decision,
+consistent with single-source behavior. `SUPPRESS_UNUSED` for a fuse-profile
+entry is emitted against the fuse profile and names it as provenance.
+
+A suppressed finding SHALL NOT count toward the command's exit code 1, and
+SHALL render per the `output` capability: present in `json` with
+`suppressed: true`, omitted from `plain` and `rich`.
+
+Verified by: `cargo test -p lattice-core --test fuse -- suppress`
+
+#### Scenario: Source-level suppression survives the merge
+- **WHEN** source `product`'s profile suppresses `UNTRACED` and its trace run
+  contributes an `UNTRACED` finding marked `suppressed: true`
+- **THEN** the fuse output carries that finding with `suppressed: true` and it
+  does not affect the fuse exit code
+
+#### Scenario: Fuse-level suppression of a cross-source finding
+- **WHEN** the fuse profile declares `SUPPRESS: {code: VACANCY}` and
+  cross-source resolution emits 59 `VACANCY` findings
+- **THEN** all 59 are suppressed: absent from plain output, present in JSON
+  with `suppressed: true`, excluded from the exit code
+
+#### Scenario: Fuse-level node_ids match composed IDs
+- **WHEN** the fuse profile declares
+  `SUPPRESS: {code: VACANCY, node_ids: [compliance:C-7]}` and `VACANCY`
+  findings exist for `compliance:C-7` and `compliance:C-8`
+- **THEN** the `compliance:C-7` finding is suppressed and `compliance:C-8` is not
+
+#### Scenario: Fuse-level unmatched suppress reports against the fuse profile
+- **WHEN** the fuse profile declares `SUPPRESS: {code: AMBIGUOUS_CROSS_REF}`
+  and no such finding is emitted
+- **THEN** the command emits `SUPPRESS_UNUSED` at info naming the fuse profile
+  as provenance
+
+#### Scenario: Fuse profile does not unsuppress a source finding
+- **WHEN** a source profile suppresses `UNREFERENCED` and the fuse profile
+  declares no `SUPPRESS` entries
+- **THEN** the source's `UNREFERENCED` findings remain suppressed in the fuse
+  output
 
 ### Requirement: Pathway preservation
 The command SHALL preserve pathways from each source's trace payload, qualified

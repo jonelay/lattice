@@ -1,8 +1,10 @@
-//! Building the status rollup `summary` reports.
+//! Building the reports `summary` shows.
 //!
-//! The rollup is computed from the register on every run and never stored. What
-//! it counts is entirely the profile's business: which kind, which attr holds a
-//! status, which attr groups the rows.
+//! Both are computed from the register on every run and never stored. What the
+//! configured rollup counts is entirely the profile's business: which kind,
+//! which attr holds a status, which attr groups the rows. The structural report
+//! needs none of that — counts by kind and finding tallies come from the graph
+//! and the profile's kind declarations alone.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -10,8 +12,9 @@ use serde_json::Value;
 
 use crate::graph::LatticeGraph;
 use crate::profile::Profile;
-use crate::types::SummaryReport;
-use crate::validate::config_str;
+use crate::query::counts;
+use crate::types::{FindingTally, Issue, Severity, StatusRollup, StructuralSummary, SummaryReport};
+use crate::validate::{config_str, validate};
 
 /// A profile that cannot be summarised. Operational rather than a finding: the
 /// command has nothing to render, so it exits 2 rather than reporting an
@@ -31,7 +34,8 @@ impl std::error::Error for SummaryError {}
 /// group an ungrouped node lands in.
 const UNKNOWN: &str = "unknown";
 
-/// Compute the rollup a profile's `SUMMARY` config declares.
+/// Compute the rollup a profile's `SUMMARY` config declares, or the structural
+/// report when it declares none.
 ///
 /// Status columns come from the profile's declared enum *and* from what the
 /// register actually holds, so a declared status no node carries still gets a
@@ -46,9 +50,10 @@ pub fn build_summary(
         .map_or(&[][..], Vec::as_slice);
     let config = match configs {
         [] => {
-            return Err(SummaryError(
-                "profile has no SUMMARY validation config".into(),
-            ));
+            let issues = validate(graph, profile, false);
+            return Ok(SummaryReport::Structural(build_structural_summary(
+                profile, graph, &issues,
+            )));
         }
         [only] => only,
         many => {
@@ -79,8 +84,8 @@ pub fn build_summary(
 
     let mut status_values: BTreeSet<String> = profile
         .node_kinds()
-        .get(&node_kind)
-        .and_then(|kind| kind.attrs.get(&status_attr))
+        .get(node_kind)
+        .and_then(|kind| kind.attrs.get(status_attr))
         .and_then(|attr| attr.values.as_deref())
         .unwrap_or_default()
         .iter()
@@ -89,7 +94,7 @@ pub fn build_summary(
 
     let of_kind = || graph.iter_nodes().filter(|n| n.kind == node_kind);
     for node in of_kind() {
-        status_values.insert(attr_or_unknown(node.attrs.get(&status_attr)));
+        status_values.insert(attr_or_unknown(node.attrs.get(status_attr)));
     }
     let status_keys: Vec<String> = status_values.iter().cloned().collect();
 
@@ -104,18 +109,48 @@ pub fn build_summary(
 
     let mut by_group: BTreeMap<String, BTreeMap<String, i64>> = BTreeMap::new();
     for node in of_kind() {
-        let group = attr_or_unknown(node.attrs.get(&group_by_attr));
-        let status = attr_or_unknown(node.attrs.get(&status_attr));
+        let group = attr_or_unknown(node.attrs.get(group_by_attr));
+        let status = attr_or_unknown(node.attrs.get(status_attr));
         let counts = by_group.entry(group).or_insert_with(|| blank.clone());
         *counts.entry(status).or_insert(0) += 1;
         *counts.entry("total".to_string()).or_insert(0) += 1;
     }
 
-    Ok(SummaryReport {
-        group_key: group_by_attr,
+    Ok(SummaryReport::Configured(StatusRollup {
+        group_key: group_by_attr.to_string(),
         status_keys,
         groups: by_group.into_iter().collect(),
-    })
+    }))
+}
+
+/// Tally the register by kind and the run's findings by code and severity.
+///
+/// Suppressed findings are left out: the profile said not to report them, and
+/// a tally is a report. The severity is the resolved one, so a profile override
+/// moves a code's row rather than being second-guessed here.
+#[must_use]
+pub fn build_structural_summary(
+    profile: &Profile,
+    graph: &LatticeGraph,
+    issues: &[Issue],
+) -> StructuralSummary {
+    let counted = counts(graph, profile, &[]);
+    let mut tallies: BTreeMap<(&str, Severity), i64> = BTreeMap::new();
+    for issue in issues.iter().filter(|i| !i.suppressed) {
+        *tallies.entry((&issue.code, issue.severity)).or_insert(0) += 1;
+    }
+    StructuralSummary {
+        node_counts: counted.nodes,
+        edge_counts: counted.edges,
+        finding_counts: tallies
+            .into_iter()
+            .map(|((code, severity), count)| FindingTally {
+                code: code.to_string(),
+                severity,
+                count,
+            })
+            .collect(),
+    }
 }
 
 /// An attr's value as the rollup keys on it, or `unknown` when the node has none.

@@ -9,7 +9,10 @@ mod common;
 
 use std::path::Path;
 
-use common::{Case, code, stderr, stdout};
+use common::{Case, code, ingest, stderr, stdout};
+use lattice_core::output::output_result;
+use lattice_core::query::diff;
+use lattice_core::types::DiffReport;
 
 /// Three node kinds and three edge kinds, one of which (`mitigates`) the
 /// register never instantiates — the zero-row scenario needs a declared kind
@@ -273,6 +276,265 @@ fn an_undeclared_endpoint_is_never_reported_as_reached() {
     assert!(!stdout(&output).contains("REQ-9"), "{}", stdout(&output));
 }
 
+/// A document over the query profile's kinds with the given edges; every
+/// endpoint named in `declared` is a node, anything else is a vacancy.
+fn edges_document(declared: &[(&str, &str)], edges: &[(&str, &str, &str)]) -> String {
+    let nodes = declared
+        .iter()
+        .map(|(id, kind)| {
+            format!(r#"{{"id": "{id}", "kind": "{kind}", "attrs": {{}}, "provenance": {{"file": "f", "line": 1}}}}"#)
+        })
+        .collect::<Vec<_>>()
+        .join(",\n");
+    let edges = edges
+        .iter()
+        .map(|(src, tgt, kind)| {
+            format!(r#"{{"src": "{src}", "tgt": "{tgt}", "kind": "{kind}", "provenance": {{"file": "f", "line": 1}}}}"#)
+        })
+        .collect::<Vec<_>>()
+        .join(",\n");
+    format!(r#"{{"interface_version": "1.0", "nodes": [{nodes}], "edges": [{edges}]}}"#)
+}
+
+fn reach_case(declared: &[(&str, &str)], edges: &[(&str, &str, &str)]) -> Case {
+    let document = edges_document(declared, edges);
+    Case::with_profile(QUERY_PROFILE, &format!("cat <<'DOC'\n{document}\nDOC"))
+}
+
+/// `id → tainted` for every node in a `--check-resolved` JSON answer.
+fn tainted_by_id(output: &std::process::Output) -> Vec<(String, Option<bool>)> {
+    json(output)["nodes"]
+        .as_array()
+        .expect("nodes array")
+        .iter()
+        .map(|n| {
+            (
+                n["id"].as_str().unwrap().to_string(),
+                n.get("tainted")
+                    .map(|t| t.as_bool().expect("tainted is a bool")),
+            )
+        })
+        .collect()
+}
+
+fn owned(pairs: &[(&str, Option<bool>)]) -> Vec<(String, Option<bool>)> {
+    pairs.iter().map(|(id, t)| (id.to_string(), *t)).collect()
+}
+
+#[test]
+fn check_resolved_reach_through_declared_nodes_is_clean() {
+    let case = graph_case();
+    let output = case.run(&[
+        "query",
+        "reaches",
+        "T-1",
+        "--check-resolved",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert_eq!(
+        tainted_by_id(&output),
+        owned(&[("N-1", Some(false)), ("REQ-1", Some(false))])
+    );
+}
+
+#[test]
+fn check_resolved_reach_through_a_vacancy_is_tainted() {
+    let case = reach_case(
+        &[("T-1", "test"), ("N-1", "need")],
+        &[("T-1", "REQ-9", "verifies"), ("REQ-9", "N-1", "derives")],
+    );
+    let output = case.run(&[
+        "query",
+        "reaches",
+        "T-1",
+        "--check-resolved",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert_eq!(tainted_by_id(&output), owned(&[("N-1", Some(true))]));
+}
+
+#[test]
+fn check_resolved_reach_taint_carries_past_the_first_declared_node() {
+    let case = reach_case(
+        &[("T-1", "test"), ("REQ-1", "req"), ("N-1", "need")],
+        &[
+            ("T-1", "REQ-9", "verifies"),
+            ("REQ-9", "REQ-1", "mitigates"),
+            ("REQ-1", "N-1", "derives"),
+        ],
+    );
+    let output = case.run(&[
+        "query",
+        "reaches",
+        "T-1",
+        "--check-resolved",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert_eq!(
+        tainted_by_id(&output),
+        owned(&[("N-1", Some(true)), ("REQ-1", Some(true))])
+    );
+}
+
+#[test]
+fn check_resolved_reach_with_one_clean_path_is_not_tainted() {
+    let case = reach_case(
+        &[("T-1", "test"), ("REQ-1", "req"), ("N-1", "need")],
+        &[
+            ("T-1", "REQ-1", "verifies"),
+            ("REQ-1", "N-1", "derives"),
+            ("T-1", "REQ-9", "verifies"),
+            ("REQ-9", "N-1", "derives"),
+        ],
+    );
+    let output = case.run(&[
+        "query",
+        "reaches",
+        "T-1",
+        "--check-resolved",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert_eq!(
+        tainted_by_id(&output),
+        owned(&[("N-1", Some(false)), ("REQ-1", Some(false))])
+    );
+}
+
+/// The vacancy path is the shorter one, so a breadth-first walk meets N-1
+/// tainted — and expands its descendant N-3 — before the longer clean path
+/// arrives. The answer must still be clean for both.
+#[test]
+fn check_resolved_reach_clean_path_found_later_wins() {
+    let case = reach_case(
+        &[
+            ("T-1", "test"),
+            ("REQ-1", "req"),
+            ("REQ-2", "req"),
+            ("REQ-3", "req"),
+            ("N-1", "need"),
+            ("N-3", "need"),
+        ],
+        &[
+            ("T-1", "REQ-9", "verifies"),
+            ("REQ-9", "N-1", "derives"),
+            ("N-1", "N-3", "derives"),
+            ("T-1", "REQ-1", "verifies"),
+            ("REQ-1", "REQ-2", "mitigates"),
+            ("REQ-2", "REQ-3", "mitigates"),
+            ("REQ-3", "N-1", "derives"),
+        ],
+    );
+    let output = case.run(&[
+        "query",
+        "reaches",
+        "T-1",
+        "--check-resolved",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert_eq!(
+        tainted_by_id(&output),
+        owned(&[
+            ("N-1", Some(false)),
+            ("N-3", Some(false)),
+            ("REQ-1", Some(false)),
+            ("REQ-2", Some(false)),
+            ("REQ-3", Some(false))
+        ])
+    );
+}
+
+#[test]
+fn check_resolved_is_not_an_orphans_flag() {
+    let case = graph_case();
+    let output = case.run(&["query", "orphans", "--check-resolved"]);
+    assert_eq!(code(&output), 2, "{}", stdout(&output));
+}
+
+#[test]
+fn check_resolved_reach_never_reports_the_vacancy_itself() {
+    let case = reach_case(&[("T-1", "test")], &[("T-1", "REQ-9", "verifies")]);
+    let output = case.run(&[
+        "query",
+        "reaches",
+        "T-1",
+        "--check-resolved",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert_eq!(tainted_by_id(&output), vec![]);
+}
+
+#[test]
+fn check_resolved_reached_by_walks_incoming_edges() {
+    let case = reach_case(
+        &[("T-1", "test"), ("N-1", "need")],
+        &[("T-1", "REQ-9", "verifies"), ("REQ-9", "N-1", "derives")],
+    );
+    let output = case.run(&[
+        "query",
+        "reached-by",
+        "N-1",
+        "--check-resolved",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert_eq!(tainted_by_id(&output), owned(&[("T-1", Some(true))]));
+}
+
+#[test]
+fn check_resolved_reach_marks_tainted_nodes_in_plain_and_rich() {
+    let case = reach_case(
+        &[("T-1", "test"), ("REQ-1", "req"), ("N-1", "need")],
+        &[
+            ("T-1", "REQ-1", "verifies"),
+            ("T-1", "REQ-9", "verifies"),
+            ("REQ-9", "N-1", "derives"),
+        ],
+    );
+    for format in ["plain", "rich"] {
+        let output = case.run(&[
+            "query",
+            "reaches",
+            "T-1",
+            "--check-resolved",
+            "--format",
+            format,
+        ]);
+        assert_eq!(code(&output), 0, "{}", stderr(&output));
+        let text = stdout(&output);
+        let line = |id: &str| {
+            text.lines()
+                .find(|l| l.starts_with(&format!("{id} ")))
+                .unwrap_or_else(|| panic!("{format}: no line for {id}:\n{text}"))
+        };
+        assert!(line("N-1").ends_with("(tainted)"), "{format}:\n{text}");
+        assert!(!line("REQ-1").ends_with("(tainted)"), "{format}:\n{text}");
+    }
+}
+
+#[test]
+fn reach_without_check_resolved_carries_no_tainted_field() {
+    let case = reach_case(
+        &[("T-1", "test"), ("N-1", "need")],
+        &[("T-1", "REQ-9", "verifies"), ("REQ-9", "N-1", "derives")],
+    );
+    let output = case.run(&["query", "reaches", "T-1", "--format", "json"]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert_eq!(tainted_by_id(&output), owned(&[("N-1", None)]));
+}
+
 // Requirement: Path query
 
 #[test]
@@ -444,7 +706,10 @@ fn diff_json_carries_the_report_structured() {
     let value = json(&output);
     assert_eq!(value["nodes_added"][0]["id"], "T-1");
     assert_eq!(value["nodes_changed"][0]["id"], "N-1");
+    assert_eq!(value["nodes_changed"][0]["attrs_a"]["text"], "a");
+    assert_eq!(value["nodes_changed"][0]["attrs_b"]["text"], "b");
     assert_eq!(value["edges_added"][0]["src"], "T-1");
+    assert_eq!(value["edges_changed"], serde_json::json!([]));
     assert_eq!(value["pathways_changed"][0], "phase");
     assert_eq!(value["nodes_removed"], serde_json::json!([]));
 }
@@ -508,7 +773,7 @@ fn diff_leaves_the_target_working_tree_untouched() {
 
 #[test]
 fn orphans_reports_an_orphan_ok_node_the_validator_exempts() {
-    // orphan_ok is ORPHAN_NODE policy; the query answers the ask-time fact.
+    // orphan_ok is validation policy; the query answers the ask-time fact.
     let profile = QUERY_PROFILE.replace(
         "  need:\n    id_pattern: \"^N-\\\\d+$\"",
         "  need:\n    id_pattern: \"^N-\\\\d+$\"\n    orphan_ok: true",
@@ -646,4 +911,110 @@ fn at_an_absolute_directory_argument_matches_relative_provenance_beneath_it() {
     let output = case.run(&["query", "at", abs.to_str().unwrap(), "--format", "plain"]);
     assert_eq!(code(&output), 0, "{}", stderr(&output));
     assert!(stdout(&output).contains("REQ-1"), "{}", stdout(&output));
+}
+
+// Requirement: Live two-revision diff
+
+/// Two registers that differ only in what the library-level diff is asked
+/// about, so each scenario reads as its two edge lists.
+fn diff_edges(edges_a: serde_json::Value, edges_b: serde_json::Value) -> DiffReport {
+    let document = |edges| {
+        ingest(serde_json::json!({
+            "interface_version": "1.0",
+            "nodes": [
+                {"id": "A", "kind": "req", "attrs": {}, "provenance": {"file": "r", "line": 1}},
+                {"id": "B", "kind": "req", "attrs": {}, "provenance": {"file": "r", "line": 2}},
+                {"id": "C", "kind": "req", "attrs": {}, "provenance": {"file": "r", "line": 3}}],
+            "edges": edges,
+        }))
+    };
+    diff("a", &document(edges_a), "b", &document(edges_b))
+}
+
+fn edge(src: &str, tgt: &str, attrs: serde_json::Value) -> serde_json::Value {
+    serde_json::json!({"src": src, "tgt": tgt, "kind": "derives", "attrs": attrs,
+                       "provenance": {"file": "r", "line": 1}})
+}
+
+#[test]
+fn an_edge_whose_attrs_changed_is_reported_as_changed_with_both_sides() {
+    let report = diff_edges(
+        serde_json::json!([edge("A", "B", serde_json::json!({"confidence": "low"}))]),
+        serde_json::json!([edge("A", "B", serde_json::json!({"confidence": "high"}))]),
+    );
+    assert!(report.edges_added.is_empty() && report.edges_removed.is_empty());
+    assert_eq!(report.edges_changed.len(), 1);
+    let changed = &report.edges_changed[0];
+    assert_eq!(
+        (
+            changed.src.as_str(),
+            changed.tgt.as_str(),
+            changed.kind.as_str()
+        ),
+        ("A", "B", "derives")
+    );
+    assert_eq!(changed.attrs_a["confidence"], "low");
+    assert_eq!(changed.attrs_b["confidence"], "high");
+}
+
+#[test]
+fn an_edge_that_moved_to_another_target_is_removed_and_added_not_changed() {
+    let report = diff_edges(
+        serde_json::json!([edge("A", "B", serde_json::json!({}))]),
+        serde_json::json!([edge("A", "C", serde_json::json!({}))]),
+    );
+    assert!(report.edges_changed.is_empty());
+    assert_eq!(report.edges_removed[0].tgt, "B");
+    assert_eq!(report.edges_added[0].tgt, "C");
+}
+
+#[test]
+fn parallel_edges_match_pairwise_in_document_order() {
+    let report = diff_edges(
+        serde_json::json!([
+            edge("A", "B", serde_json::json!({"w": 1})),
+            edge("A", "B", serde_json::json!({"w": 2}))
+        ]),
+        serde_json::json!([
+            edge("A", "B", serde_json::json!({"w": 1})),
+            edge("A", "B", serde_json::json!({"w": 3})),
+            edge("A", "B", serde_json::json!({"w": 4}))
+        ]),
+    );
+    assert_eq!(report.edges_changed.len(), 1, "{:?}", report.edges_changed);
+    assert_eq!(report.edges_changed[0].attrs_a["w"], 2);
+    assert_eq!(report.edges_changed[0].attrs_b["w"], 3);
+    assert_eq!(report.edges_added.len(), 1, "the third edge has no partner");
+    assert!(report.edges_removed.is_empty());
+}
+
+#[test]
+fn identical_edge_attrs_do_not_diff() {
+    let edges = serde_json::json!([edge("A", "B", serde_json::json!({"w": 1}))]);
+    let report = diff_edges(edges.clone(), edges);
+    assert!(report.is_empty());
+}
+
+#[test]
+fn a_changed_edge_renders_in_every_format() {
+    let report = diff_edges(
+        serde_json::json!([edge("A", "B", serde_json::json!({"w": 1}))]),
+        serde_json::json!([edge("A", "B", serde_json::json!({"w": 2}))]),
+    );
+    assert_eq!(
+        output_result(&report, "plain").unwrap(),
+        "edge changed A derives B"
+    );
+    let parsed: serde_json::Value =
+        serde_json::from_str(&output_result(&report, "json").unwrap()).unwrap();
+    assert_eq!(
+        parsed["edges_changed"],
+        serde_json::json!([{"attrs_a": {"w": 1}, "attrs_b": {"w": 2},
+                            "kind": "derives", "src": "A", "tgt": "B"}])
+    );
+    assert!(
+        output_result(&report, "rich")
+            .unwrap()
+            .contains("edge changed A derives B")
+    );
 }

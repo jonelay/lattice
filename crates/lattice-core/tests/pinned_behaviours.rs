@@ -153,9 +153,18 @@ fn a_dangling_edge_target_is_reported_and_the_node_is_not_invented() {
         "edge 'REQ-1'->'REQ-9' (kind 'derives'): target 'REQ-9' does not exist"
     );
     assert_eq!(dangling[0].severity, Severity::Error);
-    // The edge referred to REQ-1, so it is not an orphan even though its
-    // counterpart never existed.
-    assert!(!issues.iter().any(|i| i.code == "ORPHAN_NODE"));
+    // REQ-1 is the edge source, so it has outgoing — no UNTRACED. But it has
+    // no incoming edge, so UNREFERENCED fires.
+    assert!(
+        !issues
+            .iter()
+            .any(|i| i.code == "UNTRACED" && i.node_id.as_deref() == Some("REQ-1"))
+    );
+    assert!(
+        issues
+            .iter()
+            .any(|i| i.code == "UNREFERENCED" && i.node_id.as_deref() == Some("REQ-1"))
+    );
 }
 
 // Requirement: Provenance on findings
@@ -170,10 +179,15 @@ fn an_orphan_finding_carries_the_node_provenance() {
     let profile = profile_from(MINIMAL_PROFILE).unwrap();
     let issues = validate(&graph, &profile, false);
 
-    assert_eq!(issues.len(), 1);
-    assert_eq!(issues[0].code, "ORPHAN_NODE");
+    assert_eq!(issues.len(), 2);
+    assert_eq!(issues[0].code, "UNREFERENCED");
     assert_eq!(
         issues[0].provenance,
+        Provenance::new("REQUIREMENTS.md", 102)
+    );
+    assert_eq!(issues[1].code, "UNTRACED");
+    assert_eq!(
+        issues[1].provenance,
         Provenance::new("REQUIREMENTS.md", 102)
     );
 }
@@ -216,7 +230,7 @@ fn strict_promotes_warnings_and_leaves_errors_alone() {
     assert_eq!(
         relaxed
             .iter()
-            .find(|i| i.code == "ORPHAN_NODE")
+            .find(|i| i.code == "UNREFERENCED")
             .unwrap()
             .severity,
         Severity::Warning
@@ -226,7 +240,7 @@ fn strict_promotes_warnings_and_leaves_errors_alone() {
     assert_eq!(
         strict
             .iter()
-            .find(|i| i.code == "ORPHAN_NODE")
+            .find(|i| i.code == "UNREFERENCED")
             .unwrap()
             .severity,
         Severity::Error

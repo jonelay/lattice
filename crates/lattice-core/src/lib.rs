@@ -35,8 +35,9 @@
 //! let issues = validate(&graph, &profile, false);
 //! let rendered = output_result(&issues, "plain").unwrap();
 //!
-//! // The lone node has no edges, so it is an orphan.
-//! assert_eq!(rendered, "WARNING ORPHAN_NODE reqs.md:3 node 'REQ-1' has no edges");
+//! // The lone node has no edges, so it is both unreferenced and untraced.
+//! assert_eq!(rendered, "WARNING UNREFERENCED reqs.md:3 node 'REQ-1' has no incoming edges\n\
+//!     WARNING UNTRACED reqs.md:3 node 'REQ-1' has no outgoing edges");
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 

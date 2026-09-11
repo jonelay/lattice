@@ -12,7 +12,9 @@ use std::collections::BTreeMap;
 use common::{ingest, profile_from};
 use lattice_core::output::output_result;
 use lattice_core::trace::build_trace_report;
-use lattice_core::types::{Issue, PathReport, Provenance, Severity, SummaryReport, TraceReport};
+use lattice_core::types::{
+    Issue, PathReport, Provenance, Severity, StatusRollup, SummaryReport, TraceReport,
+};
 use lattice_core::validate::validate;
 use serde_json::{Value, json};
 
@@ -385,14 +387,14 @@ edge_kinds: {}
 fn findings_render_one_line_each_in_plain() {
     let issue = Issue::new(
         Severity::Warning,
-        "ORPHAN_NODE",
-        "node 'REQ-9999' has no edges",
+        "UNREFERENCED",
+        "node 'REQ-9999' has no incoming edges",
         Provenance::new("REQS.md", 42),
         Some("REQ-9999".into()),
     );
     assert_eq!(
         output_result(&vec![issue], "plain").unwrap(),
-        "WARNING ORPHAN_NODE REQS.md:42 node 'REQ-9999' has no edges"
+        "WARNING UNREFERENCED REQS.md:42 node 'REQ-9999' has no incoming edges"
     );
 }
 
@@ -400,7 +402,7 @@ fn findings_render_one_line_each_in_plain() {
 fn a_finding_in_json_carries_every_documented_field() {
     let issue = Issue::new(
         Severity::Warning,
-        "ORPHAN_NODE",
+        "UNREFERENCED",
         "m",
         Provenance::new("REQS.md", 42),
         Some("REQ-9999".into()),
@@ -430,7 +432,7 @@ fn an_unknown_format_is_rejected_for_every_payload() {
 /// Every group carries every status key, which is how the rollup is built — a
 /// declared status with no nodes is a zero column, not an absent one.
 fn summary() -> SummaryReport {
-    SummaryReport {
+    SummaryReport::Configured(StatusRollup {
         group_key: "file".to_string(),
         status_keys: ["blocked", "done", "todo"].map(String::from).to_vec(),
         groups: vec![
@@ -443,7 +445,7 @@ fn summary() -> SummaryReport {
                 counts(&[("blocked", 0), ("done", 1), ("todo", 0), ("total", 1)]),
             ),
         ],
-    }
+    })
 }
 
 fn counts(pairs: &[(&str, i64)]) -> BTreeMap<String, i64> {
@@ -465,10 +467,10 @@ fn the_rollup_carries_a_column_for_a_status_no_row_holds() {
     let rendered = output_result(&summary(), "json").unwrap();
     let parsed: Value = serde_json::from_str(&rendered).unwrap();
     assert_eq!(
-        parsed["files"][0]["blocked"], 0,
+        parsed["groups"][0]["blocked"], 0,
         "a declared status keeps its column"
     );
-    assert_eq!(parsed["files"][0]["file"], "a.md");
+    assert_eq!(parsed["groups"][0]["file"], "a.md");
     assert_eq!(parsed["totals"]["done"], 3);
     assert_eq!(parsed["totals"]["total"], 4);
 }
@@ -540,7 +542,7 @@ fn a_state_carrying_finding_serializes_its_state() {
 fn a_stateless_finding_carries_no_state_key() {
     let issue = Issue::new(
         Severity::Warning,
-        "ORPHAN_NODE",
+        "UNREFERENCED",
         "m",
         Provenance::new("REQS.md", 42),
         None,
@@ -578,7 +580,7 @@ fn a_suggestion_renders_as_a_hint_in_all_three_formats() {
 
     let ordinary = Issue::new(
         Severity::Warning,
-        "ORPHAN_NODE",
+        "UNREFERENCED",
         "m",
         Provenance::new("reqs.md", 3),
         Some("REQ-0001".into()),
@@ -626,4 +628,145 @@ fn keys(entry: &Value) -> Vec<String> {
         .collect();
     names.sort();
     names
+}
+
+// Requirement: Suppressed finding rendering
+
+fn suppressed_vacancy() -> Issue {
+    let mut issue = Issue::new(
+        Severity::Error,
+        "VACANCY",
+        "edge 'UN-1'->'UN-9' (kind 'derives'): target 'UN-9' does not exist",
+        Provenance::new("needs.md", 4),
+        Some("UN-1".into()),
+    );
+    issue.suppressed = true;
+    issue
+}
+
+fn unsuppressed_unreferenced() -> Issue {
+    Issue::new(
+        Severity::Warning,
+        "UNREFERENCED",
+        "node 'UN-2' has no incoming edges",
+        Provenance::new("needs.md", 8),
+        Some("UN-2".into()),
+    )
+}
+
+#[test]
+fn json_retains_a_suppressed_finding_with_every_field() {
+    let mut unsuppressed = suppressed_vacancy();
+    unsuppressed.suppressed = false;
+    let before: Value =
+        serde_json::from_str(&output_result(&vec![unsuppressed], "json").unwrap()).unwrap();
+    let after: Value =
+        serde_json::from_str(&output_result(&vec![suppressed_vacancy()], "json").unwrap()).unwrap();
+    let entry = &after["findings"][0];
+    assert_eq!(entry["suppressed"], true);
+    for key in ["severity", "code", "file", "line", "message", "node_id"] {
+        assert_eq!(entry[key], before["findings"][0][key], "{key}");
+    }
+    assert_eq!(entry["severity"], "error");
+}
+
+#[test]
+fn an_unsuppressed_finding_carries_no_suppressed_key() {
+    let rendered = output_result(&vec![unsuppressed_unreferenced()], "json").unwrap();
+    let parsed: Value = serde_json::from_str(&rendered).unwrap();
+    assert_eq!(
+        keys(&parsed["findings"][0]),
+        ["code", "file", "line", "message", "node_id", "severity"]
+    );
+}
+
+#[test]
+fn suppressed_findings_keep_their_place_in_json_ordering() {
+    // needs.md:4 sorts before needs.md:8, suppressed or not.
+    let issues = vec![unsuppressed_unreferenced(), suppressed_vacancy()];
+    let parsed: Value = serde_json::from_str(&output_result(&issues, "json").unwrap()).unwrap();
+    let findings = parsed["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 2);
+    assert_eq!(findings[0]["code"], "VACANCY");
+    assert_eq!(findings[0]["suppressed"], true);
+    assert_eq!(findings[1]["code"], "UNREFERENCED");
+    assert!(findings[1].get("suppressed").is_none());
+}
+
+#[test]
+fn plain_omits_a_suppressed_finding() {
+    let issues = vec![suppressed_vacancy(), unsuppressed_unreferenced()];
+    assert_eq!(
+        output_result(&issues, "plain").unwrap(),
+        "WARNING UNREFERENCED needs.md:8 node 'UN-2' has no incoming edges"
+    );
+    assert_eq!(
+        output_result(&vec![suppressed_vacancy()], "plain").unwrap(),
+        ""
+    );
+}
+
+#[test]
+fn rich_omits_a_suppressed_finding_and_counts_only_what_it_shows() {
+    let issues = vec![suppressed_vacancy(), unsuppressed_unreferenced()];
+    let rich = output_result(&issues, "rich").unwrap();
+    assert!(rich.contains("UNREFERENCED"), "{rich}");
+    assert!(!rich.contains("VACANCY"), "{rich}");
+    assert!(rich.contains("1 warning(s)"), "{rich}");
+    assert!(!rich.contains("error(s)"), "{rich}");
+    assert_eq!(
+        output_result(&vec![suppressed_vacancy()], "rich").unwrap(),
+        "No findings."
+    );
+}
+
+#[test]
+fn a_suppressed_hint_follows_the_suppression_rule() {
+    let mut hint = Issue::new(
+        Severity::Hint,
+        "COVERAGE_UNKNOWN",
+        "m",
+        Provenance::new("<profile>", 0),
+        None,
+    );
+    hint.suppressed = true;
+    assert_eq!(output_result(&vec![hint.clone()], "plain").unwrap(), "");
+    assert_eq!(
+        output_result(&vec![hint.clone()], "rich").unwrap(),
+        "No findings."
+    );
+    let parsed: Value = serde_json::from_str(&output_result(&vec![hint], "json").unwrap()).unwrap();
+    assert_eq!(parsed["findings"][0]["severity"], "hint");
+    assert_eq!(parsed["findings"][0]["suppressed"], true);
+}
+
+#[test]
+fn trace_formats_follow_the_suppression_rule() {
+    let profile = profile_from(ORDER_PROFILE).unwrap();
+    let graph = ingest(json!({
+        "interface_version": "1.0",
+        "nodes": [node("UN-1", "need", 1), node("UN-2", "need", 2)],
+    }));
+    let mut attached = suppressed_vacancy();
+    attached.provenance = Provenance::new("r.md", 1);
+    let mut footer = unsuppressed_unreferenced();
+    footer.node_id = None;
+    footer.suppressed = true;
+    let report = build_trace_report(&profile, &graph, vec![attached, footer], "0.0.0");
+
+    let plain = output_result(&report, "plain").unwrap();
+    assert!(!plain.contains("VACANCY"), "{plain}");
+    assert!(!plain.contains("Unattachable"), "{plain}");
+    assert!(plain.contains("findings:0"), "{plain}");
+    let rich = output_result(&report, "rich").unwrap();
+    assert!(rich.contains("no findings"), "{rich}");
+    let parsed: Value = serde_json::from_str(&output_result(&report, "json").unwrap()).unwrap();
+    let entry = parsed["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["id"] == "UN-1")
+        .unwrap();
+    assert_eq!(entry["findings"][0]["suppressed"], true);
+    assert_eq!(parsed["unattachable_findings"][0]["suppressed"], true);
 }

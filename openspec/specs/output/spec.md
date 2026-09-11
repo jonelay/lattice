@@ -11,7 +11,7 @@ emits human-readable formatted output (colors, tables).
 
 #### Scenario: Plain format
 - **WHEN** `lattice validate --format=plain` runs on a graph with one warning
-- **THEN** the output is one line per finding: `WARNING ORPHAN_NODE REQS.md:42 node 'REQ-9999' has no edges`
+- **THEN** the output is one line per finding: `WARNING UNREFERENCED REQS.md:42 node 'REQ-9999' has no incoming edges`
 
 #### Scenario: JSON format
 - **WHEN** `lattice validate --format=json` runs on a graph with one warning
@@ -32,11 +32,16 @@ without adding a printing path outside the dispatcher.
 - **THEN** `output_result` serializes the data as JSON
 
 #### Scenario: Summary uses the dispatcher
-- **WHEN** `lattice summary` renders its rollup in any of the three formats
+- **WHEN** `lattice summary` renders its configured rollup or its zero-config
+  structural report in any of the three formats
 - **THEN** it does so by calling `output_result`, not by printing directly
 
 #### Scenario: Trace uses the dispatcher
 - **WHEN** `lattice trace` renders its trace report in any of the three formats
+- **THEN** it does so by calling `output_result`, not by printing directly
+
+#### Scenario: Coverage uses the dispatcher
+- **WHEN** `lattice coverage` renders its report in any of the three formats
 - **THEN** it does so by calling `output_result`, not by printing directly
 
 #### Scenario: Adapter issues use the dispatcher
@@ -119,12 +124,55 @@ Verified by: `cargo test --test native_messages summary_rollup`
   runs with `--format json`
 - **THEN** the rollup counts it under the key `true`
 
+### Requirement: Suppressed finding rendering
+A suppressed finding SHALL render in `json` with `"suppressed": true` and every
+other field it would carry unsuppressed — severity, code, message, file, line,
+node_id, and state where present. An unsuppressed finding SHALL omit the
+`suppressed` key entirely, so every finding that was never suppressed
+serializes byte-identically to before the field existed.
+
+`plain` and `rich` SHALL omit suppressed findings. This is the one deliberate
+divergence between formats on what was found: the profile declared the finding
+structurally expected, so the human-facing formats show what is left to act on,
+and the JSON keeps the audit trail of what was hidden. A downstream tool that
+wants the full picture reads `json`.
+
+Suppressed findings SHALL keep their place in the deterministic ordering of the
+JSON `findings` array — they are not moved to a separate section.
+
+Verified by: `cargo test --test output suppressed`
+
+#### Scenario: JSON retains a suppressed finding
+- **WHEN** `lattice validate --format=json` runs and a `VACANCY` finding for
+  `UN-1` is suppressed
+- **THEN** the `findings` array contains that entry with `"suppressed": true`
+  and its `severity`, `code`, `file`, `line`, `message`, and `node_id` intact
+
+#### Scenario: Unsuppressed finding carries no suppressed key
+- **WHEN** an `UNREFERENCED` finding that no suppress entry matches renders as JSON
+- **THEN** the entry has no `suppressed` key and is byte-identical to the
+  pre-change shape
+
+#### Scenario: Plain omits a suppressed finding
+- **WHEN** `lattice validate --format=plain` runs and one of two findings is
+  suppressed
+- **THEN** the output is one line, for the unsuppressed finding
+
+#### Scenario: Rich omits a suppressed finding
+- **WHEN** `lattice validate --format=rich` runs and one of two findings is
+  suppressed
+- **THEN** the table shows the unsuppressed finding only, and the summary line
+  counts one finding
+
 ### Requirement: Hint severity rendering
 All three formats SHALL render hint-severity findings. `plain` labels the line `HINT`,
 in the same one-line shape as the other severities. `json` carries `"severity": "hint"`.
 `rich` renders a hint with its own label and a colour distinct from info. A hint is
 part of the report wherever findings render — dropping it in any format would make the
-formats diverge on what was found.
+formats diverge on what was found. Suppression is the sole exception to that rule, and
+it is a declared one: a suppressed hint is omitted from `plain` and `rich` like any
+other suppressed finding, and stays in `json` with `suppressed: true` (see the
+suppressed-finding rendering requirement).
 
 Verified by: `cargo test --test output hint`
 
@@ -135,6 +183,11 @@ Verified by: `cargo test --test output hint`
 #### Scenario: JSON hint severity
 - **WHEN** `lattice validate --format=json` reports a hint finding
 - **THEN** the findings entry carries `"severity": "hint"`
+
+#### Scenario: Suppressed hint follows the suppression rule
+- **WHEN** a hint-severity finding is suppressed by the profile
+- **THEN** `plain` and `rich` omit it and `json` carries it with
+  `"severity": "hint"` and `"suppressed": true`
 
 ### Requirement: Findings JSON carries state when present
 A finding that carries a `state` SHALL expose it in the JSON findings entry as a
@@ -150,7 +203,7 @@ Verified by: `cargo test --test output state`
 - **THEN** the entry carries `"state": "unknown"`
 
 #### Scenario: Stateless finding unchanged
-- **WHEN** an `ORPHAN_NODE` finding renders as JSON
+- **WHEN** an `UNREFERENCED` finding renders as JSON
 - **THEN** the entry has no `state` key and is byte-identical to the pre-change shape
 
 ### Requirement: Suggestion rendering

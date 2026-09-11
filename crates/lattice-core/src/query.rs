@@ -1,4 +1,4 @@
-//! Ask-time graph queries: reachability, paths, orphans and counts.
+//! Ask-time graph queries: reachability, paths, orphans, counts and coverage.
 //!
 //! The graph stores flat node and edge vectors; every index here is built per
 //! invocation from a borrowed graph and dropped with the answer. Nothing is
@@ -11,12 +11,12 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use serde_json::{Map, Value};
 
-use crate::graph::{Edge, LatticeGraph};
+use crate::graph::{Edge, EdgeIndex, LatticeGraph};
 use crate::profile::{Condition, ConditionOp, Profile};
 use crate::trace::build_trace_report_for_nodes;
 use crate::types::{
-    AtReport, CountsReport, DiffReport, EdgeRef, Issue, NodeRef, OrphanEntry, OrphansReport,
-    PathReport, ReachReport,
+    AtReport, CountsReport, CoverageReport, DiffReport, EdgeChangedRef, EdgeRef, Issue,
+    KindCoverage, NodeChangedRef, NodeRef, OrphanEntry, OrphansReport, PathReport, ReachReport,
 };
 use crate::validate::eval_conditions;
 
@@ -37,7 +37,17 @@ pub fn parse_filter(value: &str) -> Result<Condition, String> {
             .map(Value::from)
             .or_else(|| raw.parse::<u64>().ok().map(Value::from))
     };
-    let int_or_string = || integer().unwrap_or_else(|| Value::String(raw.to_string()));
+    let comparable = || {
+        raw.parse::<i64>()
+            .ok()
+            .map(|n| crate::profile::Comparable::Int(i128::from(n)))
+            .or_else(|| {
+                raw.parse::<u64>()
+                    .ok()
+                    .map(|n| crate::profile::Comparable::Int(i128::from(n)))
+            })
+            .unwrap_or_else(|| crate::profile::Comparable::Str(raw.to_string()))
+    };
     let equality_value = || {
         integer()
             .or_else(|| raw.parse::<bool>().ok().map(Value::from))
@@ -49,10 +59,10 @@ pub fn parse_filter(value: &str) -> Result<Condition, String> {
         "~=" => ConditionOp::Matches(
             regex::Regex::new(raw).map_err(|error| format!("invalid filter '{value}': {error}"))?,
         ),
-        "<" => ConditionOp::Lt(int_or_string()),
-        ">" => ConditionOp::Gt(int_or_string()),
-        "<=" => ConditionOp::Lte(int_or_string()),
-        ">=" => ConditionOp::Gte(int_or_string()),
+        "<" => ConditionOp::Lt(comparable()),
+        ">" => ConditionOp::Gt(comparable()),
+        "<=" => ConditionOp::Lte(comparable()),
+        ">=" => ConditionOp::Gte(comparable()),
         _ => unreachable!(),
     };
     Ok(Condition {
@@ -76,7 +86,7 @@ impl std::fmt::Display for QueryError {
 impl std::error::Error for QueryError {}
 
 /// Which way a reachability walk follows edges.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
     /// Along outgoing edges: what does this node reach?
     Forward,
@@ -84,30 +94,34 @@ pub enum Direction {
     Reverse,
 }
 
-/// Forward and reverse adjacency over a borrowed graph.
+/// Adjacency over a borrowed graph, in one walk direction.
 ///
 /// Adjacency lists are sorted by (far endpoint, edge kind) so every walk
 /// expands neighbours in one order and answers are deterministic.
 struct Adjacency<'a> {
-    forward: HashMap<&'a str, Vec<&'a Edge>>,
-    reverse: HashMap<&'a str, Vec<&'a Edge>>,
+    direction: Direction,
+    by_node: HashMap<&'a str, Vec<&'a Edge>>,
 }
 
 impl<'a> Adjacency<'a> {
-    fn build(graph: &'a LatticeGraph) -> Self {
-        let mut forward: HashMap<&str, Vec<&Edge>> = HashMap::new();
-        let mut reverse: HashMap<&str, Vec<&Edge>> = HashMap::new();
+    fn build(graph: &'a LatticeGraph, direction: Direction) -> Self {
+        let mut by_node: HashMap<&str, Vec<&Edge>> = HashMap::new();
         for edge in graph.iter_edges() {
-            forward.entry(&edge.src).or_default().push(edge);
-            reverse.entry(&edge.tgt).or_default().push(edge);
+            let (near, _) = Self::ends(edge, direction);
+            by_node.entry(near).or_default().push(edge);
         }
-        for list in forward.values_mut() {
-            list.sort_by_key(|e| (&e.tgt, &e.kind));
+        for list in by_node.values_mut() {
+            list.sort_by_key(|e| (Self::ends(e, direction).1, &e.kind));
         }
-        for list in reverse.values_mut() {
-            list.sort_by_key(|e| (&e.src, &e.kind));
+        Self { direction, by_node }
+    }
+
+    /// An edge's (near, far) endpoints as the walk sees them.
+    fn ends(edge: &'a Edge, direction: Direction) -> (&'a str, &'a str) {
+        match direction {
+            Direction::Forward => (&edge.src, &edge.tgt),
+            Direction::Reverse => (&edge.tgt, &edge.src),
         }
-        Self { forward, reverse }
     }
 
     /// Edges leaving `id` in the walk's direction, restricted to `kinds` when
@@ -115,24 +129,15 @@ impl<'a> Adjacency<'a> {
     fn neighbours<'b>(
         &'b self,
         id: &str,
-        direction: Direction,
         kinds: &'b BTreeSet<String>,
     ) -> impl Iterator<Item = (&'a str, &'a str)> + 'b {
-        let map = match direction {
-            Direction::Forward => &self.forward,
-            Direction::Reverse => &self.reverse,
-        };
-        map.get(id)
+        let direction = self.direction;
+        self.by_node
+            .get(id)
             .into_iter()
             .flatten()
             .filter(move |e| kinds.is_empty() || kinds.contains(&e.kind))
-            .map(move |e| {
-                let far = match direction {
-                    Direction::Forward => e.tgt.as_str(),
-                    Direction::Reverse => e.src.as_str(),
-                };
-                (e.kind.as_str(), far)
-            })
+            .map(move |e| (e.kind.as_str(), Self::ends(e, direction).1))
     }
 }
 
@@ -163,6 +168,11 @@ fn check_node(graph: &LatticeGraph, id: &str) -> Result<(), QueryError> {
 /// The walk follows edge endpoints as plain strings, so it traverses *through*
 /// an endpoint no adapter declared; only declared nodes enter the answer — an
 /// undeclared one is a dangling reference, not a phantom node.
+///
+/// With `check_resolved`, a second walk admits declared endpoints only. A
+/// node the first walk reaches and the second does not is tainted: every
+/// path to it crosses a vacancy. Without the flag the second walk is skipped
+/// and `tainted` stays `None`.
 pub fn reach(
     graph: &LatticeGraph,
     profile: &Profile,
@@ -170,22 +180,15 @@ pub fn reach(
     edge_kinds: &BTreeSet<String>,
     direction: Direction,
     filters: &[Condition],
+    check_resolved: bool,
 ) -> Result<ReachReport, QueryError> {
     check_node(graph, origin)?;
     check_edge_kinds(profile, edge_kinds)?;
 
-    let adjacency = Adjacency::build(graph);
-    let mut seen: BTreeSet<&str> = BTreeSet::new();
-    let mut queue: VecDeque<&str> = VecDeque::from([origin]);
-    seen.insert(origin);
-    while let Some(id) = queue.pop_front() {
-        for (_, far) in adjacency.neighbours(id, direction, edge_kinds) {
-            if seen.insert(far) {
-                queue.push_back(far);
-            }
-        }
-    }
-    seen.remove(origin);
+    let adjacency = Adjacency::build(graph, direction);
+    let seen = walk(&adjacency, origin, edge_kinds, |_| true);
+    let clean =
+        check_resolved.then(|| walk(&adjacency, origin, edge_kinds, |id| graph.has_node(id)));
 
     Ok(ReachReport {
         origin: origin.to_string(),
@@ -202,9 +205,32 @@ pub fn reach(
             .map(|n| NodeRef {
                 id: n.id.clone(),
                 kind: n.kind.clone(),
+                tainted: clean.as_ref().map(|clean| !clean.contains(n.id.as_str())),
             })
             .collect(),
     })
+}
+
+/// Every endpoint a breadth-first walk from `origin` visits, excluding the
+/// origin. The walk enters an endpoint only when `enter` admits it, so a
+/// refused endpoint neither appears nor is expanded through.
+fn walk<'a>(
+    adjacency: &Adjacency<'a>,
+    origin: &'a str,
+    edge_kinds: &BTreeSet<String>,
+    enter: impl Fn(&str) -> bool,
+) -> BTreeSet<&'a str> {
+    let mut seen: BTreeSet<&str> = BTreeSet::from([origin]);
+    let mut queue: VecDeque<&str> = VecDeque::from([origin]);
+    while let Some(id) = queue.pop_front() {
+        for (_, far) in adjacency.neighbours(id, edge_kinds) {
+            if enter(far) && seen.insert(far) {
+                queue.push_back(far);
+            }
+        }
+    }
+    seen.remove(origin);
+    seen
 }
 
 /// One shortest path from `src` to `tgt` along outgoing edges.
@@ -223,13 +249,13 @@ pub fn path(
     check_node(graph, tgt)?;
     check_edge_kinds(profile, edge_kinds)?;
 
-    let adjacency = Adjacency::build(graph);
+    let adjacency = Adjacency::build(graph, Direction::Forward);
     // Predecessor of each visited node: (previous node, edge kind into here).
     let mut came_from: HashMap<&str, (&str, &str)> = HashMap::new();
     let mut queue: VecDeque<&str> = VecDeque::from([src]);
     let mut found = src == tgt;
     'walk: while let Some(id) = queue.pop_front() {
-        for (kind, far) in adjacency.neighbours(id, Direction::Forward, edge_kinds) {
+        for (kind, far) in adjacency.neighbours(id, edge_kinds) {
             if far == src || came_from.contains_key(far) {
                 continue;
             }
@@ -285,15 +311,11 @@ pub fn orphans(
         )));
     }
 
-    let mut named: BTreeSet<&str> = BTreeSet::new();
-    for edge in graph.iter_edges() {
-        named.insert(&edge.src);
-        named.insert(&edge.tgt);
-    }
+    let edge_index = EdgeIndex::build(graph);
 
     let mut entries: Vec<OrphanEntry> = graph
         .iter_nodes()
-        .filter(|n| !named.contains(n.id.as_str()))
+        .filter(|n| !edge_index.connected(&n.id))
         .filter(|n| kind.is_none_or(|k| n.kind == k))
         .filter(|n| eval_conditions(filters, &n.attrs, true))
         .map(|n| OrphanEntry {
@@ -335,6 +357,48 @@ pub fn counts(graph: &LatticeGraph, profile: &Profile, filters: &[Condition]) ->
         *edges.entry(edge.kind.clone()).or_insert(0) += 1;
     }
     CountsReport { nodes, edges }
+}
+
+/// Per-kind counts of nodes any edge enters or leaves, with percentages.
+///
+/// An edge counts for a node whenever it names that node's ID, on the same
+/// terms as `orphans`: whether the far endpoint resolves is `VACANCY`'s
+/// business. Only declared nodes are counted, so a dangling endpoint adds to
+/// no kind's total. Kinds follow `counts`: every declared kind, plus any the
+/// register carries undeclared.
+pub fn coverage(graph: &LatticeGraph, profile: &Profile) -> CoverageReport {
+    let edge_index = EdgeIndex::build(graph);
+    let mut tallies: BTreeMap<&str, (i64, i64, i64)> = profile
+        .node_kinds()
+        .keys()
+        .map(|k| (k.as_str(), (0, 0, 0)))
+        .collect();
+    for node in graph.iter_nodes() {
+        let (total, incoming, outgoing) = tallies.entry(&node.kind).or_insert((0, 0, 0));
+        *total += 1;
+        *incoming += i64::from(edge_index.has_incoming(&node.id));
+        *outgoing += i64::from(edge_index.has_outgoing(&node.id));
+    }
+    let kinds = tallies
+        .into_iter()
+        .map(|(kind, (total, incoming, outgoing))| KindCoverage {
+            kind: kind.to_string(),
+            total,
+            incoming,
+            outgoing,
+            incoming_pct: percent(incoming, total),
+            outgoing_pct: percent(outgoing, total),
+        })
+        .collect();
+    CoverageReport { kinds }
+}
+
+/// `part` of `whole` as a percentage rounded to one decimal; 0.0 of nothing.
+fn percent(part: i64, whole: i64) -> f64 {
+    if whole == 0 {
+        return 0.0;
+    }
+    (part as f64 * 1000.0 / whole as f64).round() / 10.0
 }
 
 /// Register entries and findings originating at one source path.
@@ -423,10 +487,10 @@ pub fn at(
 
 /// Compare two ingested registers by semantic identity, provenance excluded.
 ///
-/// Nodes compare by ID → (kind, attrs); edges as a multiset of (src, tgt,
-/// kind); pathways by name → (order, current). A declaration that merely moved
-/// lines therefore does not diff — line numbers are where a thing was said,
-/// not what was said.
+/// Nodes compare by ID → (kind, attrs); edges by (src, tgt, kind) → attrs,
+/// with parallel edges paired in document order; pathways by name → (order,
+/// current). A declaration that merely moved lines therefore does not diff —
+/// line numbers are where a thing was said, not what was said.
 pub fn diff(rev_a: &str, a: &LatticeGraph, rev_b: &str, b: &LatticeGraph) -> DiffReport {
     // Both registers outlive the answer, so the identities compare as borrowed
     // views of them: a diff of two large registers otherwise duplicated every
@@ -442,6 +506,7 @@ pub fn diff(rev_a: &str, a: &LatticeGraph, rev_b: &str, b: &LatticeGraph) -> Dif
     let node_ref = |id: &str, kind: &str| NodeRef {
         id: id.to_string(),
         kind: kind.to_string(),
+        tainted: None,
     };
     let mut nodes_added = Vec::new();
     let mut nodes_changed = Vec::new();
@@ -449,7 +514,12 @@ pub fn diff(rev_a: &str, a: &LatticeGraph, rev_b: &str, b: &LatticeGraph) -> Dif
         match nodes_a.get(id) {
             None => nodes_added.push(node_ref(id, kind)),
             Some((kind_a, attrs_a)) if kind_a != kind || attrs_a != attrs => {
-                nodes_changed.push(node_ref(id, kind));
+                nodes_changed.push(NodeChangedRef {
+                    id: id.to_string(),
+                    kind: kind.to_string(),
+                    attrs_a: (*attrs_a).clone(),
+                    attrs_b: (*attrs).clone(),
+                });
             }
             Some(_) => {}
         }
@@ -460,34 +530,48 @@ pub fn diff(rev_a: &str, a: &LatticeGraph, rev_b: &str, b: &LatticeGraph) -> Dif
         .map(|(id, (kind, _))| node_ref(id, kind))
         .collect();
 
-    fn edges_of(g: &LatticeGraph) -> BTreeMap<(&str, &str, &str), i64> {
-        let mut multiset = BTreeMap::new();
+    // Attrs per identity tuple in document order, so parallel edges pair up
+    // positionally rather than being matched by content — content is what
+    // the pairing is meant to compare.
+    type EdgeAttrs<'g> = BTreeMap<(&'g str, &'g str, &'g str), Vec<&'g Map<String, Value>>>;
+    fn edges_of(g: &LatticeGraph) -> EdgeAttrs<'_> {
+        let mut by_tuple: EdgeAttrs<'_> = BTreeMap::new();
         for e in g.iter_edges() {
-            *multiset
+            by_tuple
                 .entry((e.src.as_str(), e.tgt.as_str(), e.kind.as_str()))
-                .or_insert(0) += 1;
+                .or_default()
+                .push(&e.attrs);
         }
-        multiset
+        by_tuple
     }
     let edges_a = edges_of(a);
     let edges_b = edges_of(b);
     let mut edges_added = Vec::new();
     let mut edges_removed = Vec::new();
+    let mut edges_changed = Vec::new();
     let keys: BTreeSet<_> = edges_a.keys().chain(edges_b.keys()).collect();
+    let edge_ref = |key: &(&str, &str, &str)| EdgeRef {
+        src: key.0.to_string(),
+        tgt: key.1.to_string(),
+        kind: key.2.to_string(),
+    };
     for key in keys {
-        let surplus = edges_b.get(key).unwrap_or(&0) - edges_a.get(key).unwrap_or(&0);
-        let (list, count) = if surplus > 0 {
-            (&mut edges_added, surplus)
-        } else {
-            (&mut edges_removed, -surplus)
-        };
-        for _ in 0..count {
-            list.push(EdgeRef {
-                src: key.0.to_string(),
-                tgt: key.1.to_string(),
-                kind: key.2.to_string(),
-            });
+        let in_a = edges_a.get(key).map_or(&[][..], Vec::as_slice);
+        let in_b = edges_b.get(key).map_or(&[][..], Vec::as_slice);
+        for (attrs_a, attrs_b) in in_a.iter().zip(in_b) {
+            if attrs_a != attrs_b {
+                edges_changed.push(EdgeChangedRef {
+                    src: key.0.to_string(),
+                    tgt: key.1.to_string(),
+                    kind: key.2.to_string(),
+                    attrs_a: (*attrs_a).clone(),
+                    attrs_b: (*attrs_b).clone(),
+                });
+            }
         }
+        let paired = in_a.len().min(in_b.len());
+        edges_added.extend((paired..in_b.len()).map(|_| edge_ref(key)));
+        edges_removed.extend((paired..in_a.len()).map(|_| edge_ref(key)));
     }
 
     let pathway_names: BTreeSet<&str> = a
@@ -509,6 +593,7 @@ pub fn diff(rev_a: &str, a: &LatticeGraph, rev_b: &str, b: &LatticeGraph) -> Dif
         nodes_changed,
         edges_added,
         edges_removed,
+        edges_changed,
         pathways_changed,
     }
 }
@@ -519,6 +604,7 @@ pub fn diff(rev_a: &str, a: &LatticeGraph, rev_b: &str, b: &LatticeGraph) -> Dif
 /// embed the target path in attrs, so two materialization directories would
 /// make every such node "changed" in a diff of identical content. Extractions
 /// are sequential; the second replaces the first.
+#[derive(Debug)]
 pub struct MaterializationDir {
     path: PathBuf,
 }
@@ -652,8 +738,12 @@ mod filter_tests {
 
     #[test]
     fn ordering_filters_infer_int_then_string() {
+        use crate::profile::Comparable;
         for operator in ["<", ">", "<=", ">="] {
-            for (raw, expected) in [("42", json!(42)), ("true", json!("true"))] {
+            for (raw, expected) in [
+                ("42", Comparable::Int(42)),
+                ("true", Comparable::Str("true".into())),
+            ] {
                 let condition = parse_filter(&format!("a{operator}{raw}")).unwrap();
                 let actual = match condition.op {
                     ConditionOp::Lt(value)
