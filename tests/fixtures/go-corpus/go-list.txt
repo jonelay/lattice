@@ -1,0 +1,7 @@
+alpha/alpha_test.go::TestPlain
+alpha/alpha_test.go::TestGeneric
+alpha/alpha_test.go::BenchmarkPlain
+alpha/alpha_test.go::FuzzPlain
+alpha/alpha_test.go::ExamplePlain
+beta/beta_test.go::TestBeta
+beta/beta_test.go::TestBetaTable

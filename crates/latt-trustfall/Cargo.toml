@@ -1,0 +1,17 @@
+[package]
+name = "latt-trustfall"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Development-only cross-check of lattice's validators against Trustfall queries over the same graph"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+latt-core = { path = "../latt-core" }
+serde_json.workspace = true
+trustfall_core.workspace = true

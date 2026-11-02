@@ -1,0 +1,5 @@
+{
+  "exit": 2,
+  "stderr": "Error: Profile error: validation config for 'CONSTRAINT', message: unknown placeholder '{the docs}' (valid: {message}, {code}, {severity}, {id}, {kind}, {attrs.<name>})\nCONSTRAINT config: 'when.status' uses the retired operator 'not'; write 'ne' (not equal, or absent)\n",
+  "stdout": ""
+}

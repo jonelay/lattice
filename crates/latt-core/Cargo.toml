@@ -1,0 +1,38 @@
+[package]
+name = "latt-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Core graph ingestion, validation and querying for Lattice"
+publish = false
+
+[lints]
+workspace = true
+
+[features]
+default = ["native-adapters"]
+native-adapters = ["dep:toml_edit"]
+
+[dependencies]
+latt-adapter = { path = "../latt-adapter" }
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_norway.workspace = true
+thiserror.workspace = true
+# The toml adapter only: the parser `toml` is built on, used directly because it keeps
+# each value's span, so a node or finding names its line and the entry as written.
+toml_edit = { workspace = true, optional = true }
+
+[dev-dependencies]
+# The benchmark-report example only; a dev edge keeps clap out of what embedders compile.
+clap.workspace = true
+criterion.workspace = true
+proptest.workspace = true
+rustdoc-types.workspace = true
+
+[[bench]]
+name = "core"
+harness = false

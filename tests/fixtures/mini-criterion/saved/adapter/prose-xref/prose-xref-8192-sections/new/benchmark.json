@@ -1,0 +1,11 @@
+{
+  "group_id": "adapter",
+  "function_id": "prose-xref",
+  "value_str": "prose-xref-8192-sections",
+  "throughput": {
+    "Elements": 8704
+  },
+  "full_id": "adapter/prose-xref/prose-xref-8192-sections",
+  "directory_name": "adapter/prose-xref/prose-xref-8192-sections",
+  "title": "adapter/prose-xref/prose-xref-8192-sections"
+}

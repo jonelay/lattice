@@ -1,0 +1,11 @@
+{
+  "group_id": "document",
+  "function_id": "ingest",
+  "value_str": "defects-1024-nodes",
+  "throughput": {
+    "Elements": 1048
+  },
+  "full_id": "document/ingest/defects-1024-nodes",
+  "directory_name": "document/ingest/defects-1024-nodes",
+  "title": "document/ingest/defects-1024-nodes"
+}

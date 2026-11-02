@@ -1,0 +1,5 @@
+{
+  "exit": 2,
+  "stderr": "Error: Profile error: failed to parse profile <case>/profile.yaml\n  caused by: did not find expected node content at line 4 column 1, while parsing a flow node\n",
+  "stdout": ""
+}

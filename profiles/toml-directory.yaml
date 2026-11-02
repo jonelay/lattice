@@ -2,6 +2,7 @@ name: toml-directory
 profile_version: "1.0.0"
 
 adapter:
+  native: toml
   mode: directory
   paths:
     files:

@@ -2,9 +2,8 @@
 
 ## Purpose
 The validation framework that checks a loaded graph against its profile — severity-tagged
-issue codes, built-in validators, adapter-issue channel, and strict-mode enforcement.
+finding codes, built-in validators, adapter-issue channel, and strict-mode enforcement.
 ## Requirements
-
 ### Requirement: Issue model
 A validation finding SHALL be an `Issue` with fields: `severity` (error, warning, info,
 hint), `code` (string identifier like `UNREFERENCED`), `message` (human-readable),
@@ -13,7 +12,13 @@ concerns, or null for findings not tied to a single node). An issue MAY addition
 carry a `state` (string): a machine-readable qualifier of what the finding established,
 set only by validators that define one. An issue with no state carries none — the field
 is absent, not null-valued, so findings that never had one are byte-identical to before
-the field existed.
+the field existed. An issue MAY likewise carry a `note`: the finding-notes entry that
+matched it, with its text, its optional `until`, `by` and `at`, and whether it has
+expired. An issue with no note
+carries none, absent rather than null, for the same reason.
+
+Verified by: `cargo test -p latt-core --locked --test output note` and
+`cargo test -p latt-core --locked --test validation`.
 
 #### Scenario: Issue formatting
 - **WHEN** an issue with severity=warning, code="UNREFERENCED", provenance=("REQS.md", 42) is formatted
@@ -27,6 +32,10 @@ the field existed.
 - **WHEN** an `UNREFERENCED` issue is serialized to JSON
 - **THEN** the entry carries no `state` key
 
+#### Scenario: Absent note is absent, not null
+- **WHEN** an `UNREFERENCED` issue that no note entry matches is serialized to JSON
+- **THEN** the entry carries no `note` key
+
 ### Requirement: Built-in validators
 Core SHALL provide these validators, each identified by a code:
 
@@ -36,8 +45,10 @@ Core SHALL provide these validators, each identified by a code:
   The issue SHALL carry `node_id` set to the edge's source node
 - `VACANCY`: edge references a node ID that does not exist in the graph.
   The issue SHALL carry `node_id` set to the edge's source node
-- `UNREFERENCED`: node has no incoming edges
-- `UNTRACED`: node has no outgoing edges
+- `UNREFERENCED`: node has no incoming edges, and its kind is a target in some
+  `allowed` pair (see "Orphan checks follow the allowed pairs")
+- `UNTRACED`: node has no outgoing edges, and its kind is a source in some `allowed`
+  pair
 - `ATTR_REQUIRED`: a required attr is missing from a node
 - `ATTR_TYPE`: an attr value does not match its declared type
 - `ATTR_ENUM`: an enum attr value is not in the declared `values` list
@@ -45,27 +56,56 @@ Core SHALL provide these validators, each identified by a code:
 - `COVERAGE`: a node of the configured `target_kind` has no incoming edge of the
   configured `edge_kind` (warning by default). An optional `where` condition block
   restricts the target-kind nodes checked; absent `where`, every target is checked
-- `SOURCE_MISSING`: a path cited by the register does not resolve on disk
-  (warning by default). Emitted by adapters, not by core; core SHALL declare its
-  default severity so a profile can override it like any other code
 - `CONFIG_ERROR`: a profile's validation configuration is missing required keys or
-  names a node/edge kind the profile does not declare (error by default)
+  names a node/edge kind the profile does not declare (error by default). For
+  `COVERAGE` and `COVERAGE_DEEP` in a standard profile these are load errors (see the
+  profile-schema spec), so the finding arises only on the profile `fuse` composes,
+  whose kinds are known only once the sources have run
 - `PATHWAY_UNRESOLVED`: a profile binds a finding code to an ordering pathway the graph does
   not carry (warning by default). Emitted by core
-- `PATHWAY_INVALID`: a register declares an ordering pathway that does not hold — a current
-  position absent from its order, either value of the wrong shape, one of the pair
-  declared without the other, or repeated positions in the order (warning by default).
-  Emitted by adapters, not by core; core SHALL declare its default severity so a profile
-  can override it like any other code
 - `CONSTRAINT`: a node fails a cross-field constraint declared in the profile
   (warning by default). Core evaluates the constraint conditions against node
   attrs; no adapter involvement. A profile MAY declare multiple CONSTRAINT
   entries, each with its own condition set — every entry SHALL be honoured
   independently per the existing repeated-code contract
+- `EDGE_WHERE`: an edge of the configured `edge_kind` fails conditions declared
+  on its source, its target or its own attrs (warning by default). The issue
+  SHALL carry `node_id` set to the edge's source node. Like `CONSTRAINT`, every
+  entry SHALL be honoured independently
+- `EDGE_COUNT`: a node of the configured `node_kind` holds fewer than `min` or more
+  than `max` edges of the configured `edge_kind`, optionally per value of a far-end
+  attr (warning by default). The issue SHALL carry `node_id` set to the counted node.
+  Every entry SHALL be honoured independently
 - `SUPPRESS_UNUSED`: a profile `SUPPRESS` entry whose selector matched no finding
   this run (info by default). Carries no `node_id`; provenance names the profile.
-  Emitted by core after finding collection and before severity resolution, so a
-  profile override to warning is reachable by `--strict`
+  Emitted by core after severity resolution and before `--strict` promotion, at
+  its own profile override, so an override to warning is reachable by `--strict`
+- `OVERRIDE_UNUSED`: a profile validation entry overrides the severity of a code no
+  shipped component owns, and no finding carried that code this run (info by default).
+  Carries no `node_id`; provenance names the profile. Emitted at the same point as
+  `SUPPRESS_UNUSED`
+
+Codes specified by other capabilities — `COVERAGE_DEEP` and `COVERAGE_UNKNOWN`
+(coverage-query), `SUGGESTED_EDGE` and `SUGGESTION_UNRESOLVED` (output, Suggestion rendering),
+`SUGGESTION_UNRANKED` (cli, An unranked run is visible),
+and the `NOTE_*` codes (finding-notes) — are core's too, at the defaults those specs give.
+
+Adapters, not core, emit these codes. Core implements none of them: each arrives at the
+severity its adapter chose (the adapter-contract capability), and a profile override
+applies to it by code string like any other.
+
+- `PARSE_ERROR`: an adapter could not read part of the register
+- `AMBIGUOUS_REF`, `EXTERNAL_REF`: a reference the adapter could not turn into an edge
+- `WRAPPED_REF`: a reference a line break split from the file it names
+- `NO_MATCHING_FILES`: the target is readable but no path matches the configured
+  globs (`latt-adapter`, at info)
+- `PATHWAY_INVALID`: a register declares an ordering pathway that does not hold — a current
+  position absent from its order, either value of the wrong shape, one of the pair
+  declared without the other, or repeated positions in the order. `latt-adapter`, which the Rust
+  adapters share, emits it at warning
+- `SOURCE_MISSING`: a node whose kind declares `id_names` names a file or test that
+  does not resolve in the target (the source-existence capability). The md and TOML
+  adapters emit it at warning
 
 A node with no edges in either direction SHALL receive both `UNREFERENCED` and
 `UNTRACED` findings. The two codes are independent: a node may be unreferenced
@@ -83,6 +123,12 @@ declaration in the sequence sets the severity for all findings of that code. Thi
 a replacement — the check each entry configures still runs independently, and every
 finding it produces is reported. The severity declaration is about the code's weight, not
 about which entries are heard.
+
+Entries that each declare their own check are the exception: `CONSTRAINT`, `EDGE_WHERE`,
+`EDGE_COUNT`, `COVERAGE` and `COVERAGE_DEEP`. An entry's own `severity` SHALL govern that
+entry's findings. A profile can then hold an error-level and a warning-level rule under
+one code, such as an error-level `COVERAGE` over core-tier nodes beside an info-level one
+over the rest. An entry without `severity` takes the code's severity as above.
 
 A pathway binding is the one exception, and it is an exception by rejection rather than by
 discard: a second binding for an already-bound code SHALL be a load error, per the
@@ -104,7 +150,7 @@ matching parent's coverage.
 - **THEN** validation emits a `COVERAGE` issue naming that node
 
 #### Scenario: Attribute-filtered coverage
-- **WHEN** `COVERAGE` has `where: {status: {not: deferred}}` and uncovered target-kind
+- **WHEN** `COVERAGE` has `where: {status: {ne: deferred}}` and uncovered target-kind
   nodes have statuses `active` and `deferred`
 - **THEN** validation emits a `COVERAGE` issue only for the active node
 
@@ -120,13 +166,25 @@ matching parent's coverage.
 - **WHEN** a profile declares `COVERAGE` twice as above and a `req` node has neither edge
 - **THEN** validation emits two `COVERAGE` issues for that node, one per configured `edge_kind`
 
+#### Scenario: Each coverage entry keeps its own severity
+- **WHEN** a profile declares `COVERAGE` twice over kind `item`, one with
+  `where: {tier: {eq: core}}` and `severity: error`, the other with
+  `where: {tier: {eq: extra}}` and `severity: info`, and one uncovered item of each tier
+- **THEN** the core item's `COVERAGE` finding is `error`, the extra item's is `info`, and
+  the exit code is 1 whichever entry comes first
+
+#### Scenario: Each deep-coverage entry keeps its own severity
+- **WHEN** a profile declares `COVERAGE_DEEP` twice with disjoint `where` filters and
+  different `severity` values
+- **THEN** each entry's findings carry that entry's severity
+
 #### Scenario: Coverage config names an undeclared kind
-- **WHEN** a `COVERAGE` config sets `target_kind` to a kind not present in `node_kinds`
-- **THEN** validation emits a `CONFIG_ERROR` issue and performs no coverage validation
+- **WHEN** a standard profile's `COVERAGE` config sets `target_kind` to a kind not present in `node_kinds`
+- **THEN** the profile does not load and the command exits 2 naming the kind
 
 #### Scenario: One bad config among several does not suppress the others
-- **WHEN** a profile declares `COVERAGE` twice and only the first names an undeclared `target_kind`
-- **THEN** validation emits a `CONFIG_ERROR` for the first and still performs the second config's coverage validation
+- **WHEN** a fuse profile declares `COVERAGE` twice and only the first names a `target_kind` the composed profile does not declare
+- **THEN** fuse emits a `CONFIG_ERROR` for the first and still performs the second config's coverage validation
 
 #### Scenario: ID format violation
 - **WHEN** a node of kind `req` (pattern `^REQ-\d{4}$`) has id "REQ-1"
@@ -227,9 +285,7 @@ the code and leave the finding at `hint`, rather than ignoring the override in s
 The `CONFIG_ERROR` is emitted once per offending code, not once per finding.
 
 The rule is stated over the severity a finding *arrives at*, not over the code's shipped
-default, because core has no default for a code it does not implement — a finding emitted at
-`hint` by an adapter or a suggestion overlay would otherwise be promoted by an override with
-no `CONFIG_ERROR` raised, which is promotion in exactly the silence this requirement forbids.
+default.
 
 Verified by: `cargo test --test validation override` and
 `cargo test --test suggestions promoted`
@@ -297,8 +353,8 @@ node and resolve as follows:
 | the node's position value | resolution |
 |---|---|
 | a string in the pathway order, at or before the current position | severity unchanged — the finding is due |
-| a string in the pathway order, after the current position | severity becomes `info` |
-| a string that is **not a member** of the pathway order | severity becomes `info` |
+| a string in the pathway order, after the current position | severity lowered to `info` |
+| a string that is **not a member** of the pathway order | severity lowered to `info` |
 | not a string (int, list, mapping, null) | severity unchanged |
 | the attribute is absent | severity unchanged |
 
@@ -311,6 +367,9 @@ Demotion is a positive claim that a finding is provably not yet due; a node that
 state its position, or states it in a shape the pathway cannot hold, has proven nothing.
 Quieting either would be indistinguishable from dropping it. A wrong-shaped attr is
 separately reported by the attribute-type validator where the profile types it.
+
+Demotion SHALL only lower a severity. A finding already at `info` or `hint` SHALL keep
+it; the pathway pass never raises a finding.
 
 Resolution SHALL be deterministic and independent of the order findings were collected in.
 
@@ -345,6 +404,11 @@ Verified by: `cargo test --test validation pathway`
 - **WHEN** a profile binds only `OBLIGATION_UNBACKED` and validation also finds
   `UNREFERENCED`
 - **THEN** the `UNREFERENCED` findings keep their declared severity
+
+#### Scenario: Demotion never raises a hint
+- **WHEN** a bound finding arrives at `hint` and its node's `trigger` is `M4`, after the
+  current position `M0`
+- **THEN** the finding keeps severity `hint`
 
 ### Requirement: Findings the pathway pass cannot resolve
 The severity-resolution pass SHALL leave a finding untouched when it cannot be resolved,
@@ -388,9 +452,6 @@ one operation, and every command that reports or exits on adapter issues SHALL a
 Two commands run against the same graph and profile SHALL NOT report different severities
 for the same finding.
 
-A per-command copy of this logic is how the formats and the exit codes diverge. The
-requirement is on the observable outcome, not on any particular internal arrangement.
-
 Verified by: `cargo test --test cli severity`
 
 #### Scenario: Two commands agree on an adapter issue's severity
@@ -418,20 +479,37 @@ Verified by: `cargo test --test native_messages`
 #### Scenario: Type mismatch names the native type
 - **WHEN** a node's attr value does not match its declared type
 - **THEN** the `ATTR_TYPE` message names the value's actual type in the native
-  vocabulary, e.g. `expected type 'int', got string` — never `str` or `NoneType`
+  vocabulary and the value as written, in compact JSON cut at 60 characters, e.g.
+  `expected type 'int', got string "many"` — never `str` or `NoneType`
 
 #### Scenario: List element mismatch names the native type
 - **WHEN** a list attr element does not match the declared `items` type
 - **THEN** the `ATTR_LIST_ITEMS` message names the element's actual type in the
-  native vocabulary
+  native vocabulary and the element as written
+
+### Requirement: Attr findings are placed where the attr was written
+`ATTR_TYPE`, `ATTR_ENUM` and `ATTR_LIST_ITEMS` SHALL carry the provenance the node's
+`attr_provenance` gives that attr, and the node's provenance when it gives none.
+`ATTR_REQUIRED` SHALL carry the node's provenance: a missing attr was written nowhere.
+
+Verified by: `cargo test --test validation attr_findings`
+
+#### Scenario: An enum value located by its adapter
+- **WHEN** node `REQ-0001` at `r.toml:10` holds `status: paused`, located at `r.toml:12`,
+  outside its enum
+- **THEN** the `ATTR_ENUM` finding is at `r.toml:12`
+
+#### Scenario: No location given
+- **WHEN** a node at `r.md:4` holds a bad enum value and no `attr_provenance`
+- **THEN** the `ATTR_ENUM` finding is at `r.md:4`
 
 ### Requirement: Validation config values are typed
 A `COVERAGE` config key that names a kind (`target_kind`, `edge_kind`), and a
 `COVERAGE_DEEP` config key that names a kind (`target_kind`, `via`,
-`evidence`), SHALL be read as a string. A non-string value SHALL be a
-`CONFIG_ERROR` naming the key and the value's type in the native vocabulary,
-and that config SHALL perform no check — it is never read as absent,
-stringified, or dropped in silence. An empty string is a value, not an
+`evidence`), SHALL be read as a string. A non-string value SHALL be a fault
+naming the key and the value's type in the native vocabulary, and that config
+SHALL perform no check — it is never read as absent, stringified, or dropped in
+silence. An empty string is a value, not an
 absence, and fails the referenced-kind check like any other unknown name.
 Each key SHALL be typed and checked against the profile's declared kinds
 independently of its siblings: one missing or mistyped key SHALL NOT mask the
@@ -440,28 +518,31 @@ keys (`node_kind`, `status_attr`, `group_by_attr`) follow the same typing rule
 through `summary`'s own error channel (see the `cli` capability), not as
 findings.
 
+On a standard profile these faults are one load error naming every fault the
+entry carries (profile-schema spec, coverage entries name declared kinds). On the
+profile `fuse` composes, whose kinds are known only once the sources have run,
+each fault is a `CONFIG_ERROR` finding. The messages are the same on both.
+
 Verified by: `cargo test --test native_messages config_typing`
 
 #### Scenario: Non-string coverage config value
 - **WHEN** a `COVERAGE` config sets `target_kind: true`
-- **THEN** validation emits `CONFIG_ERROR` with message `COVERAGE config:
-  'target_kind' must be a string, got bool` and performs no coverage validation for
-  that config
+- **THEN** the fault reads `COVERAGE config: 'target_kind' must be a string, got
+  bool`, and that config performs no coverage validation
 
 #### Scenario: Null coverage config value is wrong type, not missing
 - **WHEN** a `COVERAGE` config sets `edge_kind: null`
-- **THEN** validation emits the wrong-type `CONFIG_ERROR` (`got null`), not the
-  missing-keys one
+- **THEN** the fault is the wrong-type one (`got null`), not the missing-keys one
 
 #### Scenario: Empty-string coverage config value is checked, not dropped
 - **WHEN** a `COVERAGE` config sets `target_kind: ""`
-- **THEN** validation emits `CONFIG_ERROR "COVERAGE config: target_kind '' not
-  in profile node kinds"`
+- **THEN** the fault reads `COVERAGE config: target_kind '' not in profile node
+  kinds`
 
 #### Scenario: Mixed faults are all reported
 - **WHEN** a `COVERAGE_DEEP` config sets `target_kind: 3` and omits `via`
-- **THEN** validation emits a `CONFIG_ERROR` for the mistyped key and a
-  `CONFIG_ERROR` for the missing key, and performs no check for that config
+- **THEN** both the mistyped key and the missing key are named, and that config
+  performs no check
 
 ### Requirement: Hint severity tier
 Core SHALL support a fourth severity, `hint`, below `info`. A hint SHALL never affect
@@ -496,6 +577,30 @@ Verified by: `cargo test --test validation orphan_ok`
 - **WHEN** the profile marks only `test` as `orphan_ok` and a `req` node has no edges
 - **THEN** validation emits both `UNREFERENCED` and `UNTRACED` for the `req` node
 
+### Requirement: Orphan checks follow the allowed pairs
+Core SHALL emit `UNREFERENCED` for a node only when some edge kind's `allowed` pairs
+name the node's kind as a target, and `UNTRACED` only when some pair names it as a
+source. A direction no pair permits can never be satisfied, so a missing edge there
+says nothing about the register; an edge in that direction is `EDGE_CONSTRAINT`'s
+finding. `orphan_ok` still exempts the kind from both. `query orphans` is unaffected:
+it reports nodes with no edges as the ask-time fact.
+
+Verified by: `cargo test --test validation allowed_pair` and
+`cargo test --test fuse composed_orphan_checks_follow`
+
+#### Scenario: A source-only kind is never unreferenced
+- **WHEN** the profile's only pair naming `test` is `[test, req]` and a `test` node has
+  no edges
+- **THEN** validation emits `UNTRACED` and not `UNREFERENCED` for it
+
+#### Scenario: A kind no pair names gets no orphan finding
+- **WHEN** no `allowed` pair names kind `memo` and a `memo` node has no edges
+- **THEN** validation emits neither `UNREFERENCED` nor `UNTRACED` for it
+
+#### Scenario: A kind allowed both ways keeps both checks
+- **WHEN** the profile allows `[req, req]` and a `req` node has no edges
+- **THEN** validation emits both `UNREFERENCED` and `UNTRACED` for it
+
 ### Requirement: Coverage evidence state
 A `COVERAGE` finding SHALL carry a `state` distinguishing what the register can prove.
 For a coverage config, an *unattributed candidate* is a node whose kind appears as a
@@ -516,6 +621,14 @@ observed on live data. The finding carries no `node_id`
 and names the profile as provenance, as configuration-level findings do. One finding per
 config, not per candidate: the population is one fact, and repeating it per node would
 bury the per-node findings it qualifies.
+
+A config MAY carry `source_where`, a condition block in `where` syntax over the source
+side. A source-kind node it does not match SHALL NOT be an unattributed candidate, SHALL
+NOT count in the base population, and its edges SHALL NOT cover a target. When
+`source_where` is set, the `COVERAGE_UNKNOWN` message SHALL say its population is the
+nodes matching `source_where`. Without it, a register whose retired rows are meant to
+carry no edge reports them as missing attribution on every run, and `where` cannot help:
+it filters the targets.
 
 Verified by: `cargo test --test validation coverage_state`
 
@@ -542,6 +655,17 @@ Verified by: `cargo test --test validation coverage_state`
 #### Scenario: The hint names the base population
 - **WHEN** one of three `test` nodes carries no outgoing `verifies` edge
 - **THEN** the `COVERAGE_UNKNOWN` message names `1 of 3` and the ratio `33.3%`
+
+#### Scenario: source_where narrows the population
+- **WHEN** of three `test` nodes one verifies a `req`, one is unattributed, and one is
+  `status: retired` and unattributed, and the config sets
+  `source_where: {status: {ne: retired}}`
+- **THEN** the `COVERAGE_UNKNOWN` message names `1 of 2` and `source_where`
+
+#### Scenario: An excluded source is not evidence
+- **WHEN** the only `verifies` edge into `REQ-0001` comes from a `test` node
+  `source_where` excludes
+- **THEN** `REQ-0001` gets a `COVERAGE` finding
 
 ### Requirement: CONSTRAINT evaluation
 Core SHALL evaluate each CONSTRAINT entry in the `validations:` list against every node
@@ -615,7 +739,7 @@ Verified by: `cargo test --test validation constraint`
 The condition vocabulary is fixed at compile time. Core SHALL support these operators:
 
 - `eq: <value>` — the attr's value equals `<value>` (string or number comparison)
-- `not: <value>` — the attr's value does not equal `<value>`
+- `ne: <value>` — the attr is absent, or its value does not equal `<value>`
 - `in: [v1, v2, ...]` — the attr's value is one of the listed values
 - `lt: <value>` — the attr's value is less than `<value>`
 - `gt: <value>` — the attr's value is greater than `<value>`
@@ -626,17 +750,26 @@ The condition vocabulary is fixed at compile time. Core SHALL support these oper
 - `present: false` — the attr does not exist on the node
 
 An operator key the core does not recognise SHALL be a load error (`CONFIG_ERROR`),
-not a silently inert condition.
+not a silently inert condition. The retired spelling `not` SHALL be a load error that
+names `ne` as its replacement.
 
-For `eq`, `not`, and `in`: comparison SHALL be type-aware — a string `"42"` does not
+The operator meanings follow Trustfall's filter operators of the same meaning (`=`,
+`!=`, `one_of`, `<`, `>`, `<=`, `>=`, `regex`), with two deliberate differences: `ne`
+also holds for an absent attr, and `present` tells an absent attr from one holding
+null, which Trustfall's `is_null` cannot. An operator added later SHALL take the meaning
+of the Trustfall operator it corresponds to.
+
+For `eq`, `ne`, and `in`: comparison SHALL be type-aware — a string `"42"` does not
 match an integer `42`. For `lt`, `gt`, `lte`, and `gte`: the threshold value in the
 profile SHALL be an integer or a string; any other type (array, object, boolean, null,
 float) SHALL be a load error (`CONFIG_ERROR`). At evaluation time, two strings SHALL
 compare lexicographically and two integers SHALL compare numerically. This orders
 canonical `YYYY-MM-DD` dates chronologically. A missing attr or a type mismatch between
 the node's attr and the threshold SHALL not compare and the condition SHALL fail.
-For `matches`: the value SHALL be coerced to a string before matching; a non-string attr
-that cannot be represented as text SHALL not match.
+For `matches`: the pattern SHALL be a Rust `regex` crate pattern, matched unanchored
+(a match anywhere in the text passes; anchor with `^` and `$`). The value SHALL be
+coerced to a string before matching: numbers and booleans match as their text; a
+non-string attr that cannot be represented as text SHALL not match.
 
 For `present`: only existence is checked, not the value. `present: true` on an attr
 whose value is an empty string or zero passes — the attr exists.
@@ -651,8 +784,20 @@ Verified by: `cargo test --test validation constraint`
 - **WHEN** `expect: { status: { eq: "approved" } }` and node attr `status` is `"draft"`
 - **THEN** the condition fails
 
-#### Scenario: not operator
-- **WHEN** `expect: { status: { not: "blocked" } }` and node attr `status` is `"approved"`
+#### Scenario: ne operator
+- **WHEN** `expect: { status: { ne: "blocked" } }` and node attr `status` is `"approved"`
+- **THEN** the condition passes
+
+#### Scenario: ne holds for an absent attr
+- **WHEN** `expect: { status: { ne: "blocked" } }` and the node has no `status` attr
+- **THEN** the condition passes
+
+#### Scenario: The retired not spelling is refused
+- **WHEN** a profile declares `expect: { status: { not: "blocked" } }`
+- **THEN** the loader rejects the profile, exit 2, naming `ne` as the replacement
+
+#### Scenario: matches is unanchored
+- **WHEN** `expect: { id: { matches: "REQ" } }` and node attr `id` is `"X-REQ-1"`
 - **THEN** the condition passes
 
 #### Scenario: in operator matches
@@ -767,8 +912,8 @@ Core SHALL provide the built-in code `SUPPRESS_UNUSED` (info by default),
 emitted by core, carrying no `node_id` and naming the profile as provenance,
 as configuration-level findings do.
 
-After finding collection and before severity resolution, core SHALL check each
-suppress entry at `(code, node_id)` granularity. A suppress entry whose
+After finding collection and severity resolution, and before `--strict` promotion,
+core SHALL check each suppress entry at `(code, node_id)` granularity. A suppress entry whose
 selector matched no finding SHALL produce one `SUPPRESS_UNUSED` finding. The
 message SHALL state what the core knows: whether the code is a built-in
 validator code, whether any finding carried it this run (even if `node_ids`
@@ -780,9 +925,9 @@ adapter's full code vocabulary, only what appeared this run.
 hygiene, not register correctness. It is an ordinary code: a profile MAY
 override its severity, and `--strict` promotes it when it arrives at
 `warning`, so a profile that overrides it to `warning` gates stale
-suppressions under `--strict`. Unused detection therefore runs before
-severity resolution — a `SUPPRESS_UNUSED` emitted after the override pass
-could never be promoted.
+suppressions under `--strict`. Each `SUPPRESS_UNUSED` therefore takes its own
+profile override when it is created, and unused detection runs before
+promotion — one emitted after `--strict` could never be promoted.
 
 Unused detection SHALL run once. The resulting `SUPPRESS_UNUSED` findings are
 then subject to suppression through the normal mechanism, which makes
@@ -825,3 +970,250 @@ Verified by: `cargo test --test validation suppress_unused`
 - **THEN** validation emits two `SUPPRESS_UNUSED` findings (one per stale
   entry), both suppressed, and the SUPPRESS_UNUSED suppress entry is itself
   used (no further SUPPRESS_UNUSED emitted for it)
+
+### Requirement: EDGE_WHERE evaluation
+Core SHALL evaluate each `EDGE_WHERE` entry in the `validations:` list against every
+edge whose kind equals the entry's `edge_kind`. Evaluation is stateless. Each rule
+examines one edge, its source node and its target node, and carries no state between
+edges.
+
+The entry declares up to three condition blocks: `when`, `expect` and `reject`. Each one
+maps the selectors `source`, `target` and `edge` to an ordinary condition block. A
+`source` or `target` block reads that endpoint node's attrs. An `edge` block reads the
+edge's own attrs.
+
+- `when` (optional): a guard. If any of its conditions does not match, the rule is
+  skipped for that edge.
+- `expect`: every condition SHALL hold, or an `EDGE_WHERE` finding is emitted.
+- `reject`: no condition SHALL hold, or an `EDGE_WHERE` finding is emitted.
+- A rule declaring both SHALL require both to pass. Each edge yields at most one finding
+  per entry.
+
+An edge with an undeclared kind, a missing endpoint, or an endpoint of undeclared kind
+SHALL NOT be evaluated. Those edges already carry `UNKNOWN_KIND` or `VACANCY`. An edge
+that fails `EDGE_CONSTRAINT` SHALL still be evaluated.
+
+The finding SHALL carry `node_id` set to the edge's source node, the edge's provenance,
+and `severity` from the entry's `severity` key (default `warning`). The `message` SHALL
+be the entry's `message` key if one is declared. Otherwise it is generated: it names the
+edge and the first failing condition as `<selector>.<attr>`.
+
+Verified by: `cargo test --test validation edge_where`
+
+#### Scenario: Reject on a target attr fires
+- **WHEN** a profile declares `EDGE_WHERE` with `edge_kind: fulfills` and `reject: { target: { status: { eq: blocked } } }`, and a `fulfills` edge reaches a node with `status: blocked`
+- **THEN** validation emits one `EDGE_WHERE` finding with `node_id` set to the edge's source and the edge's provenance
+
+#### Scenario: Passing edge — no finding
+- **WHEN** the same entry and the target has `status: done`
+- **THEN** validation emits no `EDGE_WHERE` finding
+
+#### Scenario: Edge attrs are read by the edge selector
+- **WHEN** an entry declares `expect: { edge: { weight: { present: true } } }` and a matching edge carries no `weight` attr
+- **THEN** validation emits an `EDGE_WHERE` finding
+
+#### Scenario: When guard on the source skips the edge
+- **WHEN** an entry declares `when: { source: { status: { eq: done } } }` and the edge's source has `status: todo`
+- **THEN** no `EDGE_WHERE` finding is emitted for that edge
+
+#### Scenario: Other edge kinds are not evaluated
+- **WHEN** an entry names `edge_kind: fulfills` and a `derives` edge would fail its conditions
+- **THEN** no `EDGE_WHERE` finding is emitted for the `derives` edge
+
+#### Scenario: Dangling edge is not evaluated
+- **WHEN** a matching edge names a target that does not exist
+- **THEN** validation emits `VACANCY` and no `EDGE_WHERE` for that edge
+
+#### Scenario: Illegal kind pair is still evaluated
+- **WHEN** a matching edge joins a disallowed kind pair and fails the entry's conditions
+- **THEN** validation emits both `EDGE_CONSTRAINT` and `EDGE_WHERE`
+
+#### Scenario: Generated message names the selector and attr
+- **WHEN** an entry with no `message` fails on `target.status`
+- **THEN** the finding's message names the edge and `target.status`
+
+#### Scenario: Custom message and severity
+- **WHEN** an entry declares `message: "No pick of a blocked option"` and `severity: error`, and an edge fails it
+- **THEN** the finding carries that message at error severity
+
+#### Scenario: Multiple EDGE_WHERE entries honoured independently
+- **WHEN** a profile declares two `EDGE_WHERE` entries and an edge fails both
+- **THEN** validation emits two `EDGE_WHERE` findings for that edge
+
+### Requirement: EDGE_COUNT evaluation
+Core SHALL evaluate each `EDGE_COUNT` entry against every node of the entry's
+`node_kind` that satisfies its optional `where` block. For each such node, core counts
+the edges of the entry's `edge_kind` at the node's end: outgoing edges for
+`direction: out` (the default), incoming edges for `direction: in`. The node at the
+other end of a counted edge is its far end.
+
+An edge with a missing endpoint, or with an endpoint of undeclared kind, SHALL NOT be
+counted. Those edges already carry `VACANCY` or `UNKNOWN_KIND`. An edge that fails
+`EDGE_CONSTRAINT` SHALL still be counted.
+
+Without `group_by`, a count below `min` or above `max` SHALL produce one `EDGE_COUNT`
+finding. A node with no counted edges has a count of zero and SHALL be reported when
+`min` is at least 1.
+
+With `group_by`, the counted edges SHALL be grouped by the far end's value of that
+attr, and each group outside `[min, max]` SHALL produce one finding. A counted edge
+whose far end lacks the attr, or holds it as null, SHALL produce its own `EDGE_COUNT` finding at the edge's
+provenance and SHALL NOT join any group. A node with no counted edges SHALL be reported
+when `min` is at least 1. Groups that no edge reaches are not reported.
+
+Every finding SHALL carry `node_id` set to the counted node and `severity` from the
+entry's `severity` key (default `warning`). A count finding SHALL carry the node's
+provenance. Its generated message names the count, the bounds, the group value if there
+is one, and each counted far end with its edge's provenance. A declared `message`
+replaces the generated message on both kinds of finding.
+
+Verified by: `cargo test --test validation edge_count`
+
+#### Scenario: Above max fires once per node
+- **WHEN** `EDGE_COUNT` has `edge_kind: derives`, `node_kind: req`, `max: 1`, and a `req` node has two outgoing `derives` edges
+- **THEN** validation emits one `EDGE_COUNT` finding for that node, naming both far ends
+
+#### Scenario: Zero edges is a count
+- **WHEN** an entry has `min: 1` and a `req` node has no outgoing `derives` edge
+- **THEN** validation emits an `EDGE_COUNT` finding for that node
+
+#### Scenario: Incoming direction counts per target
+- **WHEN** an entry has `direction: in`, `max: 1`, and a `req` node is the target of two `derives` edges
+- **THEN** validation emits one `EDGE_COUNT` finding for the target node
+
+#### Scenario: Grouped by a far-end attr
+- **WHEN** an entry has `group_by: status`, `max: 1`, and a node's outgoing edges reach two nodes with `status: done` and one with `status: todo`
+- **THEN** validation emits one finding, for the `done` group
+
+#### Scenario: Far end missing the group attr
+- **WHEN** an entry has `group_by: status` and a counted edge reaches a node with no `status`
+- **THEN** validation emits an `EDGE_COUNT` finding at that edge's provenance, and the edge joins no group
+
+#### Scenario: Where limits the counted nodes
+- **WHEN** an entry has `min: 1` and `where: { status: { eq: done } }`, and a `req` node with `status: todo` has no edges
+- **THEN** no `EDGE_COUNT` finding is emitted for it
+
+#### Scenario: Dangling edges are not counted
+- **WHEN** an entry has `min: 1` and a node's only outgoing edge of the kind is dangling
+- **THEN** validation emits `VACANCY` and an `EDGE_COUNT` finding for the zero count
+
+### Requirement: OVERRIDE_UNUSED built-in code
+Core SHALL provide the built-in code `OVERRIDE_UNUSED` (info by default), emitted by
+core, carrying no `node_id` and naming the profile as provenance.
+
+A validation entry whose code no shipped component owns (the core, fuse, and the
+adapters this release ships) can only take effect on an issue some other adapter
+emits. After finding collection and severity resolution, and before `--strict`
+promotion, core SHALL emit one `OVERRIDE_UNUSED` for each such code that no finding
+carried this run, naming the code. The message SHALL state what core knows: no shipped
+component emits the code and no finding carried it this run. Core SHALL NOT claim the
+code is a typo; an external adapter may emit it on another run. An entry for a code a
+shipped component owns SHALL never produce `OVERRIDE_UNUSED`, whether or not it fired:
+a dormant override for a shipped code is the normal state of a clean register.
+
+`OVERRIDE_UNUSED` is an ordinary code, like `SUPPRESS_UNUSED`: a profile MAY override
+its severity, `--strict` promotes it when it arrives at `warning`, and it MAY be
+suppressed. Detection SHALL run once.
+
+The set of codes shipped components own SHALL have one definition, and the contracts
+gate SHALL pin it.
+
+Verified by: `cargo test --test validation override_unused`
+
+#### Scenario: A mistyped override is reported
+- **WHEN** a profile declares `UNTRACD: { severity: error }` and no finding carries `UNTRACD`
+- **THEN** validation emits one `OVERRIDE_UNUSED` info naming `UNTRACD`, and the exit
+  code is unaffected
+
+#### Scenario: An external adapter's code that fires is not reported
+- **WHEN** a profile overrides `OBLIGATION_UNBACKED`, which no shipped component owns,
+  and the adapter emits an issue carrying it
+- **THEN** the override applies and no `OVERRIDE_UNUSED` is emitted
+
+#### Scenario: A dormant override for a shipped code is not reported
+- **WHEN** a profile overrides `VACANCY` to `warning` and the register has no dangling edge
+- **THEN** no `OVERRIDE_UNUSED` is emitted
+
+#### Scenario: OVERRIDE_UNUSED is strict-promotable and suppressible
+- **WHEN** the profile sets `OVERRIDE_UNUSED` to `warning`, one override is unused, and
+  `--strict` is passed
+- **THEN** the finding is promoted to `error` and the exit code is 1; and with
+  `SUPPRESS: {code: OVERRIDE_UNUSED}` instead, the finding is suppressed and the exit is 0
+
+### Requirement: Declared messages render placeholders
+Where a validation entry declares `message`, each finding that entry produces SHALL carry
+the message with its placeholders rendered. For an entry that configures a code by
+severity alone, the message SHALL apply to every finding carrying that code, including
+adapter issues. A finding with no declared message SHALL keep the generated message.
+
+The placeholders SHALL be `{message}` (the generated message the finding would otherwise
+carry), `{code}`, `{severity}`, and, for a finding that carries a node, `{id}` and `{kind}`.
+An entry that names one node kind (`CONSTRAINT` `kind`, `EDGE_COUNT` `node_kind`,
+`COVERAGE` and `COVERAGE_DEEP` `target_kind`) MAY also use `{attrs.<name>}` for a declared
+attr of that kind that is not a `list`. `{{` and `}}` SHALL render as literal braces, the
+escape node-kind `actions` use. A message SHALL NOT name a location: `{provenance.file}`
+and `{provenance.line}` are actions' alone. The finding carries its own file and line, and
+for an attr finding those name the attr's line, not the node's.
+
+An unknown placeholder, an unmatched brace, an `{attrs.<name>}` the entry's kind does not
+declare or declares as a `list`, a node placeholder on an entry whose findings can carry no
+node, and a location placeholder SHALL be load errors naming the entry. An
+`{attrs.<name>}` whose attr is absent on the finding's node SHALL render as `<absent>`,
+never as empty text.
+
+A severity-only entry's message is rendered after `--strict` promotion, so its
+`{severity}` is the severity reported. An entry that declares its own check (`CONSTRAINT`,
+`EDGE_WHERE`, `EDGE_COUNT`, `COVERAGE`, `COVERAGE_DEEP`) renders at the finding, so its
+`{severity}` is the severity the entry resolves to, before `--strict`. A fuse profile
+SHALL refuse `message`: the composed run never renders it, and a key that did nothing
+would be silence (program-composition capability).
+
+Verified by: `cargo test --test validation message_placeholders`
+
+#### Scenario: A message wraps the generated text
+- **WHEN** a profile declares `VACANCY: { message: "see ADR-12: {message}" }` and an edge
+  dangles
+- **THEN** the `VACANCY` finding's message is `see ADR-12: ` followed by the generated
+  dangling-reference message
+
+#### Scenario: A message cannot name a location
+- **WHEN** a profile declares `VACANCY: { message: "{id} at {provenance.line}" }`
+- **THEN** loading fails, naming the entry and `{provenance.line}`, and says the finding's
+  own file and line say where it is
+
+#### Scenario: A node placeholder renders the node
+- **WHEN** a `COVERAGE` entry declares `message: "{id} ({attrs.owner}) has no test"` and
+  `REQ-1`, owned by `ops`, is uncovered
+- **THEN** the finding's message is `REQ-1 (ops) has no test`
+
+#### Scenario: An absent attr is visible
+- **WHEN** the same entry reports `REQ-2`, which has no `owner` attr
+- **THEN** the finding's message is `REQ-2 (<absent>) has no test`
+
+#### Scenario: A literal brace must be escaped
+- **WHEN** a `CONSTRAINT` entry declares `message: "use {braces}"`
+- **THEN** the loader rejects the profile naming the unknown placeholder `braces`; with
+  `message: "use {{braces}}"` the finding reads `use {braces}`
+
+### Requirement: EMPTY_KIND built-in code
+`validate` SHALL emit one `EMPTY_KIND` finding at `info` severity for each node kind the
+profile declares that has no declared node, and for each edge kind it declares that has
+no edge. The finding SHALL be written at `<profile>`, line 0, carry no node, and name
+the kind and whether it is a node kind or an edge kind. A profile MAY override its
+severity or suppress it like any built-in code; at the default `info`, `--strict` leaves
+it alone, and a profile that promotes it to `warning` gates on it under `--strict`.
+
+A clean exit over a register whose adapter read no tests, or built no edges, then
+carries the reason on its own output.
+
+Verified by: `cargo test -p latt-core --locked empty_kind`.
+
+#### Scenario: Tests never read
+- **WHEN** the profile declares node kinds `requirement` and `test` and edge kind
+  `verifies`, and the adapter emits requirements only
+- **THEN** `validate` reports `EMPTY_KIND` for node kind `test` and for edge kind
+  `verifies`, both at `info`, and exits 0
+
+#### Scenario: Every kind populated
+- **WHEN** every declared node kind and edge kind has at least one instance
+- **THEN** no `EMPTY_KIND` finding is reported

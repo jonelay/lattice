@@ -9,12 +9,12 @@ from pathlib import Path
 
 import pytest
 
-from adapters import lattice_suggest
+from adapters import latt_suggest
 from adapters._profile import load_profile
 from tests.conftest import resolve_profile
 
 REPO = Path(__file__).resolve().parent.parent
-PROGRAM = REPO / "adapters" / "lattice-suggest"
+PROGRAM = REPO / "adapters" / "latt-suggest"
 
 PROFILE_YAML = """
 name: t
@@ -94,7 +94,7 @@ def interface(tmp_path):
 
 def run(args, stdin=None):
     return subprocess.run(
-        [sys.executable, "-m", "adapters.lattice_suggest", *args],
+        [sys.executable, "-m", "adapters.latt_suggest", *args],
         capture_output=True,
         text=True,
         cwd=REPO,
@@ -102,7 +102,7 @@ def run(args, stdin=None):
     )
 
 
-# Requirement: The sidecar is a program emitting a suggestion document
+# Requirement: suggest-sidecar/The sidecar is a program emitting a suggestion document
 
 
 def test_program_emits_a_document_on_stdout(tmp_path, interface):
@@ -116,9 +116,10 @@ def test_program_emits_a_document_on_stdout(tmp_path, interface):
 
     assert result.returncode == 0, result.stderr
     document = json.loads(result.stdout)
-    assert document["suggestion_version"] == "1.0"
-    assert document["producer"].startswith("lattice-suggest")
+    assert document["suggestion_version"] == "1.1"
+    assert document["producer"].startswith("latt-suggest")
     assert document["suggestions"] == []
+    assert document["unranked"] == 1
 
 
 def test_program_reads_a_contract_document_from_stdin(tmp_path):
@@ -160,18 +161,18 @@ def test_program_reports_an_undeclared_edge_kind(tmp_path, interface):
     assert "verifies" in result.stderr
 
 
-# Requirement: Candidates are constrained to profile-legal pairings
+# Requirement: suggest-sidecar/Candidates are constrained to profile-legal pairings
 
 
 def test_constrained_to_the_unattributed_population(profile):
-    sources, _ = lattice_suggest.candidates(INTERFACE, profile, "verifies")
+    sources, _ = latt_suggest.candidates(INTERFACE, profile, "verifies")
 
     # T-marked already carries a verifies edge, so it is not a candidate source.
     assert [n["id"] for n in sources] == ["T-temp"]
 
 
 def test_constrained_targets_exclude_forbidden_kinds(profile):
-    _, targets = lattice_suggest.candidates(INTERFACE, profile, "verifies")
+    _, targets = latt_suggest.candidates(INTERFACE, profile, "verifies")
 
     assert {n["id"] for n in targets} == {"REQ-1", "REQ-2"}
     assert all(n["kind"] == "req" for n in targets), "spec is not a legal verifies target"
@@ -180,8 +181,8 @@ def test_constrained_targets_exclude_forbidden_kinds(profile):
 def test_a_forbidden_pairing_is_never_proposed(profile):
     # The spec node's title is the closest text to the test's docstring, but
     # (test, spec) is not an allowed verifies pairing.
-    suggestions = lattice_suggest.rank(
-        *lattice_suggest.candidates(INTERFACE, profile, "verifies"),
+    suggestions = latt_suggest.rank(
+        *latt_suggest.candidates(INTERFACE, profile, "verifies"),
         profile,
         "verifies",
         _fake_embed,
@@ -212,13 +213,13 @@ def test_the_sidecar_carries_no_vocabulary_of_its_own(tmp_path):
             '"kind": "test"', '"kind": "check"'
         )
     )
-    sources, targets = lattice_suggest.candidates(document, profile, "verifies")
+    sources, targets = latt_suggest.candidates(document, profile, "verifies")
 
     assert [n["id"] for n in sources] == ["T-temp"]
     assert {n["id"] for n in targets} == {"REQ-1", "REQ-2"}
 
 
-# Requirement: Ranking baseline is embedding similarity over declared text
+# Requirement: suggest-sidecar/Ranking baseline is embedding similarity over declared text
 
 
 def _fake_embed(texts: list[str]) -> list[list[float]]:
@@ -238,8 +239,8 @@ def _words(text: str) -> set[str]:
 
 
 def test_rank_puts_the_more_similar_requirement_first(profile):
-    sources, targets = lattice_suggest.candidates(INTERFACE, profile, "verifies")
-    suggestions = lattice_suggest.rank(
+    sources, targets = latt_suggest.candidates(INTERFACE, profile, "verifies")
+    suggestions = latt_suggest.rank(
         sources, targets, profile, "verifies", _fake_embed, "fake", top_k=5
     )
 
@@ -248,8 +249,8 @@ def test_rank_puts_the_more_similar_requirement_first(profile):
 
 
 def test_rank_records_the_model_in_every_basis(profile):
-    sources, targets = lattice_suggest.candidates(INTERFACE, profile, "verifies")
-    suggestions = lattice_suggest.rank(
+    sources, targets = latt_suggest.candidates(INTERFACE, profile, "verifies")
+    suggestions = latt_suggest.rank(
         sources, targets, profile, "verifies", _fake_embed, "fake-model-1", top_k=5
     )
 
@@ -259,8 +260,8 @@ def test_rank_records_the_model_in_every_basis(profile):
 
 
 def test_rank_orders_by_descending_score_with_a_stable_tie_break(profile):
-    sources, targets = lattice_suggest.candidates(INTERFACE, profile, "verifies")
-    suggestions = lattice_suggest.rank(
+    sources, targets = latt_suggest.candidates(INTERFACE, profile, "verifies")
+    suggestions = latt_suggest.rank(
         sources, targets, profile, "verifies", _fake_embed, "fake", top_k=5
     )
 
@@ -306,7 +307,7 @@ def text_attrs_profile(tmp_path):
 def test_rank_reads_the_profile_declared_text_attrs(text_attrs_profile):
     """The profile names the rankable attrs, so a second one needs no code
     change — and the sidecar names no attr of its own."""
-    texts = lattice_suggest._texts(
+    texts = latt_suggest._texts(
         node("REQ-1", "req", {"text": "the title", "body": "the prose"}),
         text_attrs_profile,
     )
@@ -316,7 +317,7 @@ def test_rank_reads_the_profile_declared_text_attrs(text_attrs_profile):
 
 def test_rank_falls_back_to_summary_attr_when_text_attrs_is_absent(text_attrs_profile):
     """A profile written before `text_attrs` existed keeps its ranked text."""
-    texts = lattice_suggest._texts(
+    texts = latt_suggest._texts(
         node("T-x", "test", {"function": "test_x"}), text_attrs_profile
     )
 
@@ -326,7 +327,7 @@ def test_rank_falls_back_to_summary_attr_when_text_attrs_is_absent(text_attrs_pr
 def test_rank_treats_declared_empty_text_attrs_as_textless(text_attrs_profile):
     """`[]` is a declaration that the kind offers nothing to rank, which is a
     different answer from an absent key — it must not fall back."""
-    texts = lattice_suggest._texts(
+    texts = latt_suggest._texts(
         node("S-x", "spec", {"title": "a title"}), text_attrs_profile
     )
 
@@ -334,13 +335,13 @@ def test_rank_treats_declared_empty_text_attrs_as_textless(text_attrs_profile):
 
 
 def test_rank_is_deterministic_for_a_fixed_backend(profile):
-    sources, targets = lattice_suggest.candidates(INTERFACE, profile, "verifies")
+    sources, targets = latt_suggest.candidates(INTERFACE, profile, "verifies")
     args = (sources, targets, profile, "verifies", _fake_embed, "fake")
 
-    assert lattice_suggest.rank(*args, top_k=5) == lattice_suggest.rank(*args, top_k=5)
+    assert latt_suggest.rank(*args, top_k=5) == latt_suggest.rank(*args, top_k=5)
 
 
-# Requirement: The sidecar runs offline by default
+# Requirement: suggest-sidecar/The sidecar runs offline by default
 
 
 def test_offline_default_emits_an_empty_document_and_says_so(tmp_path, interface):
@@ -353,10 +354,61 @@ def test_offline_default_emits_an_empty_document_and_says_so(tmp_path, interface
     )
 
     assert result.returncode == 0
-    assert json.loads(result.stdout)["suggestions"] == []
-    # Distinguishable from a backend that ran and found nothing.
+    document = json.loads(result.stdout)
+    assert document["suggestions"] == []
+    # Distinguishable from a backend that ran and found nothing, on stdout as
+    # well as stderr: a script reading only the document sees the count.
+    assert document["unranked"] == 1
     assert "no backend configured" in result.stderr
     assert "1 unattributed" in result.stderr
+
+
+# Requirement: suggest-sidecar/The document counts the sources left unranked
+
+
+def test_offline_default_with_no_candidates_reports_zero_unranked(tmp_path):
+    """Zero is the honest count when every source is already attributed."""
+    path = tmp_path / "p.yaml"
+    path.write_text(PROFILE_YAML)
+    resolved = resolve_profile(path, tmp_path)
+    document = json.loads(json.dumps(INTERFACE))
+    document["nodes"] = [n for n in document["nodes"] if n["id"] != "T-temp"]
+
+    result = run(
+        ["--profile", str(resolved), "--edge-kind", "verifies"],
+        stdin=json.dumps(document),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["unranked"] == 0
+
+
+def test_program_counts_the_sources_a_ranked_run_left_unranked(
+    tmp_path, monkeypatch, capsys
+):
+    path = tmp_path / "p.yaml"
+    path.write_text(PROFILE_YAML)
+    resolved = resolve_profile(path, tmp_path)
+    document = json.loads(json.dumps(INTERFACE))
+    document["nodes"].append(node("T-notext", "test", {}))
+    interface = tmp_path / "interface.json"
+    interface.write_text(json.dumps(document))
+    monkeypatch.setattr(latt_suggest, "ollama_backend", lambda host, model: _fake_embed)
+
+    code = latt_suggest.main(
+        [
+            "--profile", str(resolved), "--interface", str(interface),
+            "--edge-kind", "verifies", "--backend", "ollama",
+        ]
+    )
+
+    assert code == 0
+    out = json.loads(capsys.readouterr().out)
+    assert {s["src"] for s in out["suggestions"]} == {"T-temp"}
+    assert out["unranked"] == 1, "the textless source went unranked"
+
+
+# Requirement: suggest-sidecar/The sidecar runs offline by default
 
 
 def test_offline_default_touches_no_network(monkeypatch, profile):
@@ -367,37 +419,37 @@ def test_offline_default_touches_no_network(monkeypatch, profile):
         raise AssertionError("the offline path opened a connection")
 
     monkeypatch.setattr(urllib.request, "urlopen", forbidden)
-    sources, _ = lattice_suggest.candidates(INTERFACE, profile, "verifies")
+    sources, _ = latt_suggest.candidates(INTERFACE, profile, "verifies")
 
     assert sources  # candidates are computed without a backend
 
 
 def test_the_offline_backend_refuses_rather_than_returning_zeros():
-    with pytest.raises(lattice_suggest.SuggestError, match="no embedding backend"):
-        lattice_suggest.offline_backend(["a"])
+    with pytest.raises(latt_suggest.SuggestError, match="no embedding backend"):
+        latt_suggest.offline_backend(["a"])
 
 
 def test_an_unreachable_ollama_host_is_an_error_not_a_silent_empty_document():
-    embed = lattice_suggest.ollama_backend("http://127.0.0.1:9", "m")
+    embed = latt_suggest.ollama_backend("http://127.0.0.1:9", "m")
 
-    with pytest.raises(lattice_suggest.SuggestError, match="unreachable"):
+    with pytest.raises(latt_suggest.SuggestError, match="unreachable"):
         embed(["a"])
 
 
-# Requirement: A node with no text is reported and excluded, never silently ranked
+# Requirement: suggest-sidecar/A node with no text is reported and excluded, never silently ranked
 
 
 def test_a_textless_source_is_excluded_and_reported(profile, capsys):
     document = json.loads(json.dumps(INTERFACE))
     document["nodes"].append(node("T-notext", "test", {}))
-    sources, targets = lattice_suggest.candidates(document, profile, "verifies")
+    sources, targets = latt_suggest.candidates(document, profile, "verifies")
     received: list[str] = []
 
     def embed(texts):
         received.extend(texts)
         return _fake_embed(texts)
 
-    suggestions = lattice_suggest.rank(
+    suggestions = latt_suggest.rank(
         sources, targets, profile, "verifies", embed, "fake", top_k=5
     )
 
@@ -421,8 +473,8 @@ def test_an_all_textless_population_makes_no_backend_call(profile, capsys):
     def embed(texts):
         raise AssertionError("the backend was invoked for an all-textless population")
 
-    suggestions = lattice_suggest.rank(
-        *lattice_suggest.candidates(document, profile, "verifies"),
+    suggestions = latt_suggest.rank(
+        *latt_suggest.candidates(document, profile, "verifies"),
         profile,
         "verifies",
         embed,
@@ -454,10 +506,11 @@ def test_program_with_an_all_textless_population_never_needs_the_network(tmp_pat
 
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["suggestions"] == []
+    assert json.loads(result.stdout)["unranked"] == 1
     assert "no text" in result.stderr
 
 
-# Requirement: Ranking baseline is embedding similarity over declared text
+# Requirement: suggest-sidecar/Ranking baseline is embedding similarity over declared text
 # (the chunking scenarios)
 
 CHUNK_YAML = """
@@ -509,7 +562,7 @@ def _recording_embed(seen):
 def test_chunks_splits_at_every_line_carrying_the_prefix():
     text = "preamble prose\n#### Scenario: first\nalpha\n#### Scenario: second\nbeta"
 
-    assert lattice_suggest._chunks(text, "#### Scenario:") == [
+    assert latt_suggest._chunks(text, "#### Scenario:") == [
         "preamble prose\n",
         "#### Scenario: first\nalpha\n",
         "#### Scenario: second\nbeta",
@@ -530,7 +583,7 @@ def test_chunks_partition_the_text_without_dropping_any_of_it():
         "#### Scenario: two\nSENTINELTWO"
     )
 
-    parts = lattice_suggest._chunks(text, "#### Scenario:")
+    parts = latt_suggest._chunks(text, "#### Scenario:")
 
     assert "".join(parts) == text
     for sentinel in ("SENTINELHEAD", "SENTINELONE", "SENTINELTWO"):
@@ -540,20 +593,20 @@ def test_chunks_partition_the_text_without_dropping_any_of_it():
 def test_chunks_leading_marker_yields_no_empty_head():
     text = "#### Scenario: only\nalpha"
 
-    assert lattice_suggest._chunks(text, "#### Scenario:") == [text]
+    assert latt_suggest._chunks(text, "#### Scenario:") == [text]
 
 
 def test_chunks_text_without_the_marker_stays_whole():
     text = "prose with no marker at all"
 
-    assert lattice_suggest._chunks(text, "#### Scenario:") == [text]
+    assert latt_suggest._chunks(text, "#### Scenario:") == [text]
 
 
 def test_chunks_marker_must_start_the_line():
     """A literal prefix, matched at line start — an indented marker is prose."""
     text = "head\n    #### Scenario: indented\nalpha"
 
-    assert lattice_suggest._chunks(text, "#### Scenario:") == [text]
+    assert latt_suggest._chunks(text, "#### Scenario:") == [text]
 
 
 def test_rank_sends_one_text_per_target_chunk(chunk_profile):
@@ -566,8 +619,8 @@ def test_rank_sends_one_text_per_target_chunk(chunk_profile):
         ],
         "edges": [],
     }
-    sources, targets = lattice_suggest.candidates(document, chunk_profile, "verifies")
-    lattice_suggest.rank(
+    sources, targets = latt_suggest.candidates(document, chunk_profile, "verifies")
+    latt_suggest.rank(
         sources, targets, chunk_profile, "verifies", _recording_embed(seen), "fake", 5
     )
 
@@ -590,8 +643,8 @@ def test_rank_never_chunks_a_source(chunk_profile):
         ],
         "edges": [],
     }
-    sources, targets = lattice_suggest.candidates(document, chunk_profile, "verifies")
-    lattice_suggest.rank(
+    sources, targets = latt_suggest.candidates(document, chunk_profile, "verifies")
+    latt_suggest.rank(
         sources, targets, chunk_profile, "verifies", _recording_embed(seen), "fake", 5
     )
 
@@ -626,8 +679,8 @@ def test_rank_scores_a_pairing_as_the_targets_best_chunk(chunk_profile):
         ],
         "edges": [],
     }
-    sources, targets = lattice_suggest.candidates(document, chunk_profile, "verifies")
-    suggestions = lattice_suggest.rank(
+    sources, targets = latt_suggest.candidates(document, chunk_profile, "verifies")
+    suggestions = latt_suggest.rank(
         sources, targets, chunk_profile, "verifies", _fake_embed, "fake", 5
     )
 
@@ -646,10 +699,10 @@ def test_rank_without_a_declared_prefix_is_unchanged(text_attrs_profile):
         ],
         "edges": [],
     }
-    sources, targets = lattice_suggest.candidates(
+    sources, targets = latt_suggest.candidates(
         document, text_attrs_profile, "verifies"
     )
-    lattice_suggest.rank(
+    latt_suggest.rank(
         sources, targets, text_attrs_profile, "verifies",
         _recording_embed(seen), "fake", 5,
     )
@@ -668,8 +721,8 @@ def test_rank_reports_a_declared_prefix_that_never_splits(chunk_profile, capsys)
         ],
         "edges": [],
     }
-    sources, targets = lattice_suggest.candidates(document, chunk_profile, "verifies")
-    lattice_suggest.rank(
+    sources, targets = latt_suggest.candidates(document, chunk_profile, "verifies")
+    latt_suggest.rank(
         sources, targets, chunk_profile, "verifies", _fake_embed, "fake", 5
     )
 
@@ -697,7 +750,7 @@ def test_shipped_splitter_reproduces_the_measured_one(chunk_profile, body):
     """The gate the measurement asked for: the shipped splitter *is* the one
     whose numbers are being claimed.
 
-    `notes/chunking-s40/RESULTS.md` requires the ship change to gate on its own
+    The chunking measurement required the ship change to gate on its own
     splitter rather than inherit the measured numbers. Because the marker moved
     into the profile rather than being generalised, that is satisfiable by
     reproduction — this compares the shipped chunker against `rank_chunked.py`'s
@@ -711,7 +764,7 @@ def test_shipped_splitter_reproduces_the_measured_one(chunk_profile, body):
 
     target = node("REQ-1", "req", {"text": "a title", "body": body})
 
-    assert lattice_suggest._target_chunks(target, chunk_profile) == harness.chunks_for(
+    assert latt_suggest._target_chunks(target, chunk_profile) == harness.chunks_for(
         target, chunk_profile, "bare"
     )
 
@@ -743,14 +796,14 @@ def test_the_embed_batch_matches_the_harness_batch(chunk_profile):
         ],
         "edges": [],
     }
-    sources, targets = lattice_suggest.candidates(document, chunk_profile, "verifies")
+    sources, targets = latt_suggest.candidates(document, chunk_profile, "verifies")
 
     seen = []
-    lattice_suggest.rank(
+    latt_suggest.rank(
         sources, targets, chunk_profile, "verifies", _recording_embed(seen), "fake", 5
     )
 
-    expected = [" \n".join(lattice_suggest._texts(n, chunk_profile)) for n in sources]
+    expected = [" \n".join(latt_suggest._texts(n, chunk_profile)) for n in sources]
     for target in targets:
         expected.extend(harness.chunks_for(target, chunk_profile, "bare"))
 
@@ -767,10 +820,10 @@ def test_chunks_cuts_on_newline_only_not_on_every_unicode_line_break():
     """
     text = "head #### Scenario: not a line start\nbody"
 
-    assert lattice_suggest._chunks(text, "#### Scenario:") == [text]
+    assert latt_suggest._chunks(text, "#### Scenario:") == [text]
 
 
-# Requirement: Duplicate node IDs rank as one candidate
+# Requirement: suggest-sidecar/Duplicate node IDs rank as one candidate
 
 
 def test_a_duplicated_target_scores_its_first_occurrence_and_appears_once(profile):
@@ -784,8 +837,8 @@ def test_a_duplicated_target_scores_its_first_occurrence_and_appears_once(profil
     document["nodes"].append(
         node("REQ-3", "req", {"text": "an unrelated pump curve rendering row"})
     )
-    sources, targets = lattice_suggest.candidates(document, profile, "verifies")
-    suggestions = lattice_suggest.rank(
+    sources, targets = latt_suggest.candidates(document, profile, "verifies")
+    suggestions = latt_suggest.rank(
         sources, targets, profile, "verifies", _fake_embed, "fake", top_k=5
     )
 
@@ -802,8 +855,8 @@ def test_a_duplicated_source_is_ranked_once_over_its_union_of_text(profile, caps
         node("T-dup", "test", {"function": "test_motor_reports_rotor_temperature"})
     )
     document["nodes"].append(node("T-dup", "test", {}))
-    sources, targets = lattice_suggest.candidates(document, profile, "verifies")
-    suggestions = lattice_suggest.rank(
+    sources, targets = latt_suggest.candidates(document, profile, "verifies")
+    suggestions = latt_suggest.rank(
         sources, targets, profile, "verifies", _fake_embed, "fake", top_k=5
     )
 
@@ -816,13 +869,26 @@ def test_a_duplicated_source_is_ranked_once_over_its_union_of_text(profile, caps
     assert "excluded" not in err, "the union must not be excluded as textless"
 
 
+def test_a_duplicated_id_takes_the_kind_the_core_keeps(profile):
+    document = json.loads(json.dumps(INTERFACE))
+    # Declared first as a spec, then as a test: the core keeps the spec, so a
+    # `verifies` edge from it would be an EDGE_CONSTRAINT, not a suggestion.
+    document["nodes"].insert(0, node("T-dup", "spec", {"title": "rotor temperature"}))
+    document["nodes"].append(
+        node("T-dup", "test", {"function": "test_motor_reports_rotor_temperature"})
+    )
+    sources, targets = latt_suggest.candidates(document, profile, "verifies")
+    assert "T-dup" not in {n["id"] for n in sources}
+    assert "T-dup" not in {n["id"] for n in targets}
+
+
 def test_merged_duplicates_are_reported_on_stderr(profile, capsys):
     document = json.loads(json.dumps(INTERFACE))
     document["nodes"].append(
         node("REQ-2", "req", {"text": "a second torque curve row"})
     )
-    sources, targets = lattice_suggest.candidates(document, profile, "verifies")
-    lattice_suggest.rank(
+    sources, targets = latt_suggest.candidates(document, profile, "verifies")
+    latt_suggest.rank(
         sources, targets, profile, "verifies", _fake_embed, "fake", top_k=5
     )
 

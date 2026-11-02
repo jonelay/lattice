@@ -1,0 +1,11 @@
+{
+  "group_id": "output",
+  "function_id": "json-findings",
+  "value_str": "defects-1024-nodes",
+  "throughput": {
+    "Elements": 1048
+  },
+  "full_id": "output/json-findings/defects-1024-nodes",
+  "directory_name": "output/json-findings/defects-1024-nodes",
+  "title": "output/json-findings/defects-1024-nodes"
+}

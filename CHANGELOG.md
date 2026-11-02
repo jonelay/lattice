@@ -1,15 +1,292 @@
 # Changelog
 
-All notable changes to lattice are documented here.
+All notable changes to Lattice Auditing & Tracing Tool are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 **While below 1.0.0, minor bumps (0.x.0) may include breaking changes to
-public surfaces (node IDs, profile `id_pattern`s, trace-JSON payload schema).
-Patch bumps (0.x.y) do not change public surfaces.**
+public surfaces. Patch bumps (0.x.y) do not change public surfaces.** The public
+surfaces are:
+- the supported Rust items `docs/embedding.md` lists, with the `serde_norway`
+  and `serde_json` types they name;
+- the CLI, the finding codes and the ID patterns pinned in `contracts/`;
+- `--format json` output;
+- the wire version axes;
+- node IDs.
+
+A raised minimum Rust version is a minor-version event. Adapter library crates are not
+public surfaces. `openspec/specs/versioning/spec.md` has the full rule.
 
 See `openspec/specs/trace-report/spec.md` for which trace-JSON fields are
 public and what each version axis governs.
+
+A Breaking bullet that answers an API compatibility lint names the lint and the
+item in backticks (`openspec/specs/development-verification/spec.md`);
+`tools/check-breaking.sh` enforces it.
+
+## [Unreleased]
+
+## [0.8.0] — 2026-11-01
+
+Lattice 0.8.0 renames the program to `latt` and adds an interactive `browse` TUI,
+in-process adapters, a prose cross-reference adapter, finding notes, two edge validators
+and a supported embedding API. Profiles, fuse manifests and adapter documents are checked
+more strictly, and many broken setups that used to pass now exit 2.
+
+### Breaking
+
+- The program is `latt`, with every subcommand and option unchanged. A release installs
+  to `<dest>/latt/` with `bin/latt`; nothing installs a `lattice` alias.
+- `resolve` is renamed `show`, with the same options and no alias.
+- The md, TOML and prose-xref adapters are built into `latt` (`--adapter md|toml|prose-xref`,
+  or `latt adapter <name>`); the `adapter-md` and `adapter-toml` programs are gone. The
+  entomologist adapter program is `latt-adapter-entomologist`.
+- The GitHub and GitLab adapters and their profiles are removed.
+- OpenSpec requirement IDs are `<capability>/<title>` (see Migrating).
+- An unknown key in a profile, an adapter's `adapter:` block or a fuse manifest fails to
+  load, exit 2. A fuse manifest needs `manifest_version` X.Y.Z with major `1`.
+- A retired finding code in `validations:` fails to load and names its replacement.
+- The condition operator `not` is `ne` (not equal, or absent); `not` fails to load.
+- A literal `{` or `}` in a validation entry's `message` is written `{{` or `}}`.
+- More broken setups exit 2: a `COVERAGE` or `COVERAGE_DEEP` entry naming an undeclared
+  kind or lacking its kind key; `query` or `coverage` over a register that could not be
+  read, and `query diff` over an unreadable revision; a fuse source profile that cannot
+  load, or a fuse profile endpoint naming an undeclared source or kind; an adapter
+  document with an undefined key, both `findings` and `issues`, non-UTF-8 stdout, or a
+  provenance `line` below 0 or above 4294967295.
+- `UNREFERENCED` and `UNTRACED` check only a direction an `allowed` pair permits, so
+  findings no edge could clear are gone.
+- `--filter` splits at the earliest operator: `status=a>b` is `status` equal to `a>b`.
+- A finding about the profile or another input as a whole carries no path:
+  `latt query at '<profile>'` exits 2.
+
+Rust embedders:
+
+- Six crates become three: `latt-core` (was `lattice-core`), `latt-adapter` (was
+  `adapter-core`) and the `latt` binary package. The md, TOML and prose-xref adapters are
+  hidden modules of `latt-core` behind its default `native-adapters` feature. `latt-core`
+  has no `tui` feature; `latt` built with `--no-default-features` has no `browse`.
+- The supported surface is the list in `docs/embedding.md`; the rest is
+  `#[doc(hidden)]`, including `fuse`, `types`, `query`, owner actions, browse and layout
+  machinery, validation configuration, loader internals and the graph algorithms. Write
+  `service::X` for `types::X`, call `service::execute` with a `Request` where you called
+  the query, validate, summary and trace functions, and `Condition::parse` for
+  `query::parse_filter`.
+- Most public structs and enums are `#[non_exhaustive]`: service inputs and reports,
+  profile types, graph and adapter document types, `Issue` (which gains `note`),
+  `Provenance`, `Format` and the error enums. Build values with their constructors
+  (`InputContext::default().with_*`, `Document::new()`, `Node::new`, `Edge::new`,
+  `Issue::new`, `Provenance::new`), destructure with `..`, and give each `match` a
+  wildcard arm.
+- `ProfileError` is an enum (`Io`, `Yaml`, `Invalid`) and no longer `UnwindSafe`; the
+  `fuse` functions fail with `FuseError` and filters with `profile::FilterError`;
+  `ContractError`, `PathwayError`, `QueryError` and `SummaryError` expose their text
+  through `message()`.
+- Accessors replace public fields: `Provenance::file()` and `line()` (an
+  `Option<NonZeroU32>`, `None` where the line was 0), `Issue.origin` (an `Origin`) for
+  `Issue.provenance`, `latt_adapter::Node::attrs()` and `attr(name)`,
+  `Node::attr_provenance()` and `attr_location(name)`, `Condition::attr()`, and
+  `Profile::note_location` for `note_line`.
+- Renames and signatures: `ConditionOp::Not` is `Ne`; `profile::Direction` is
+  `CountEnd`; `output_result` takes a `Format` and returns the `String`; `reach` and
+  `path` take `edge_kinds: &[&str]`; `ReachReport.direction` is a `Direction` and
+  `TraceEntry.attrs` a `serde_json::Map`; `query::graph_layout` drops its
+  `&LatticeGraph` parameter; `Issue::sort_key` returns `impl Ord`; `Issue::new` takes
+  `impl Into<Origin>`; the core's `Provenance::new` takes a `u32` line (was `i64`);
+  `latt_adapter::Issue.severity` is a `latt_adapter::Severity`; `latt_adapter::Document`,
+  `Node` and `Edge` lose their lifetime parameter; `Document::node_parse_error` takes
+  `impl Into<String>`; `fuse::SourceTrace` drops `Deserialize`; and
+  `impl From<&FuseReport> for Payload` is hidden.
+
+#### API and contract lints
+
+- `cli_command_removed`: `lattice resolve`
+- `cli_option_removed`: `lattice resolve --profile`, `lattice resolve --profile-version`,
+  `lattice resolve --version`
+- `package_missing_from_baseline`: `latt_core`, `latt_adapter`
+- `id_kind_removed`: `github.yaml bug`, `github.yaml issue`, `github.yaml pull_request`,
+  `github.yaml requirement`, `gitlab.yaml bug`, `gitlab.yaml issue`, `gitlab.yaml requirement`
+- `enum_missing`: `profile::Direction`
+- `enum_variant_missing`: `ConditionOp::Not`
+- `inherent_method_missing`: `Profile::note_line`
+- `function_parameter_count_changed`: `query::graph_layout`
+- `auto_trait_impl_removed`: `ProfileError`
+- `feature_not_enabled_by_default`, `feature_missing`: `tui`
+- `type_mismatched_generic_lifetimes`: `latt_adapter::Document`, `latt_adapter::Node`,
+  `latt_adapter::Edge`
+- `struct_pub_field_missing`, `struct_pub_field_now_doc_hidden`: `Provenance.file`,
+  `Provenance.line` (both crates), `graph::Node.attr_provenance`, `latt_adapter::Node.attrs`,
+  `latt_adapter::Node.attr_provenance`, `Condition.attr`, `Condition.op`
+- `struct_pub_field_missing`: `Issue.provenance`
+- `struct_marked_non_exhaustive`: `InputContext`, `Response`, `ServiceError`, `InputRecord`,
+  `InputDiagnostic`, `ReachReport`, `NodeRef`, `OrphansReport`, `OrphanEntry`,
+  `CountsReport`, `CoverageReport`, `KindCoverage`, `DiffReport`, `NodeChangedRef`,
+  `EdgeChangedRef`, `EdgeRef`, `TraceReport`, `TraceEntry`, `TraceEdge`, `PathwayEntry`,
+  `AtReport`, `StructuralSummary`, `StatusRollup`, `FindingTally`, `AttrSchema`,
+  `EdgeKind`, `PathwayBinding`, `ConstraintConfig`, `EdgeWhereConfig`, `EdgeConditions`,
+  `EdgeCountConfig`, `SuppressConfig`, `ActionDecl`, `Template`, `NodeKind`, `Node`,
+  `Edge`, `Pathway`, `DuplicateNode`, `ContractError`, `PathwayError`, `QueryError`,
+  `SummaryError`, `TraversalReport`, `TraversalStep`, `SchemaGraph`, `SchemaJoinCounts`,
+  `AllowedTriple`, `Condensation`, `Component`, `InterComponentEdge`, `LaneLayout`,
+  `LaneRow`, `GraphLayout`, `LayoutEdge`, `fuse::Manifest`, `fuse::Source`,
+  `FuseProvenance`, `FuseNode`, `FuseEdge`, `FuseFinding`, `FuseReport`,
+  `latt_adapter::Document`, `latt_adapter::Node`, `latt_adapter::Edge`,
+  `latt_adapter::Pathway`, `latt_adapter::Issue`, `latt_core::types::Provenance`,
+  `latt_adapter::Provenance`
+- `enum_marked_non_exhaustive`: `SummaryReport`, `AttrType`, `ConditionOp`, `Comparable`,
+  `ActionMode`, `Segment`, `document::AdapterSpec`, `document::NativeAdapter`, `Visit`,
+  `output::Format`, `latt_adapter::process::BoundedError`, `ProfileError`, `FuseError`
+- `enum_variant_marked_non_exhaustive`: `FuseError` variants `Read`, `Yaml`, `Trace`
+- `trait_now_doc_hidden`: `Neighbors`
+- `function_now_doc_hidden`: `reach`, `path`, `orphans`, `counts`, `coverage`, `at`, `diff`,
+  `parse_filter`, `build_summary`, `build_summary_on`, `trace::build_trace_report`,
+  `validate`, `validate_on`, `resolve_adapter_issues`, `scc`, `bfs_reachable`,
+  `bfs_layers`, `betweenness_centrality`, `strip_ansi`, `render_suggestions`,
+  `run_bounded`, `spawn_bounded`
+- `struct_now_doc_hidden`: `AdjacencyIndex`, `ConstraintConfig`, `EdgeConditions`,
+  `EdgeWhereConfig`, `EdgeCountConfig`, `SuppressConfig`, `BoundedChild`
+- `enum_now_doc_hidden`: `ConditionOp`, `CountEnd`, `BoundedError`
+- `inherent_method_now_doc_hidden`: `Profile::constraint_configs`,
+  `Profile::edge_where_configs`, `Profile::edge_count_configs`, `Profile::suppressions`
+- `function_now_doc_hidden`, `struct_now_doc_hidden`, `enum_now_doc_hidden` (fuse):
+  `fuse::fuse`, `load_manifest`, `load_fuse_profile`, `parse_trace`, `assemble`,
+  `Manifest`, `Source`, `FuseProfile`, `SourceTrace`, `FuseError`, `types::FuseReport`,
+  `FuseNode`, `FuseEdge`, `FuseFinding`, `FuseProvenance`, `output::Payload::Fuse`
+- `struct_now_doc_hidden`, `enum_now_doc_hidden`, `struct_pub_field_now_doc_hidden`,
+  `function_now_doc_hidden` (owner actions): `profile::ActionDecl`, `Template`,
+  `ActionMode`, `Segment`, `NodeKind::actions`, `validate::eval_conditions`
+- `function_now_doc_hidden`, `struct_now_doc_hidden`, `enum_now_doc_hidden`,
+  `inherent_method_now_doc_hidden` (browse and CLI machinery): `query::traverse`,
+  `schema_graph`, `components`, `lane_layout`, `assign_lanes`, `graph_layout`,
+  `materialize_revision`, `MaterializationDir`, `AdjacencyIndex` methods `edges_from`,
+  `edges_to`, `has_incoming`, `has_outgoing`, `connected`, `types::TraversalReport`,
+  `TraversalStep`, `Visit`, `Endpoint`, `SchemaGraph`, `SchemaJoinCounts`,
+  `AllowedTriple`, `Condensation`, `Component`, `InterComponentEdge`, `LaneLayout`,
+  `LaneRow`, `GraphLayout`, `LayoutNode`, `LayoutEdge`, `document::run_adapter`,
+  `summary::build_structural_summary`
+- `inherent_method_now_doc_hidden`, `pub_module_level_const_now_doc_hidden`:
+  `Profile::validation_configs`, `ValidationConfig`, `profile::VALID_ATTR_TYPES`,
+  `VALID_LIST_ITEM_TYPES`, `SUPPORTED_MAJOR_VERSION`
+- `struct_now_doc_hidden`, `enum_now_doc_hidden` (`types`, `query`): `ValidateReport`,
+  `SummaryReport`, `StructuralSummary`, `FindingTally`, `StatusRollup`, `NodeRef`,
+  `EdgeRef`, `ReachReport`, `PathReport`, `OrphanEntry`, `OrphansReport`, `CountsReport`,
+  `CoverageReport`, `KindCoverage`, `DiffReport`, `NodeChangedRef`, `EdgeChangedRef`,
+  `TraceEdge`, `TraceEntry`, `TraceReport`, `AtReport`, `PathwayEntry`, `Issue`, `Note`,
+  `Until`, `CivilDate`, `Severity`, `Provenance`, `Direction`, `query::Direction`,
+  `ContractError`, `LatticeGraph`, `Profile`, `ProfileError`, `Comparable`, `Condition`,
+  `QueryError`, `SummaryError`
+
+### Added
+
+- **`latt browse`**, an interactive TUI (default `tui` feature): node list, reachability
+  tree, findings, provenance with git history, a layered graph and a schema view, with
+  search, filters, reload and `e` to open `$EDITOR`; `?` lists the keys. A node kind's
+  `actions` hand a node to its register's owner tool.
+- **`latt describe`** prints a register's kinds with their ID patterns, counts and
+  source files, its `validations:` entries and its adapter configuration.
+- **`validate` reports what it read**: a `scope` key in `--format json`, one stderr line
+  in `plain` and `rich`.
+- **Native adapters**: md, TOML and prose-xref run in process with `--adapter <name>` or
+  `adapter: { native: … }`, and `--adapter` may then be omitted.
+- **The prose-xref adapter** (`profiles/prose-xref.yaml`) reads `§` cross-references in
+  Markdown.
+- **Finding notes**: a profile's `annotations` names a notes file that attaches a `note`
+  (optional `until`, `by`, `at`) to a finding without suppressing it.
+- **`EDGE_WHERE`** checks conditions on an edge's source, target or edge;
+  **`EDGE_COUNT`** bounds a node's edges of a kind.
+- **`message` on every validation entry but `SUPPRESS`**, with placeholders such as
+  `{id}` and `{attrs.<name>}`; `source_where` on `COVERAGE` and `COVERAGE_DEEP`;
+  `id_names` on a node kind, reporting rows that name nothing as `SOURCE_MISSING`.
+- **`--profile-version <X.Y.Z>`** refuses a profile whose version differs from the pin.
+- **New finding codes**: `EMPTY_KIND` (info, a declared kind nothing populated),
+  `OVERRIDE_UNUSED`, `SUGGESTION_UNRANKED`, `UNREAD_ENTRIES`, `AMBIGUOUS_REF`,
+  `WRAPPED_REF` and the `NOTE_*` codes.
+- **TOML adapter**: nodes, edges and findings name their line; `id_prefix` keeps tables
+  apart; `edge_keys` entries take `table`, `fallback` and `entry_key`; `key_map` arrays
+  become `list` attrs.
+- **md adapter** `strip_emphasis`. **OpenSpec adapter** reads TypeScript tests
+  (`dialect: typescript`); `profiles/openspec.yaml` 1.5.0 widens the `test` ID pattern
+  (`id_pattern_changed`: `openspec.yaml test`).
+- **Setup errors name the fix**: a missing `--profile` lists the profiles beside it,
+  `NO_MATCHING_FILES` suggests the target to use, and a refused profile lists every fault.
+- **Subprocess timeouts**: `timeout_seconds` (default 300) on external adapters and
+  `query diff`, `command_timeout_seconds` (default 60) on entomologist `git` calls.
+- **Rich output honours `NO_COLOR`, `FORCE_COLOR` and `TERM=dumb`.**
+- **Wire versions**: interface 1.3 (`declared_by`) and 1.4 (`attr_provenance`),
+  `suggestion_version` 1.1 and a `fuse_version` in fuse JSON; older versions still read.
+- **The embedding API** `latt_core::service` (`docs/embedding.md`); agent material in the
+  install, a root `AGENTS.md` and the `latt` skill in `skills/latt/`; and the pages
+  `docs/json.md` and `docs/ci.md`.
+
+### Changed
+
+- **`--format json` is the machine contract**; `plain` and `rich` may be reworded in a
+  patch release.
+- **`trace`, `query at` and `coverage` label every field** in `--format plain`.
+- **A repeated `COVERAGE` or `COVERAGE_DEEP` entry keeps its own `severity`**, which can
+  change an exit code.
+- **A non-UTF-8 byte is a `PARSE_ERROR` on its own line**, showing it; md, prose-xref and
+  OpenSpec specs read the rest of the file.
+- **Attr findings land on the attr's line** and show the value as written.
+- **The minimum Rust version is 1.99** (was 1.95).
+- **md `column_map` and `edge_columns`, and TOML `key_map` and `edge_keys`, are optional.**
+- **Faster validation, reach and path** (validate at 16,384 nodes: 14.0 → 5.3 ms), and
+  stripped release binaries.
+
+### Removed
+
+- `output::UnknownFormat` (use `Format`'s `FromStr`) and `graph::EdgeIndex`.
+- The Python adapter helpers' pathway support: `DocumentBuilder.set_pathway`,
+  `pathway()`, `iter_pathways()`, and `Pathway`/`PathwayError` in `adapters/_types.py`.
+
+### Fixed
+
+- Every adapter runs from a release install.
+- A failed stdout write exits 2 where it panicked with exit 101; a `git` that cannot
+  start exits 2.
+- `summary` applies `SUPPRESS` to adapter diagnostics, and pathway demotion no longer
+  raises a `hint`.
+- `fuse` recomputes `UNREFERENCED` and `UNTRACED` on the composed graph.
+- A duplicate node's edges no longer attach to the first occurrence.
+- Many parsing fixes in the md, TOML, OpenSpec and entomologist adapters; an unreadable
+  path is a `PARSE_ERROR`, and a leading byte order mark no longer hides the first line.
+
+### Migrating from 0.7.1
+
+#### Node IDs
+
+| Profile and kind | 0.7.1 | 0.8.0 |
+|------------------|-------|-------|
+| `openspec.yaml` requirement | `<title>` | `<capability>/<title>` |
+| OpenSpec citation | `Requirement: <title>` | `Requirement: <capability>/<title>` |
+| every kind of `github.yaml` and `gitlab.yaml` | as declared | removed, no 0.8.0 reader |
+
+`<capability>` is the directory under `openspec/specs/` whose spec declares the title
+(`id_pattern_changed`: `openspec.yaml requirement`; `profile_version` 1.5.0, pattern
+`^[a-z0-9-]+/\S(.*\S)?$`). A title two capabilities share becomes two nodes. No other
+0.7.1 ID pattern changed.
+
+#### Steps
+
+- Replace `lattice` with `latt` in every invocation and `<dest>/lattice` with
+  `<dest>/latt`; replace `resolve` with `show`.
+- Replace a path to `adapter-md` or `adapter-toml` with `--adapter md|toml` or
+  `./adapters/md`; an installed `adapter-entomologist` is now `latt-adapter-entomologist`.
+- In profiles: delete each retired code from `validations:` to keep 0.7.1's output.
+  Writing its replacement (`ORPHAN_NODE` → `UNREFERENCED` and `UNTRACED`, `DANGLING_REF`
+  → `VACANCY`, `AXIS_UNRESOLVED` → `PATHWAY_UNRESOLVED`, `AXIS_INVALID` →
+  `PATHWAY_INVALID`) applies the override for the first time. Change `not` to `ne`,
+  double a literal `{` or `}` in a `message`, and fix unknown-key typos such as
+  `validation:` or `require: true`.
+- Prefix each stored OpenSpec requirement ID and `Requirement:` citation with
+  `<capability>/`.
+- Export GitHub or GitLab issues to a TOML or Markdown register and read it with the
+  `toml` or `md` adapter, or keep 0.7.1.
+- Scripts: parse `--format json`, read exit 2 as a broken setup, and tolerate unknown
+  finding codes. No 0.7.1 code was removed or changed its default severity.
+- Rust: depend on `latt-core` and `latt-adapter`, replace `lattice_core::` with
+  `latt_core::` and `adapter_core::` with `latt_adapter::`, then follow the Rust
+  embedders bullets under Breaking.
 
 ## [0.7.1] — 2026-09-11
 

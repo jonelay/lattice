@@ -20,3 +20,10 @@ Alpha SHALL report what it could not read.
 #### Scenario: One error
 - **WHEN** a read fails
 - **THEN** the failure is named
+
+### Requirement: Shared title
+Alpha's requirement of this title.
+
+#### Scenario: Alpha's
+- **WHEN** alpha shares a title
+- **THEN** its node is its own

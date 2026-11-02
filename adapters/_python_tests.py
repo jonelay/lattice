@@ -1,20 +1,18 @@
-"""Shared structural discovery of Python test definitions.
+"""Structural discovery of Python test definitions, for the openspec adapter.
 
 Discovery is static and AST-based: one source definition is one test node,
 however many cases a runner expands it to: a `test_`-named function at module
 top level, or a `test_`-named direct method of a top-level class. Text that
 merely looks like a definition (a `def test_` inside a string literal) is not
 one, and a module that does not parse is reported rather than pattern-matched.
-Edge binding (pytest markers, citation comments) stays per-adapter.
+Edge binding (citation comments) stays in the adapter.
 """
 from __future__ import annotations
 
 import ast
-from pathlib import Path
 from typing import Iterator
 
 from adapters._emit import DocumentBuilder
-from adapters._read import read_utf8_text
 from adapters._types import Issue, Provenance, Severity
 
 TestFn = ast.FunctionDef | ast.AsyncFunctionDef
@@ -37,14 +35,6 @@ def parse_test_source(
             Provenance(file_str, e.lineno or 0),
         ))
         return None
-
-
-def parse_test_module(graph: DocumentBuilder, path: Path) -> ast.Module | None:
-    """Read and parse *path*; None propagates an already-reported failure."""
-    source = read_utf8_text(graph, path)
-    if source is None:
-        return None
-    return parse_test_source(graph, source, str(path))
 
 
 def iter_test_holders(

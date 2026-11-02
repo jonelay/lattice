@@ -1,0 +1,9 @@
+# `..` keeps Clippy's default list; an addition is a proper noun, not code.
+doc-valid-idents = ["CommonMark", ".."]
+# Denied in `latt-core`'s `output` module only (`#![deny]` there; allowed
+# workspace-wide): a raw map serializes in whatever order a host's feature
+# unification chose. `output/sorted.rs` wraps them.
+disallowed-types = [
+    { path = "serde_json::Map", reason = "serialize attrs through output::sorted::SortedMap" },
+    { path = "serde_json::Value", reason = "serialize attrs through output::sorted::SortedMap" },
+]

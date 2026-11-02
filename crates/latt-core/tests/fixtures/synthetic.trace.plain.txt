@@ -1,0 +1,62 @@
+id:BN-1 kind:need edges:0 findings:1 text:Protect the public trace contract with maintainable synthetic examples.
+  WARNING UNTRACED docs/register.md:6 node 'BN-1' has no outgoing edges
+id:BN-2 kind:need edges:0 findings:2 text:Maintain a deliberately disconnected business need for orphan reporting.
+  WARNING UNREFERENCED docs/register.md:12 node 'BN-2' has no incoming edges
+  WARNING UNTRACED docs/register.md:12 node 'BN-2' has no outgoing edges
+id:UN-1 kind:need edges:1 findings:1 text:Maintainers need stable trace output for compatible core changes.
+  WARNING UNREFERENCED docs/register.md:20 node 'UN-1' has no incoming edges
+id:UN-2 kind:need edges:1 findings:1 text:Reviewers need deterministic grouping independent of declaration order.
+  WARNING UNREFERENCED docs/register.md:24 node 'UN-2' has no incoming edges
+id:REQ-0001 kind:req edges:1 findings:1 text:The trace gate shall render every declared node and outgoing edge.
+  ERROR REGISTER_CONFLICT docs/register.md:53 synthetic conflicting declarations remain visible at error severity
+id:REQ-0002 kind:req edges:0 findings:2 text:The report shall treat a parent as covered through all covered children.
+  WARNING UNTRACED docs/register.md:58 node 'REQ-0002' has no outgoing edges
+  WARNING EDITORIAL_WARNING docs/register.md:59 synthetic wording needs a maintainer review
+id:REQ-0003 kind:req edges:1 findings:0 text:A deriving child shall contribute coverage to its parent.
+id:REQ-0004 kind:req edges:0 findings:4 text:The report shall expose a childless requirement with no test evidence.
+  WARNING COVERAGE docs/register.md:72 node 'REQ-0004' (kind 'req') has no incoming 'fulfills' edge
+  WARNING COVERAGE_DEEP docs/register.md:72 node 'REQ-0004' (kind 'req') is not deep-covered: no evidence and no children
+  WARNING UNREFERENCED docs/register.md:72 node 'REQ-0004' has no incoming edges
+  WARNING UNTRACED docs/register.md:72 node 'REQ-0004' has no outgoing edges
+id:REQ-0005 kind:req edges:0 findings:2 text:The report shall identify a parent whose child remains uncovered.
+  WARNING COVERAGE_DEEP docs/register.md:79 node 'REQ-0005' (kind 'req') is not deep-covered: uncovered children: 'REQ-0006'
+  WARNING UNTRACED docs/register.md:79 node 'REQ-0005' has no outgoing edges
+id:REQ-0006 kind:req edges:1 findings:1 text:An uncovered child shall remain visible even when its parent is specified.
+  WARNING COVERAGE_DEEP docs/register.md:86 node 'REQ-0006' (kind 'req') is not deep-covered: no evidence and no children
+id:REQ-0007 kind:req edges:0 findings:1 text:A parent requirement shall become deep-covered when every child is covered.
+  WARNING UNTRACED docs/register.md:93 node 'REQ-0007' has no outgoing edges
+id:REQ-0008 kind:req edges:1 findings:0 text:The covered child shall carry direct evidence used by its parent.
+id:REQ-0009 kind:req edges:0 findings:1 text:A second parent shall demonstrate that deep rollup is repeatable.
+  WARNING UNTRACED docs/register.md:108 node 'REQ-0009' has no outgoing edges
+id:REQ-0010 kind:req edges:1 findings:1 text:The report shall preserve adapter findings at their declared severity.
+  ERROR ATTR_REQUIRED docs/register.md:120 node 'REQ-0010': missing required attr 'domain'
+id:REQ-0011 kind:req edges:1 findings:1 text:The report shall attach diagnostics to the node that gives them context.
+  WARNING COVERAGE_DEEP docs/register.md:127 node 'REQ-0011' (kind 'req') is not deep-covered: no evidence and no children
+id:01-1.1 kind:spec-goal edges:3 findings:0 title:Ingest a synthetic requirements register with deliberately long display text
+id:01-1.2 kind:spec-goal edges:3 findings:0 title:Render direct and rolled-up coverage without storing derived state
+id:01-1.3 kind:spec-goal edges:2 findings:0 title:Report childless and child-caused deep coverage gaps
+id:01-1.4 kind:spec-goal edges:2 findings:1 title:Exercise edge grouping with a deliberately invalid cross-kind edge
+  ERROR EDGE_CONSTRAINT docs/spec/01-coverage.md:75 edge '01-1.4'->'REQ-0002' (kind 'derives'): [spec-goal, req] not in allowed pairs
+id:02-2.1 kind:spec-goal edges:2 findings:1 title:Keep findings visible in every supported output format
+  INFO DESIGN_NOTE docs/spec/02-reporting.md:15 synthetic informational context is attached to this specification goal
+id:02-2.2 kind:spec-goal edges:0 findings:1 title:Leave one specification goal deliberately unattributed
+  WARNING UNTRACED docs/spec/02-reporting.md:42 node '02-2.2' has no outgoing edges
+id:tests/test_register.py::TestRendering::test_long_identifier_and_summary_columns kind:test edges:2 findings:1 function:test_long_identifier_and_summary_columns
+  ERROR VACANCY tests/test_register.py:36 edge 'tests/test_register.py::TestRendering::test_long_identifier_and_summary_columns'->'REQ-9999' (kind 'verifies'): target 'REQ-9999' does not exist
+id:tests/test_register.py::test_direct_evidence kind:test edges:1 findings:1 function:test_direct_evidence
+  HINT REVIEW_SUGGESTION tests/test_register.py:13 synthetic hint demonstrates the lowest-severity rendering
+id:tests/test_register.py::test_duplicate_evidence_path kind:test edges:1 findings:0 function:test_duplicate_evidence_path
+id:tests/test_register.py::test_first_rollup_child kind:test edges:1 findings:0 function:test_first_rollup_child
+id:tests/test_register.py::test_long_summary_truncation kind:test edges:1 findings:0 function:test_long_summary_truncation
+id:tests/test_register.py::test_second_rollup_child kind:test edges:1 findings:0 function:test_second_rollup_child
+id:tests/test_register.py::test_unattributed_candidate_keeps_coverage_unknown kind:test edges:0 findings:0 function:test_unattributed_candidate_keeps_coverage_unknown
+id:SC-001 kind:sc edges:0 findings:0 text:A maintainer can review a compact but behaviorally broad baseline diff.
+id:SC-002 kind:sc edges:0 findings:0 text:A release gate detects byte-level changes in plain, JSON, and rich trace output.
+id:SC-003 kind:sc edges:0 findings:1 text:A reviewer can distinguish unsupported claims from incomplete attribution.
+  WARNING UNREFERENCED docs/register.md:210 node 'SC-003' has no incoming edges
+
+Unattachable findings:
+  HINT COVERAGE_UNKNOWN <profile>:0 1 of 6 node(s) of kind 'spec-goal' (16.7%) carry no outgoing 'fulfills' edge; coverage state for 'req' is unknown
+  HINT COVERAGE_UNKNOWN <profile>:0 1 of 7 node(s) of kind 'test' (14.3%) carry no outgoing 'verifies' edge; deep coverage state for 'req' is unknown
+  WARNING SOURCE_MISSING docs/spec/02-reporting.md:41 synthetic cited path 'tests/test_absent.py' does not resolve
+  WARNING PARSE_ERROR docs/unparsed-register-fragment.md:4 synthetic unattachable input diagnostic

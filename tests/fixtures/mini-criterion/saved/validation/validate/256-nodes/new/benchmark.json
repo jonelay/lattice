@@ -1,0 +1,11 @@
+{
+  "group_id": "validation",
+  "function_id": "validate",
+  "value_str": "256-nodes",
+  "throughput": {
+    "Elements": 256
+  },
+  "full_id": "validation/validate/256-nodes",
+  "directory_name": "validation/validate/256-nodes",
+  "title": "validation/validate/256-nodes"
+}

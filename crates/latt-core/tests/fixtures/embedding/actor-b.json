@@ -1,0 +1,108 @@
+{
+  "interface_version": "1.2",
+  "nodes": [
+    {
+      "id": "C1",
+      "kind": "claim",
+      "attrs": {
+        "status": "settled",
+        "group": "fixture"
+      },
+      "provenance": {
+        "file": "crates/latt-core/tests/fixtures/embedding/actor-b.json",
+        "line": 5
+      }
+    },
+    {
+      "id": "R1",
+      "kind": "reading",
+      "attrs": {
+        "status": "settled",
+        "group": "fixture"
+      },
+      "provenance": {
+        "file": "crates/latt-core/tests/fixtures/embedding/actor-b.json",
+        "line": 17
+      }
+    },
+    {
+      "id": "R2",
+      "kind": "reading",
+      "attrs": {
+        "status": "settled",
+        "group": "fixture"
+      },
+      "provenance": {
+        "file": "crates/latt-core/tests/fixtures/embedding/actor-b.json",
+        "line": 29
+      }
+    },
+    {
+      "id": "B1",
+      "kind": "assertion",
+      "attrs": {
+        "status": "settled",
+        "group": "fixture"
+      },
+      "provenance": {
+        "file": "crates/latt-core/tests/fixtures/embedding/actor-b.json",
+        "line": 41
+      }
+    },
+    {
+      "id": "B2",
+      "kind": "assertion",
+      "attrs": {
+        "status": "settled",
+        "group": "fixture"
+      },
+      "provenance": {
+        "file": "crates/latt-core/tests/fixtures/embedding/actor-b.json",
+        "line": 53
+      }
+    }
+  ],
+  "edges": [
+    {
+      "src": "B1",
+      "tgt": "C1",
+      "kind": "about",
+      "attrs": {},
+      "provenance": {
+        "file": "crates/latt-core/tests/fixtures/embedding/actor-b.json",
+        "line": 67
+      }
+    },
+    {
+      "src": "B1",
+      "tgt": "R1",
+      "kind": "uses",
+      "attrs": {},
+      "provenance": {
+        "file": "crates/latt-core/tests/fixtures/embedding/actor-b.json",
+        "line": 77
+      }
+    },
+    {
+      "src": "B2",
+      "tgt": "C1",
+      "kind": "about",
+      "attrs": {},
+      "provenance": {
+        "file": "crates/latt-core/tests/fixtures/embedding/actor-b.json",
+        "line": 87
+      }
+    },
+    {
+      "src": "B2",
+      "tgt": "R2",
+      "kind": "uses",
+      "attrs": {},
+      "provenance": {
+        "file": "crates/latt-core/tests/fixtures/embedding/actor-b.json",
+        "line": 97
+      }
+    }
+  ],
+  "findings": []
+}

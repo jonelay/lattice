@@ -1,0 +1,315 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jonelay/lattice/blob/main/benchmarks/e2e/report.schema.json",
+  "title": "Lattice end-to-end performance record",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_unix_seconds",
+    "collector",
+    "toolchain",
+    "environment",
+    "policy",
+    "scenario",
+    "inputs",
+    "revisions",
+    "comparisons"
+  ],
+  "properties": {
+    "schema_version": { "enum": ["1.1", "1.2"] },
+    "generated_unix_seconds": { "type": "integer", "minimum": 0 },
+    "collector": {
+      "type": "object",
+      "required": ["commit", "working_tree_dirty"],
+      "properties": {
+        "commit": { "$ref": "#/$defs/commit" },
+        "working_tree_dirty": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "toolchain": { "$ref": "#/$defs/toolchain" },
+    "environment": {
+      "type": "object",
+      "required": ["os", "architecture", "cpu", "runner_class", "execution"],
+      "properties": {
+        "os": { "type": "string", "minLength": 1 },
+        "architecture": { "type": "string", "minLength": 1 },
+        "cpu": { "type": "string", "minLength": 1 },
+        "runner_class": {
+          "enum": ["local", "github-actions", "gitlab-ci"]
+        },
+        "execution": {
+          "type": "object",
+          "required": ["provider"],
+          "properties": {
+            "provider": { "enum": ["local", "github", "gitlab"] }
+          },
+          "additionalProperties": { "type": "string", "minLength": 1 }
+        }
+      },
+      "additionalProperties": false
+    },
+    "policy": {
+      "type": "object",
+      "required": [
+        "warmup_runs",
+        "measurement_runs",
+        "round_order",
+        "performance_threshold_enforced"
+      ],
+      "properties": {
+        "warmup_runs": { "type": "integer", "minimum": 0 },
+        "measurement_runs": { "type": "integer", "minimum": 1 },
+        "round_order": { "const": "alternating" },
+        "performance_threshold_enforced": { "const": false }
+      },
+      "additionalProperties": false
+    },
+    "scenario": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "id",
+        "description",
+        "node_count",
+        "edge_count",
+        "generator",
+        "warmup_runs",
+        "measurement_runs",
+        "expected_exit_status",
+        "command"
+      ],
+      "properties": {
+        "schema_version": { "enum": ["1.1", "1.2"] },
+        "id": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "node_count": { "type": "integer", "minimum": 1 },
+        "edge_count": { "type": "integer", "minimum": 0 },
+        "generator": { "type": "string", "minLength": 1 },
+        "warmup_runs": { "type": "integer", "minimum": 0 },
+        "measurement_runs": { "type": "integer", "minimum": 1 },
+        "expected_exit_status": { "type": "integer" },
+        "command": { "type": "string", "minLength": 1 },
+        "expected": { "$ref": "#/$defs/expected" }
+      },
+      "additionalProperties": false
+    },
+    "inputs": {
+      "type": "object",
+      "required": [
+        "scenario_manifest_sha256",
+        "profile_sha256",
+        "generated_fixture_sha256",
+        "generated_fixture_bytes"
+      ],
+      "properties": {
+        "scenario_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "profile_sha256": { "$ref": "#/$defs/sha256" },
+        "generated_fixture_sha256": { "$ref": "#/$defs/sha256" },
+        "generated_fixture_bytes": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "revisions": {
+      "type": "array",
+      "minItems": 2,
+      "items": { "$ref": "#/$defs/revision" }
+    },
+    "comparisons": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/comparison" }
+    }
+  },
+  "additionalProperties": false,
+  "if": { "properties": { "schema_version": { "const": "1.2" } } },
+  "then": {
+    "properties": {
+      "scenario": {
+        "properties": { "schema_version": { "const": "1.2" } },
+        "required": ["expected"]
+      },
+      "revisions": { "items": { "required": ["preflight"] } }
+    }
+  },
+  "else": {
+    "properties": {
+      "scenario": {
+        "properties": { "schema_version": { "enum": ["1.0", "1.1"] } },
+        "not": { "required": ["expected"] }
+      },
+      "revisions": { "items": { "not": { "required": ["preflight"] } } }
+    }
+  },
+  "$defs": {
+    "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "kind_counts": {
+      "type": "object",
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "finding_tallies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "severity", "count"],
+        "properties": {
+          "code": { "type": "string", "minLength": 1 },
+          "severity": { "type": "string", "minLength": 1 },
+          "count": { "type": "integer", "minimum": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "expected": {
+      "type": "object",
+      "required": ["node_counts", "edge_counts", "finding_counts"],
+      "properties": {
+        "node_counts": { "$ref": "#/$defs/kind_counts" },
+        "edge_counts": { "$ref": "#/$defs/kind_counts" },
+        "finding_counts": { "$ref": "#/$defs/finding_tallies" }
+      },
+      "additionalProperties": false
+    },
+    "preflight": {
+      "type": "object",
+      "required": ["command", "exit_status", "node_counts", "edge_counts", "finding_counts"],
+      "properties": {
+        "command": { "const": "summary" },
+        "exit_status": { "type": "integer" },
+        "node_counts": { "$ref": "#/$defs/kind_counts" },
+        "edge_counts": { "$ref": "#/$defs/kind_counts" },
+        "finding_counts": { "$ref": "#/$defs/finding_tallies" }
+      },
+      "additionalProperties": false
+    },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "toolchain": {
+      "type": "object",
+      "required": ["rustc"],
+      "properties": {
+        "rustc": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "findings": {
+      "type": "object",
+      "required": ["finding_count", "by_code", "by_severity"],
+      "properties": {
+        "finding_count": { "type": "integer", "minimum": 0 },
+        "by_code": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 1 }
+        },
+        "by_severity": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "additionalProperties": false
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "minimum",
+        "median",
+        "mean",
+        "maximum",
+        "population_standard_deviation"
+      ],
+      "properties": {
+        "minimum": { "type": "number", "minimum": 0 },
+        "median": { "type": "number", "minimum": 0 },
+        "mean": { "type": "number", "minimum": 0 },
+        "maximum": { "type": "number", "minimum": 0 },
+        "population_standard_deviation": { "type": "number", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "measurement": {
+      "type": "object",
+      "required": ["samples", "summary"],
+      "properties": {
+        "samples": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "integer", "minimum": 0 }
+        },
+        "summary": { "$ref": "#/$defs/summary" }
+      },
+      "additionalProperties": false
+    },
+    "revision": {
+      "type": "object",
+      "required": [
+        "ref",
+        "commit",
+        "version",
+        "binary_sha256",
+        "adapter_sha256",
+        "release_build",
+        "toolchain",
+        "output",
+        "measurements"
+      ],
+      "properties": {
+        "ref": { "type": "string", "minLength": 1 },
+        "commit": { "$ref": "#/$defs/commit" },
+        "version": { "type": "string", "minLength": 1 },
+        "binary_sha256": { "$ref": "#/$defs/sha256" },
+        "adapter_sha256": { "$ref": "#/$defs/sha256" },
+        "release_build": {
+          "type": "object",
+          "required": ["locked", "cargo_profile"],
+          "properties": {
+            "locked": { "const": true },
+            "cargo_profile": { "const": "release" }
+          },
+          "additionalProperties": false
+        },
+        "toolchain": { "$ref": "#/$defs/toolchain" },
+        "preflight": { "$ref": "#/$defs/preflight" },
+        "output": {
+          "type": "object",
+          "required": ["exit_status", "bytes", "sha256", "findings"],
+          "properties": {
+            "exit_status": { "type": "integer" },
+            "bytes": { "type": "integer", "minimum": 0 },
+            "sha256": { "$ref": "#/$defs/sha256" },
+            "findings": { "$ref": "#/$defs/findings" }
+          },
+          "additionalProperties": false
+        },
+        "measurements": {
+          "type": "object",
+          "required": ["wall_time_nanoseconds", "peak_rss_kibibytes"],
+          "properties": {
+            "wall_time_nanoseconds": { "$ref": "#/$defs/measurement" },
+            "peak_rss_kibibytes": { "$ref": "#/$defs/measurement" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "comparison": {
+      "type": "object",
+      "required": [
+        "baseline_ref",
+        "candidate_ref",
+        "wall_time_median_percent_change",
+        "peak_rss_median_percent_change",
+        "output_identical",
+        "threshold_enforced"
+      ],
+      "properties": {
+        "baseline_ref": { "type": "string", "minLength": 1 },
+        "candidate_ref": { "type": "string", "minLength": 1 },
+        "wall_time_median_percent_change": { "type": "number" },
+        "peak_rss_median_percent_change": { "type": "number" },
+        "output_identical": { "type": "boolean" },
+        "threshold_enforced": { "const": false }
+      },
+      "additionalProperties": false
+    }
+  }
+}

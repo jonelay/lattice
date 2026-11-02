@@ -1,0 +1,5 @@
+{
+  "exit": 2,
+  "stderr": "Error: Profile error: validation config for 'CONSTRAINT', message: 'open {id' has a '{' that is never closed (write '{{' for a literal brace)\n",
+  "stdout": ""
+}

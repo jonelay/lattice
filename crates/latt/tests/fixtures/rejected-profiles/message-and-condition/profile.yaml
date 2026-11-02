@@ -1,0 +1,14 @@
+name: t
+profile_version: "1.0.0"
+node_kinds:
+  req:
+    id_pattern: "^REQ-\\d+$"
+    attrs:
+      status: { type: string }
+edge_kinds: {}
+validations:
+  - CONSTRAINT:
+      kind: req
+      when: { status: { not: deferred } }
+      expect: { status: { present: true } }
+      message: "see {the docs}"

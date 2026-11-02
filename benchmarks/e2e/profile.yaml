@@ -1,0 +1,32 @@
+name: e2e-toml-chain
+profile_version: "1.1.0"
+
+adapter:
+  paths:
+    files:
+      - "register.toml"
+  tables:
+    item:
+      kind: item
+      id_key: id
+      key_map:
+        id: id
+      edge_keys:
+        refs: references
+
+node_kinds:
+  item:
+    id_pattern: "^n[0-9]{5}$"
+    attrs:
+      id: { type: string, required: true }
+
+edge_kinds:
+  references:
+    allowed:
+      - [item, item]
+
+validations:
+  - UNREFERENCED:
+      severity: info
+  - UNTRACED:
+      severity: info

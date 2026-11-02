@@ -1,20 +1,24 @@
 """The types an adapter shares with the core, defined on the adapter's side.
 
-The core is Rust from 0.3.0; the adapters stay Python. These carried the same
-meaning on both sides of the old in-process boundary, and the interface document
-is now what carries it, so the definitions live here and the core reads them
-back out of the serialized document.
+The core and most adapters are Rust; the openspec and latt-suggest adapters
+stay Python. The interface document is what carries these between the two
+sides, so the definitions live here and the core reads them back out of the
+serialized document.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 
 
 @dataclass(frozen=True, slots=True)
 class Provenance:
-    """Where a node, edge or issue came from in the source text."""
+    """Where a node, edge or issue came from in the source text.
+
+    ``line`` is one-based, or 0 when there is no exact line, and at most
+    4294967295: the core refuses a document with a line outside that range.
+    """
 
     file: str
     line: int
@@ -43,34 +47,3 @@ class Issue:
     message: str
     provenance: Provenance
     node_id: str | None = None
-
-
-class PathwayError(Exception):
-    pass
-
-
-@dataclass(frozen=True, slots=True)
-class Pathway:
-    """An ordering pathway read from the target: its positions and where it stands now.
-
-    Ingested data, on the same footing as nodes and edges. The register declares
-    it and the adapter reads it. Nothing here is computed or defaulted.
-    """
-
-    name: str
-    order: list[str] = field(default_factory=list)
-    current: str = ""
-
-    def is_member(self, position: str) -> bool:
-        """True when `position` is one of this pathway's declared positions."""
-        return position in self.order
-
-    def is_after(self, position: str) -> bool:
-        """True when `position` sits strictly later on the pathway than `current`.
-
-        False for a non-member, which callers must screen with `is_member`
-        first; the two cases mean different things and share no answer.
-        """
-        if position not in self.order:
-            return False
-        return self.order.index(position) > self.order.index(self.current)

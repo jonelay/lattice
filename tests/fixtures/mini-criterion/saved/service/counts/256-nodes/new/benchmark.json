@@ -1,0 +1,11 @@
+{
+  "group_id": "service",
+  "function_id": "counts",
+  "value_str": "256-nodes",
+  "throughput": {
+    "Elements": 256
+  },
+  "full_id": "service/counts/256-nodes",
+  "directory_name": "service/counts/256-nodes",
+  "title": "service/counts/256-nodes"
+}

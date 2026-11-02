@@ -1,0 +1,11 @@
+{
+  "group_id": "validation",
+  "function_id": "validate",
+  "value_str": "defects-1024-nodes",
+  "throughput": {
+    "Elements": 1048
+  },
+  "full_id": "validation/validate/defects-1024-nodes",
+  "directory_name": "validation/validate/defects-1024-nodes",
+  "title": "validation/validate/defects-1024-nodes"
+}

@@ -14,16 +14,18 @@ A suggestion document SHALL be a JSON object carrying `suggestion_version`, `pro
 `tgt` SHALL be public node IDs; `kind` SHALL be an edge kind; `score` SHALL be a number;
 `basis` SHALL be a string.
 
-`basis` is free-form on purpose: a producer records how it reached the candidate — a
-similarity figure, a model identifier, a prompt version, the ranks it fused — and the core
-SHALL carry that text through without interpreting it. Constraining `basis` to a shape the
-core understands would make the core know how its producers work, which is the coupling this
-capability exists to avoid.
+`basis` is free-form: a producer records how it reached the candidate. The core
+SHALL carry that text through without interpreting it.
 
 `producer` names the program and version that emitted the document, so a reviewer reading a
 rendered suggestion can tell which ranker proposed it when several ran.
 
-Verified by: `cargo test --test suggestions schema`
+From version `1.1` a document MAY carry `unranked`, a non-negative integer: the number of
+candidates the producer did not rank. Absent, it SHALL read as zero; a `1.0` producer writes
+none. The core SHALL read a present `unranked` whatever the declared version, and one that is
+not a non-negative integer SHALL fail the interface schema, like a malformed entry.
+
+Verified by: `cargo test --test suggestions schema` and `cargo test --test suggestions unranked`
 
 #### Scenario: A well-formed document is accepted
 - **WHEN** the core reads a document declaring `suggestion_version`, a `producer` string, and
@@ -35,13 +37,18 @@ Verified by: `cargo test --test suggestions schema`
 - **THEN** the core reports the document as failing the interface schema and exits 2, rather
   than rendering a partial entry
 
+#### Scenario: A malformed unranked count is a contract failure
+- **WHEN** a `1.1` document declares `unranked` as `-1`, `1.5`, a string or null
+- **THEN** the core reports the document as failing the interface schema and exits 2
+
 #### Scenario: Basis text survives unchanged
 - **WHEN** a suggestion carries a `basis` of `cosine 0.83; model nomic-embed-text-v1.5`
 - **THEN** the rendered finding carries that text verbatim
 
 ### Requirement: Suggestion document is versioned and negotiated
 A suggestion document SHALL declare `suggestion_version`, and the core SHALL reject a version
-it does not support rather than reading the document on a guess. An unsupported version is a
+it does not support rather than reading the document on a guess. The core SHALL read `1.0` and
+`1.1`, and the sidecar SHALL write `1.1`. An unsupported version is a
 setup fault, not a finding: the core SHALL exit 2, the same way it treats an adapter
 declaring an unsupported interface version.
 
@@ -61,12 +68,9 @@ A producer SHALL order `suggestions` by descending `score`, breaking ties on `sr
 `tgt`, then `kind`, so a document is byte-reproducible for a given producer and input and two
 producers that agree on scores agree on order. The document is where rank lives.
 
-The core SHALL NOT preserve that order when rendering. A rendered suggestion is a finding, and
-findings carry one total order across the whole report — by provenance, then code, then node
-ID, then message — so that repeated runs are byte-identical whatever produced them. Giving the
-overlay an ordering of its own would fork that guarantee for the sake of a ranking the reviewer
-can already read: `score` travels in every rendered message, and the document itself is the
-ranked artifact.
+The core SHALL NOT preserve that order when rendering. Rendered suggestions follow the
+report's total finding order (provenance, code, node ID, message). Each rendered message
+carries its `score`, so the ranking is recoverable.
 
 Verified by: `cargo test --test suggestions ordering`
 
@@ -86,15 +90,12 @@ register, read one back as evidence of a relationship, or treat its absence as a
 durable artifact of an accepted suggestion is a human's edit to the register, landing in a
 reviewed diff and re-ingested through the ordinary adapter path.
 
-A suggestion is therefore advice in flight, never derived state at rest — the distinction the
-tool exists to hold.
-
 Verified by inspection: the core has no write path for a suggestion document, and `--suggestions`
 is read-only. Enforced by `cargo test --test suggestions readonly`, which asserts a run with
 `--suggestions` creates and modifies no file.
 
 #### Scenario: Running with suggestions writes nothing
-- **WHEN** `lattice validate --suggestions <file>` runs to completion
+- **WHEN** `latt validate --suggestions <file>` runs to completion
 - **THEN** no file in the target repo and no file in the lattice tree has been created or
   modified, including the suggestion document itself
 

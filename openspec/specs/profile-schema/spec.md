@@ -6,9 +6,32 @@ attributes, and validation configuration — the contract between adapters and c
 ## Requirements
 ### Requirement: Profile YAML structure
 A profile SHALL be a single YAML file containing: `name` (string), `profile_version`
-(string, three-part numeric version X.Y.Z), `node_kinds` (map), `edge_kinds` (map), and optionally `validations`
-(list). Top-level keys core does not recognise SHALL be preserved verbatim rather than
-rejected, so a profile can carry adapter-specific settings core has no opinion about.
+(string, three-part numeric version X.Y.Z), `node_kinds` (map), `edge_kinds` (map), and
+optionally `validations` (list), `pathways` (list), `extends` (string, resolved before the
+value is loaded), `annotations` (string, the notes file; see the finding-notes capability)
+and `adapter` (map). The loader SHALL reject any other top-level key with
+an error naming the key and listing the accepted keys, so a mistyped section such as
+`validation:` is a load error rather than a silently absent one. `adapter` is the one
+section the core admits without interpreting: it is preserved verbatim so a profile can
+carry adapter-specific settings core has no opinion about.
+
+The `adapter` top-level key MAY contain a `native` field (string) naming a native
+adapter to use when `--adapter` is not supplied on the command line, and a
+`timeout_seconds` field (positive integer) bounding how long the core waits for an
+external adapter program. The core reads these two fields during adapter resolution;
+all other `adapter` sub-keys remain opaque to the core and are passed through to the
+adapter unchanged. The `adapter` block MAY also carry `command_timeout_seconds`
+(positive integer), which the core passes through but validates: adapters read it to
+bound each subprocess they run. When either timeout key is present and is not a
+positive integer, the loader SHALL reject the profile with a `CONFIG_ERROR` naming
+the key, so a zero or negative bound never silently means "no bound". A positive
+bound larger than the clock can represent SHALL wait as if unbounded rather than
+panic outside the exit-code contract.
+
+Verified by: `cargo test --test profile_schema`,
+`cargo test -p latt --locked --test finding_notes location`, `cargo test --test native`,
+`cargo test --test profile_schema timeout`, and
+`cargo test -p latt-adapter a_bound_beyond_the_clock_does_not_panic`.
 
 #### Scenario: Valid profile loads
 - **WHEN** a profile YAML with all required top-level keys is loaded
@@ -18,9 +41,38 @@ rejected, so a profile can carry adapter-specific settings core has no opinion a
 - **WHEN** a profile YAML omits `node_kinds`
 - **THEN** the loader raises a validation error naming the missing key
 
-#### Scenario: Unrecognised top-level key preserved
-- **WHEN** a profile declares a top-level `adapter` key core does not interpret
-- **THEN** the profile loads and the key is retained for the adapter to read
+#### Scenario: Unknown top-level key rejected
+- **WHEN** a profile declares `validation:` (mistyped singular) beside the required keys
+- **THEN** the loader rejects the profile naming `validation` and listing the accepted
+  top-level keys
+
+#### Scenario: Adapter block accepted uninterpreted
+- **WHEN** a profile declares a top-level `adapter` key whose contents core does not interpret
+- **THEN** the profile loads and the block is retained for the adapter to read
+
+#### Scenario: Profile with adapter.native
+- **WHEN** a profile declares `adapter: { native: md, paths: { files: ["*.md"] } }`
+- **THEN** the loader preserves both `native` and `paths` in the adapter block,
+  and the core reads `native` during adapter resolution
+
+#### Scenario: Timeout keys are validated
+- **WHEN** a profile declares `adapter: { timeout_seconds: 0 }`,
+  `adapter: { command_timeout_seconds: -5 }` or `adapter: { command_timeout_seconds: 0.5 }`
+- **THEN** the loader rejects the profile naming the key, and the command exits 2
+
+#### Scenario: Timeout keys pass through to the adapter
+- **WHEN** a profile declares `adapter: { command_timeout_seconds: 30 }`
+- **THEN** the resolved profile document the adapter receives carries
+  `command_timeout_seconds: 30` unchanged
+
+#### Scenario: Profile without adapter.native
+- **WHEN** a profile's `adapter` block has no `native` key
+- **THEN** the profile loads normally and `--adapter` is required on the command line
+
+#### Scenario: Annotations key accepted
+- **WHEN** a profile declares `annotations: lattice-notes.yaml` beside the required keys
+- **THEN** the profile loads, and an unknown-key error for any other key lists
+  `annotations` among the accepted top-level keys
 
 ### Requirement: Node kind declaration
 Each entry in `node_kinds` SHALL declare an `id_pattern` (regex string) and MAY declare
@@ -45,11 +97,7 @@ non-textual structured data even though it arrives as a string; admitting it wou
 wire representation into prose by accident. `text_attrs` MAY name the same attr as
 `summary_attr`.
 
-`text_attrs` exists because a ranker needs more text than a summary column can hold, and
-because naming that text is the profile's job: without it a consumer has to pick an attr
-name of its own, which is domain vocabulary in a domain-free program. A kind with no
-`text_attrs` is not an error — the consumer falls back to `summary_attr`, so every
-profile written before this key keeps its meaning.
+A kind with no `text_attrs` is not an error; the consumer falls back to `summary_attr`.
 
 The loader SHALL NOT require `text_attrs` to be present, and SHALL accept an empty list
 as an explicit declaration that the kind offers no text to rank. An absent `text_attrs`
@@ -59,10 +107,7 @@ they carry different meanings for a ranking consumer — absent falls back to
 renders them identically SHALL NOT be used.
 
 A node kind MAY declare `text_chunk_line_prefix` (string), a **literal** line prefix at
-which a ranking consumer subdivides the text that kind offers. It is a literal compared
-with a string prefix test, never a regex: the profile is validated by the core and applied
-by a separate consumer program, and a pattern language whose engines differ between the two
-is a guarantee that is not one.
+which a ranking consumer subdivides the text that kind offers. It is a literal compared with a string prefix test, never a regex.
 
 The loader SHALL reject a `text_chunk_line_prefix` that is not a string, that is empty or
 contains only whitespace, or that contains a carriage return or line feed. A prefix that
@@ -70,16 +115,7 @@ matches every line, or that spans a line boundary, cannot name a cut point.
 
 The loader SHALL reject `text_chunk_line_prefix` on a node kind that offers no rankable
 text — one declaring `text_attrs: []`, or declaring neither `text_attrs` nor
-`summary_attr`. Such a declaration is a setting with nothing to act on, and the schema
-already rejects a partial pathway binding on the same grounds: configuration that silently
-does nothing is indistinguishable from configuration that works.
-
-`text_chunk_line_prefix` names how a register's own blocks begin, which is the profile's
-fact and not the consumer's — the same reason `text_attrs` names attrs. It configures how
-declared text is *subdivided* for ranking; it never selects, extracts or alters what any
-node carries, which remains the adapter's.
-
-The loader SHALL NOT require `text_chunk_line_prefix` to be present. A kind that does not
+`summary_attr`. The loader SHALL NOT require `text_chunk_line_prefix` to be present. A kind that does not
 declare one SHALL be ranked as one undivided text, so every profile written before this key
 produces identical output.
 
@@ -226,10 +262,49 @@ edge of that kind whose endpoints both exist and have declared kinds then produc
 - **WHEN** an edge kind's `allowed` pair names a node kind not in `node_kinds`
 - **THEN** the loader raises an error identifying the undefined kind
 
+### Requirement: Unknown keys in declarations
+A node kind SHALL admit only `id_pattern`, `attrs`, `summary_attr`, `text_attrs`,
+`text_chunk_line_prefix`, `orphan_ok`, `actions` and `id_names`; an attr declared in mapping form SHALL admit
+only `type`, `required`, `values` and `items`; an edge kind SHALL admit only `allowed`
+and `cross_source`. The loader SHALL reject any other key with an error naming the
+declaration, the offending key and the accepted keys. As with validation entries, a typo
+becomes a load error instead of a setting that silently does nothing.
+
+Verified by: `cargo test --test profile_schema unknown`.
+
+#### Scenario: Unknown node kind key rejected
+- **WHEN** a node kind declares `id_patern` (mistyped) in place of `id_pattern`
+- **THEN** the loader rejects the profile naming the kind, `id_patern`, and the accepted keys
+
+#### Scenario: Unknown attr key rejected
+- **WHEN** an attr declares `{ type: string, require: true }`
+- **THEN** the loader rejects the profile naming the kind, the attr, `require`, and the
+  accepted keys
+
+#### Scenario: Unknown edge kind key rejected
+- **WHEN** an edge kind declares `allow:` in place of `allowed:`
+- **THEN** the loader rejects the profile naming the edge kind, `allow`, and the accepted keys
+
 ### Requirement: Profile version
 Every profile SHALL carry a `profile_version` key (three-part numeric version string,
 X.Y.Z where each component is a non-negative integer without leading zeros). Core SHALL reject a
 profile whose `profile_version` major exceeds the supported range.
+
+The major is the profile format: a profile of a major the core does not support
+cannot load, so it changes only with the core's supported range. Within it, a
+profile's author bumps `profile_version` by what the change does to the register's
+consumers: **minor** for added vocabulary (a kind, an attr, an edge kind) or a changed
+ID shape, **patch** for a change under which all formerly valid data stays valid.
+Narrowing or renaming an ID shape that shipped in a release SHALL carry a Breaking
+changelog entry and a deterministic old-to-new ID mapping in the same minor bump; a
+shape that only release candidates carried needs neither. Widening an `id_pattern`
+keeps every old ID valid.
+
+A caller MAY additionally pin an exact `profile_version`: `Profile::require_version`
+SHALL accept the profile only when its `profile_version` equals the pin, and SHALL refuse
+a pin that is not itself X.Y.Z without leading zeros. Under `extends:` the compared
+version is the child's. The pin is opt-in; the loader alone checks only the major. The CLI
+exposes it as `--profile-version` (the cli capability, Requirement: Profile version pin).
 
 #### Scenario: Supported version
 - **WHEN** a profile declares `profile_version: "1.0.0"` and core supports major 1
@@ -238,6 +313,19 @@ profile whose `profile_version` major exceeds the supported range.
 #### Scenario: Unsupported major version
 - **WHEN** a profile declares `profile_version: "2.0.0"` and core supports only major 1
 - **THEN** core raises an error: unsupported profile version
+
+#### Scenario: Exact pin
+- **WHEN** a profile declares `profile_version: "1.4.2"` and a caller pins `1.4.2`, then
+  `1.4.3`
+- **THEN** the first pin accepts the profile and the second refuses it naming both versions
+
+#### Scenario: Malformed pin
+- **WHEN** a caller pins `1.0`, `01.0.0` or `1.0.0-rc.1`
+- **THEN** the pin is refused as not a valid version, whatever the profile declares
+
+#### Scenario: Pin under extends
+- **WHEN** a child declaring `profile_version: "1.2.0"` extends a parent declaring `"1.1.0"`
+- **THEN** a pin of `1.2.0` accepts the profile and a pin of `1.1.0` refuses it
 
 ### Requirement: Suppress configuration in profiles
 The `validations` list SHALL accept entries keyed by `SUPPRESS`. Each entry
@@ -286,12 +374,23 @@ Verified by: `cargo test --test profile_schema suppress`
 
 ### Requirement: Validation configuration schema
 Each entry in `validations` maps a validator code to its configuration. Core SHALL accept
-only the keys that code defines — `COVERAGE` takes `severity`, `target_kind`, `edge_kind`;
+only the keys that code defines — `COVERAGE` takes `severity`, `target_kind`, `edge_kind`, `where`, `source_where`;
+`COVERAGE_DEEP` takes `severity`, `target_kind`, `evidence`, `via`, `where`, `source_where`;
 `SUMMARY` takes `severity`, `node_kind`, `status_attr`, `group_by_attr`;
 `CONSTRAINT` takes `severity`, `kind`, `when`, `expect`, `reject`, `message`;
+`EDGE_WHERE` takes `severity`, `edge_kind`, `when`, `expect`, `reject`, `message`;
+`EDGE_COUNT` takes `severity`, `edge_kind`, `node_kind`, `direction`, `group_by`, `min`, `max`, `where`, `message`;
 `SUPPRESS` takes `code`, `node_ids` — and SHALL
 reject an unknown key rather than ignoring it. A code core does not know SHALL accept
-`severity` alone, so a profile can set the severity of a third-party validator.
+`severity` alone, so a profile can set the severity of a third-party validator. Every
+entry except `SUPPRESS` SHALL also accept `message` (see the validation spec's
+declared-message requirement).
+
+A retired finding code (`ORPHAN_NODE`, `DANGLING_REF`, `AXIS_UNRESOLVED`,
+`AXIS_INVALID`) SHALL be a load error naming the code and its replacement, in a profile
+and in a fuse profile alike. An override naming a retired code would otherwise apply to
+nothing in silence. The retired list SHALL have one definition, and the contracts gate
+SHALL pin it.
 
 In addition, any entry — for a code core implements or one it does not — SHALL accept the
 pathway-binding keys `pathway` and `position_attr`, subject to the pathway-binding requirements
@@ -303,8 +402,27 @@ by the `code` it names. It SHALL NOT accept `severity`, `pathway`, or
 `position_attr` — a severity or binding on a selector would be a setting with
 nothing to act on, and the loader SHALL reject it as an unknown key like any other.
 
-Rejecting unknown keys turns a typo in a profile into a load error instead of a silently
-inert setting.
+An invalid severity string SHALL produce a diagnostic listing
+all accepted severity values: error, hint, info, warning. For the lint-level words of
+cargo-semver-checks and Rust, the diagnostic SHALL also name lattice's spelling: `warn`
+→ `warning`, `deny` → `error`, and `allow` → a `SUPPRESS` entry. The `allow` diagnostic
+SHALL say that a suppressed finding is still computed and kept in JSON, where an `allow`
+lint does not run.
+
+A `message` value that is not a string SHALL be a load error naming
+the code. The declared message is never silently replaced by the generated one. A
+`CONSTRAINT` or `EDGE_WHERE` entry whose `expect` and `reject` blocks together hold no
+condition SHALL be a load error, because it would check nothing and always read clean.
+
+Verified by: `cargo test --test profile_schema`.
+
+#### Scenario: Non-string message rejected
+- **WHEN** a profile declares `EDGE_COUNT` with `message: {a: 1}`
+- **THEN** the loader rejects the profile: `EDGE_COUNT` `message` must be a string
+
+#### Scenario: Entry with empty blocks rejected
+- **WHEN** a profile declares `CONSTRAINT` with `kind: req` and `expect: {}`
+- **THEN** the loader rejects the profile: the entry holds no conditions
 
 #### Scenario: Unknown key rejected
 - **WHEN** a profile declares `COVERAGE` with a `target_kinds` key (mistyped plural)
@@ -364,18 +482,40 @@ inert setting.
 - **WHEN** a profile declares `CONSTRAINT` with `kind: widget` and `widget` is not in `node_kinds`
 - **THEN** the loader emits a `CONFIG_ERROR` naming the undeclared kind
 
+#### Scenario: A retired code is refused
+- **WHEN** a profile declares `ORPHAN_NODE: { severity: info }`
+- **THEN** the loader rejects the profile, exit 2, naming `UNREFERENCED` and `UNTRACED`
+  as the replacement
+
+#### Scenario: A retired code in a fuse profile is refused
+- **WHEN** a fuse profile declares `DANGLING_REF: { severity: error }`
+- **THEN** fuse rejects the fuse profile, exit 2, naming `VACANCY` as the replacement
+
+#### Scenario: A lint-level word names lattice's spelling
+- **WHEN** a validation override declares `severity: warn`
+- **THEN** the loader rejects it, lists the accepted values, and names `warning`
+
+#### Scenario: allow points at SUPPRESS and states the difference
+- **WHEN** a validation override declares `severity: allow`
+- **THEN** the loader rejects it, names a `SUPPRESS` entry, and says the suppressed
+  finding is still kept in JSON
+
+#### Scenario: message is accepted on a severity-only code
+- **WHEN** a profile declares `VACANCY: { severity: error, message: "see ADR-12: {message}" }`
+- **THEN** the profile loads
+
+#### Scenario: Invalid severity lists hint among accepted values
+- **WHEN** a validation override declares severity loud
+- **THEN** the loader rejects it and lists error, hint, info, warning as valid values
+
 ### Requirement: Ordering pathway declaration
-A profile MAY declare an `pathways` list naming the pathways it binds to. Core SHALL accept a list
+A profile MAY declare a `pathways` list naming the pathways it binds to. Core SHALL accept a list
 of names and SHALL reject any other shape rather than ignoring it.
 
 The list declares that a pathway exists and names it. It SHALL NOT carry the pathway values —
 neither the ordered positions nor the current position. Those are target state, supplied
 by the adapter at ingest; a copy held in the profile would advance without lattice
 noticing, which is the hand-maintained derived state the tool exists to eliminate.
-
-A list of bare names, rather than a mapping to per-pathway configuration, is deliberate:
-there is exactly one thing to say about a pathway here — its name — and a mapping whose only
-legal key had one legal value would be configurability with no consumer.
 
 Verified by: `cargo test --test profile_schema pathway_list_loads`
 
@@ -400,10 +540,7 @@ binding is a setting that silently does nothing.
 `pathway` SHALL name a pathway declared in the same profile's `pathways` list. Core SHALL reject a
 binding naming an undeclared pathway at load time.
 
-There is no configurable demotion target. A demoted finding becomes `info`, always. The
-only useful target is the quietest severity, and a configurable one would permit both
-promotion — which the change forbids — and demotion to `warning`, which `--strict` would
-immediately promote back to error, defeating the purpose. Widening this later is additive.
+A demoted finding becomes `info`, always; there is no configurable demotion target.
 
 Verified by: `cargo test --test profile_schema binding`
 
@@ -433,13 +570,13 @@ outcome that neither drops a declared setting nor resolves arbitrarily.
 Verified by: `cargo test --test profile_schema second_binding_for_one_code_is_rejected`
 
 #### Scenario: Second binding for the same code rejected
-- **WHEN** a profile carries two `OBLIGATION_UNBACKED` entries, each with an `pathway` and
+- **WHEN** a profile carries two `OBLIGATION_UNBACKED` entries, each with a `pathway` and
   `position_attr`
 - **THEN** the loader raises an error naming the duplicated code
 
 #### Scenario: Repeated non-binding configuration still honoured
-- **WHEN** a profile carries two `COVERAGE` entries, neither carrying an `pathway`
-- **THEN** the profile loads and both configurations are honoured, unchanged from today
+- **WHEN** a profile carries two `COVERAGE` entries, neither carrying a `pathway`
+- **THEN** the profile loads and both configurations are honoured
 
 #### Scenario: One binding alongside a repeated plain configuration
 - **WHEN** a profile carries two `COVERAGE` entries and exactly one of them binds a pathway
@@ -606,7 +743,7 @@ An edge kind declaration in a profile SHALL accept an optional `cross_source: tr
 field. When present, the validation layer SHALL demote VACANCY findings for
 edges of that kind whose target does not resolve to hint severity instead of the
 default error severity. This applies in standalone (single-source) runs only — in a
-program composition context, cross-source edges resolve normally after merge.
+fuse context, cross-source edges resolve normally after merge.
 
 The flag is profile data, not core vocabulary. The core reads it as a severity
 modifier during VACANCY collection, not as a behavioral switch.
@@ -614,8 +751,15 @@ modifier during VACANCY collection, not as a behavioral switch.
 A profile that does not declare `cross_source` on any edge kind has no change in
 behavior.
 
-Verified by: `cargo test` (validation severity test), and
-`.venv/bin/python -m pytest tests/test_adapter_md.py` (profile with cross_source edge)
+The demotion applies after the profile's `VACANCY` override, as a pathway demotion
+does. Hint is the lowest severity, so the override cannot raise a cross-source
+`VACANCY` above it: that would promote a hint, which the validation spec forbids.
+The override still applies to `VACANCY` on other edge kinds, and it is not a
+refused promotion, so it produces no `CONFIG_ERROR`.
+
+Verified by: `cargo test -p latt-core --lib dangling_target`,
+`cargo test -p latt-core --lib vacancy_override_applies_to_ordinary_edges_and_cross_source_stays_hint`,
+and `.venv/bin/python -m pytest tests/test_adapter_md.py` (profile with cross_source edge)
 
 #### Scenario: Cross-source edge kind demotes dangling ref
 - **WHEN** a profile declares edge kind `derives` with `cross_source: true` and an
@@ -630,3 +774,239 @@ Verified by: `cargo test` (validation severity test), and
 #### Scenario: Flag absent means no change
 - **WHEN** no edge kind in the profile declares `cross_source`
 - **THEN** all VACANCY findings use their default or profile-overridden severity
+
+#### Scenario: A VACANCY override does not reach a cross-source edge
+- **WHEN** a profile declares edge kind `derives` with `cross_source: true` and edge kind
+  `contains` without it, overrides `VACANCY` to `warning`, and an edge of each kind
+  targets a missing ID
+- **THEN** the `contains` VACANCY has severity `warning`, the `derives` VACANCY stays
+  `hint`, and no `CONFIG_ERROR` is emitted
+
+### Requirement: EDGE_WHERE configuration
+An `EDGE_WHERE` entry SHALL name a declared edge kind in `edge_kind` and SHALL declare
+at least one of `expect` or `reject`. Each of `when`, `expect` and `reject` SHALL be a
+mapping whose keys are drawn from `source`, `target` and `edge`. Each of those keys
+SHALL hold a condition block with the same syntax and operators as `CONSTRAINT`. Any
+other key in a block, or a block that is not a mapping, SHALL be a load error naming the
+block. `severity` SHALL be a valid severity string.
+
+Verified by: `cargo test --test validation edge_where_config`
+
+#### Scenario: EDGE_WHERE config with all keys loads
+- **WHEN** a profile declares `EDGE_WHERE` with `edge_kind`, `when`, `expect`, `reject`, `message` and `severity`
+- **THEN** the profile loads
+
+#### Scenario: EDGE_WHERE missing edge_kind rejected
+- **WHEN** a profile declares `EDGE_WHERE` with `reject` but no `edge_kind`
+- **THEN** the loader rejects the profile: `EDGE_WHERE` requires `edge_kind`
+
+#### Scenario: EDGE_WHERE edge_kind names an undeclared edge kind
+- **WHEN** a profile declares `EDGE_WHERE` with `edge_kind: picks` and `picks` is not in `edge_kinds`
+- **THEN** the loader rejects the profile naming `picks`
+
+#### Scenario: EDGE_WHERE with neither expect nor reject rejected
+- **WHEN** a profile declares `EDGE_WHERE` with only `edge_kind`
+- **THEN** the loader rejects the profile: `EDGE_WHERE` requires at least one of `expect` or `reject`
+
+#### Scenario: EDGE_WHERE block key outside the selectors rejected
+- **WHEN** a profile declares `EDGE_WHERE` with `reject: { status: { eq: blocked } }`, an attr where a selector belongs
+- **THEN** the loader rejects the profile naming `reject.status` and the selectors `source`, `target`, `edge`
+
+#### Scenario: EDGE_WHERE unknown operator rejected
+- **WHEN** a profile declares `EDGE_WHERE` with `expect: { target: { count: { between: [1, 5] } } }`
+- **THEN** the loader rejects the profile naming the unknown operator `between`
+
+### Requirement: EDGE_COUNT configuration
+An `EDGE_COUNT` entry SHALL name a declared edge kind in `edge_kind` and a declared
+node kind in `node_kind`. `direction` SHALL be `out` or `in` and defaults to `out`. At
+least one allowed pair of the edge kind SHALL place `node_kind` at the counted end: the
+source for `out`, the target for `in`. Otherwise every node of the kind would count
+zero, which is a misconfiguration and not a finding. At least one of `min` and `max`
+SHALL be declared. Each SHALL be a non-negative integer, and `min` SHALL NOT exceed
+`max`. `group_by` SHALL be a string. `where` SHALL be a `CONSTRAINT`-syntax condition
+block on the counted node.
+
+Verified by: `cargo test --test validation edge_count_config`
+
+#### Scenario: EDGE_COUNT config with all keys loads
+- **WHEN** a profile declares `EDGE_COUNT` with every key
+- **THEN** the profile loads
+
+#### Scenario: EDGE_COUNT node kind never at the counted end
+- **WHEN** an entry has `edge_kind: fulfills`, `node_kind: need`, `direction: out`, and no allowed `fulfills` pair has `need` as source
+- **THEN** the loader rejects the profile naming `need`, `fulfills` and the direction
+
+#### Scenario: EDGE_COUNT without bounds rejected
+- **WHEN** an entry declares neither `min` nor `max`
+- **THEN** the loader rejects the profile: `EDGE_COUNT` requires at least one of `min` or `max`
+
+#### Scenario: EDGE_COUNT min above max rejected
+- **WHEN** an entry declares `min: 2` and `max: 1`
+- **THEN** the loader rejects the profile naming both bounds
+
+#### Scenario: EDGE_COUNT invalid direction rejected
+- **WHEN** an entry declares `direction: both`
+- **THEN** the loader rejects the profile naming `both` and the accepted values
+
+### Requirement: Node kind actions
+A node kind MAY declare `actions`: a mapping from verb name to an action. The loader
+SHALL keep the verbs in declared order. A verb name SHALL be a non-empty string; the
+core gives no verb a meaning. An action SHALL be a mapping that admits only `run` and
+`mode`, and both are required:
+
+- `run`: a non-empty list of strings, never a single string. The first element names
+  the program and SHALL contain no placeholder.
+- `mode`: one of `interactive`, `capture`, `detached`.
+
+Inside a `run` element, `{` opens a placeholder and `}` closes it. `{{` and `}}` are
+literal braces. The loader SHALL accept only `{id}`, `{kind}`, `{provenance.file}`,
+`{provenance.line}` and `{attrs.<name>}` where `<name>` is an attr the kind declares.
+The loader SHALL reject an unknown placeholder, an `{attrs.…}` naming an undeclared attr
+or a `list` attr, an unclosed `{` and a lone `}`. Each error names the kind, the verb
+and the offending text. A kind with no `actions` key has none. The resolved profile
+document carries `actions` as written.
+
+Verified by: `cargo test -p latt --locked --test profile_schema actions`.
+
+#### Scenario: Node kind with actions
+- **WHEN** a node kind declares
+  `actions: {show: {run: ["ent", "show", "{id}"], mode: capture}}`
+- **THEN** the profile loads and the kind carries one action, `show`
+
+#### Scenario: Shell string rejected
+- **WHEN** an action declares `run: "ent show {id}"`
+- **THEN** the loader rejects the profile naming the kind, the verb and `run`
+
+#### Scenario: Unknown mode rejected
+- **WHEN** an action declares `mode: split`
+- **THEN** the loader rejects the profile naming the kind, the verb, `split` and the
+  accepted modes
+
+#### Scenario: Placeholder naming an undeclared attr
+- **WHEN** a kind that declares no `number` attr has an action using `{attrs.number}`
+- **THEN** the loader rejects the profile naming the kind, the verb and `{attrs.number}`
+
+#### Scenario: Placeholder in the program
+- **WHEN** an action declares `run: ["{attrs.tool}", "show"]`
+- **THEN** the loader rejects the profile naming the kind and the verb
+
+#### Scenario: Unknown key in an action
+- **WHEN** an action declares `cmd:` in place of `run:`
+- **THEN** the loader rejects the profile naming the kind, the verb, `cmd` and the
+  accepted keys
+
+### Requirement: Coverage entries name declared kinds
+A standard profile's `COVERAGE` and `COVERAGE_DEEP` entries SHALL be checked when the
+profile loads, as `CONSTRAINT`, `EDGE_WHERE` and `EDGE_COUNT` entries are. A missing
+kind key, a kind key whose value is not a string, a `target_kind` naming no declared
+node kind, and an `edge_kind`, `via` or `evidence` naming no declared edge kind SHALL
+each be a load error naming the code, the key and the value, so the command exits 2
+before any adapter runs. A coverage entry that cannot run is a broken setup, not a
+finding about the register: reported as a finding, it exits 1 beside real findings and
+reads as one.
+
+The profile `fuse` composes from its sources is exempt. Its kinds are the kinds the
+sources' traces carried, known only after they have run, so on that profile the
+validation spec's `CONFIG_ERROR` finding stands (program-composition spec, standard
+validators on the composed graph).
+
+Verified by: `cargo test --test profile_schema coverage_kind`
+
+#### Scenario: COVERAGE target_kind names an undeclared node kind
+- **WHEN** a profile declares `COVERAGE` with `target_kind: widget` and `widget` is not in `node_kinds`
+- **THEN** the loader raises an error naming `COVERAGE`, `target_kind` and `widget`
+
+#### Scenario: COVERAGE_DEEP evidence names an undeclared edge kind
+- **WHEN** a profile declares `COVERAGE_DEEP` with `evidence: nosuch` and `nosuch` is not in `edge_kinds`
+- **THEN** the loader raises an error naming `COVERAGE_DEEP`, `evidence` and `nosuch`
+
+#### Scenario: COVERAGE missing a kind key
+- **WHEN** a profile declares `COVERAGE` with `target_kind: req` and no `edge_kind`
+- **THEN** the loader raises an error naming the missing key
+
+#### Scenario: Validate exits 2 on an undeclared coverage kind
+- **WHEN** `latt validate` runs with a profile whose `COVERAGE` names an undeclared kind
+- **THEN** it exits 2 with the load error and does not run the adapter
+
+### Requirement: Source address declaration
+A node kind MAY declare `id_names`, stating that its IDs are addresses in the target
+(their resolution is the source-existence capability's). The value SHALL be either a
+preset name or a structured block:
+
+- `file` — the ID is a path.
+- `cargo` — shorthand for `{ language: rust, separator: "::" }`.
+- `pytest` — shorthand for `{ language: python, separator: "::", params: "[]" }`.
+- `gotest` — shorthand for `{ language: go, separator: "::" }`.
+- A mapping with `language` (`rust`, `python` or `go`) and `separator` (a non-empty string), both
+  required, and optional `params` (exactly two characters, opener then closer). It admits
+  no other key.
+
+The loader SHALL reject an unknown preset, an unknown `language`, a missing or empty
+`separator`, a `params` that is not two characters, an unknown key, and a value of any
+other type. Each error SHALL name the kind, `id_names`, the offending value or key, and
+what is accepted. The accepted forms are the source-existence resolver's own, so the
+loader and the resolver cannot disagree. A language with no resolver is rejected, not reduced to a file
+check. The key SHALL reach adapters unchanged in the resolved profile document: a
+preset stays a preset, and is expanded by the resolver. A kind without the key declares
+nothing about its IDs, so every profile written before it validates identically.
+`id_names: null` SHALL read as absent, as a null `orphan_ok` or `actions` does.
+
+Verified by: `cargo test -p latt --test profile_schema id_names`
+
+#### Scenario: Presets load
+- **WHEN** four kinds declare `id_names: file`, `id_names: cargo`, `id_names: pytest` and `id_names: gotest`
+- **THEN** the profile loads, and the resolved document carries each value as written
+
+#### Scenario: Structured block loads
+- **WHEN** a kind declares `id_names: { language: rust, separator: "::" }`
+- **THEN** the profile loads, and the resolved document carries the mapping as written
+
+#### Scenario: Unknown preset rejected
+- **WHEN** a kind declares `id_names: jest`
+- **THEN** the loader rejects the profile naming the kind, `id_names`, `jest`, and the
+  accepted presets `file`, `cargo`, `pytest` and `gotest`
+
+#### Scenario: Unknown language rejected
+- **WHEN** a kind declares `id_names: { language: ruby, separator: "::" }`
+- **THEN** the loader rejects the profile naming the kind, `ruby`, and the accepted
+  languages `rust`, `python` and `go`
+
+#### Scenario: Structured block without a separator rejected
+- **WHEN** a kind declares `id_names: { language: python }`
+- **THEN** the loader rejects the profile naming the kind and `separator`
+
+#### Scenario: Null id_names reads as absent
+- **WHEN** a kind declares `id_names: null`
+- **THEN** the profile loads, and none of the kind's nodes is resolved
+
+#### Scenario: Non-string, non-mapping id_names rejected
+- **WHEN** a kind declares `id_names: [file]`
+- **THEN** the loader rejects the profile naming the kind and `id_names`
+
+### Requirement: A refused profile names every independent fault
+When the loader refuses a profile, the refusal SHALL name every fault it can detect
+independently, not only the first, so a profile with three mistakes is fixed in one
+edit. Each fault SHALL be on its own line, naming where it is. A fault that stops further
+checking (unreadable file, invalid YAML, an `extends` cycle, a top level that is not a
+mapping) SHALL be reported alone. A fault that depends on another (an entry naming a kind
+that a broken `node_kinds` failed to declare) MAY be left out. Within one validation
+entry, a fault in its `message` or pathway binding SHALL NOT keep its body from being
+checked: a `CONSTRAINT` with an unknown placeholder and a retired operator names both. The exit code SHALL stay 2.
+The fuse-profile loader SHALL behave the same way.
+
+Verified by: `cargo test -p latt --locked --test rejected_profiles`
+
+#### Scenario: Three independent faults are reported together
+- **WHEN** a profile declares `VACANCY` with `severity: loud`, `COVERAGE` with a mistyped
+  `target_kinds` key, and `UNTRACED` with `severity: nope`
+- **THEN** the loader refuses the profile, exit 2, and the refusal names all three entries
+
+#### Scenario: Two faults in one entry are reported together
+- **WHEN** a `CONSTRAINT` entry's `message` names an unknown placeholder and its `when`
+  block uses the retired operator `not`
+- **THEN** the loader refuses the profile, exit 2, and the refusal names both
+
+#### Scenario: A blocking fault is reported alone
+- **WHEN** a profile is not valid YAML
+- **THEN** the loader refuses it with the YAML error only
+

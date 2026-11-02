@@ -1,4 +1,4 @@
-"""The writing half of the adapter interface, shared by both adapters.
+"""The writing half of the adapter interface, for the Python openspec adapter.
 
 The reading half is the core's `document.rs`. They are deliberately separate
 implementations of one format; that independence is what the contract is for.
@@ -13,9 +13,9 @@ import sys
 from pathlib import Path
 
 from adapters._profile import load_profile
-from adapters._types import Pathway, PathwayError, Issue, Provenance
+from adapters._types import Issue, Provenance
 
-INTERFACE_VERSION = "1.2"
+INTERFACE_VERSION = "1.4"
 
 
 class DocumentBuilder:
@@ -23,7 +23,7 @@ class DocumentBuilder:
 
     Not a `LatticeGraph`. `add_node` there rejects a repeated ID, which is
     correct for the core but wrong here. The core resolves duplicates at
-    ingest now, and it can only do that if both occurrences reach it. A builder
+    ingest, and it can only do that if both occurrences reach it. A builder
     that deduplicated would drop the second in silence, which is the one thing
     an adapter must never do.
     """
@@ -32,17 +32,29 @@ class DocumentBuilder:
         self._nodes: list[tuple[str, dict]] = []
         self._edges: list[tuple[str, str, str, dict]] = []
         self._issues: list[Issue] = []
-        self._pathways: dict[str, Pathway] = {}
         self._ids: set[str] = set()
 
-    def add_node(self, id: str, kind: str, attrs: dict, provenance: Provenance) -> None:
+    def add_node(self, id: str, kind: str, attrs: dict, provenance: Provenance) -> int:
+        """Append a node entry and return its index, for `add_edge`'s `declared_by`.
+
+        Keep the index from this call: a lookup by ID would find the first
+        occurrence and pin a repeat's edges on the entry ingest keeps.
+        """
         self._nodes.append(
             (id, {"kind": kind, "attrs": attrs, "provenance": provenance})
         )
         self._ids.add(id)
+        return len(self._nodes) - 1
 
-    def add_edge(self, src: str, tgt: str, kind: str, provenance: Provenance) -> None:
-        self._edges.append((src, tgt, kind, {"provenance": provenance}))
+    def add_edge(self, src: str, tgt: str, kind: str, provenance: Provenance,
+                 declared_by: int | None = None) -> None:
+        """Append an edge; `declared_by` is the index of the node entry whose
+        row declared it, so ingest drops it with that entry if the entry repeats
+        an ID."""
+        data: dict = {"provenance": provenance}
+        if declared_by is not None:
+            data["declared_by"] = declared_by
+        self._edges.append((src, tgt, kind, data))
 
     def add_issue(self, issue: Issue) -> None:
         self._issues.append(issue)
@@ -62,24 +74,6 @@ class DocumentBuilder:
                 return dict(data)
         raise KeyError(id)
 
-    def set_pathway(self, name: str, order: list[str], current: str) -> None:
-        """Attach a pathway, raising `PathwayError` if it is not internally valid.
-
-        Validation is the adapter's, per the adapter-contract capability: it
-        read the declaration and can name the file. The core refuses an invalid
-        pathway outright rather than reporting it.
-        """
-        if len(set(order)) != len(order):
-            raise PathwayError(f"pathway '{name}': positions are not unique: {order}")
-        if current not in order:
-            raise PathwayError(
-                f"pathway '{name}': current position '{current}' is not in {order}"
-            )
-        self._pathways[name] = Pathway(name=name, order=list(order), current=current)
-
-    def pathway(self, name: str) -> Pathway | None:
-        return self._pathways.get(name)
-
     @property
     def adapter_issues(self) -> list[Issue]:
         return list(self._issues)
@@ -90,9 +84,6 @@ class DocumentBuilder:
     def iter_edges(self):
         for src, tgt, kind, data in self._edges:
             yield src, tgt, kind, data
-
-    def iter_pathways(self):
-        yield from self._pathways.values()
 
 
 def _provenance(prov: Provenance, root: Path) -> dict:
@@ -135,13 +126,14 @@ def serialize_graph(graph: DocumentBuilder, root: Path) -> dict:
                 "tgt": tgt,
                 "kind": kind,
                 "provenance": _provenance(data["provenance"], root),
+                **({"declared_by": data["declared_by"]}
+                   if "declared_by" in data else {}),
             }
             for src, tgt, kind, data in graph.iter_edges()
         ],
-        "pathways": [
-            {"name": a.name, "order": list(a.order), "current": a.current}
-            for a in graph.iter_pathways()
-        ],
+        # No Python adapter reads a pathway. The key is optional in the
+        # interface document; emitting it empty keeps every document one shape.
+        "pathways": [],
         "findings": [
             {
                 "severity": i.severity.value,
@@ -177,7 +169,15 @@ def run_main(build_graph, argv: list[str] | None = None) -> int:
     # path and the target-relative rendering does not depend on whether the
     # caller spelled `--target` absolutely or relatively.
     target = Path(args.target).resolve()
-    graph = build_graph(profile, target)
+    # A profile that cannot say where the register lives raises ValueError
+    # (`_read.py`); that is a broken setup, so one line and exit 2, not a
+    # traceback. The user's own `--profile` path is unknown here: the core
+    # hands an adapter a scratch copy, so the message names the key, not a file.
+    try:
+        graph = build_graph(profile, target)
+    except ValueError as e:
+        print(f"Error: adapter configuration: {e}", file=sys.stderr)
+        return 2
     json.dump(serialize_graph(graph, target), sys.stdout)
     sys.stdout.write("\n")
     return 0

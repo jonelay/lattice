@@ -1,0 +1,11 @@
+{
+  "group_id": "adapter",
+  "function_id": "md",
+  "value_str": "md-32768-rows",
+  "throughput": {
+    "Elements": 32768
+  },
+  "full_id": "adapter/md/md-32768-rows",
+  "directory_name": "adapter/md/md-32768-rows",
+  "title": "adapter/md/md-32768-rows"
+}

@@ -1,0 +1,11 @@
+{
+  "group_id": "query",
+  "function_id": "reach",
+  "value_str": "located-16384-nodes",
+  "throughput": {
+    "Elements": 16384
+  },
+  "full_id": "query/reach/located-16384-nodes",
+  "directory_name": "query/reach/located-16384-nodes",
+  "title": "query/reach/located-16384-nodes"
+}

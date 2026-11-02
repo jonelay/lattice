@@ -1,0 +1,11 @@
+{
+  "group_id": "document",
+  "function_id": "parse-and-ingest",
+  "value_str": "256-nodes",
+  "throughput": {
+    "Elements": 256
+  },
+  "full_id": "document/parse-and-ingest/256-nodes",
+  "directory_name": "document/parse-and-ingest/256-nodes",
+  "title": "document/parse-and-ingest/256-nodes"
+}

@@ -1,13 +1,13 @@
 # suggest-sidecar Specification
 
 ## Purpose
-`lattice-suggest`, the program that proposes candidate edges the register does not yet
+`latt-suggest`, the program that proposes candidate edges the register does not yet
 declare. It ranks; it never decides, never writes, and never runs as part of a gating check.
 This capability covers its inputs, its offline default, and the embedding baseline every
 later ranker is measured against.
 ## Requirements
 ### Requirement: The sidecar is a program emitting a suggestion document
-`lattice-suggest` SHALL be an executable program. Given the resolved profile and an interface
+`latt-suggest` SHALL be an executable program. Given the resolved profile and an interface
 document, it SHALL write a single suggestion document to stdout and exit 0. A malformed or
 unreadable *input* SHALL become an issue reported on stderr with a still-valid document on
 stdout, or an explicit non-zero exit; it SHALL NOT be dropped in silence.
@@ -63,15 +63,11 @@ subdivide that target's joined text into chunks, embed each chunk, and take the 
 to be the **maximum** cosine similarity over the target's chunks. Where no prefix is declared the
 target offers one undivided text and the score is that single similarity, unchanged.
 
-Pooling SHALL be maximum, and SHALL NOT be configurable. Averaging the per-chunk scores measured
-*below* the unchunked baseline on this register (hit@1 0.416 against 0.507), because it puts every
-irrelevant block back into the number — the dilution chunking exists to escape. The gain is
-specifically max-pooling, not chunking as such.
+Pooling SHALL be maximum, and SHALL NOT be configurable.
 
 Subdivision SHALL apply to targets only. A node kind may be a target of one edge kind and a source
 of another, so chunking is a property of the role, not of the kind; sources SHALL be ranked as one
-undivided text whether or not their kind declares a prefix. This is also the arrangement the
-measurement held fixed.
+undivided text whether or not their kind declares a prefix.
 
 The sidecar SHALL NOT name an attr of its own, and SHALL NOT name a split marker of its own.
 Which attrs carry rankable text, and where a target's text divides, are the profile's
@@ -79,19 +75,10 @@ declarations, because either one chosen by the sidecar is domain vocabulary insi
 that must work against any register — the same reason node kinds and edge kinds are profile
 data. The marker is compared as a literal string prefix of a line, never as a regex.
 
-The population this baseline targets is the set of nodes carrying no edge of the proposed
-kind — the tests with no requirement marker. The output is a ranked review list, not an oracle.
+The population this baseline targets is the set of nodes carrying no edge of the proposed kind.
 
 Chunking a target changes its ranking against **every** edge kind for which it is a legal target,
 not only the one being ranked.
-
-Measured against this register's 219 citation labels, one vector per requirement put the true
-requirement first for 51% of unmarked tests and never surfaced 8% of them in a 20-deep list;
-chunking with max-pooling moves those to 63% and 2% (`notes/chunking-s40/RESULTS.md`). The gain is
-granularity, not semantic alignment — a control cutting the same documents into the same number of
-chunks at arbitrary boundaries scores within one label — but a fully generic fixed-window splitter
-measured 0.04–0.09 hit@1 worse, which is why the cut points are the register's own and the profile
-names them.
 
 Verified by: `.venv/bin/python -m pytest tests/test_suggest.py -k "rank or chunk"`
 
@@ -161,20 +148,34 @@ a GPU, and SHALL report plainly that no backend is available rather than failing
 silently emitting an empty document. Any backend requiring a network or an accelerator SHALL
 be opt-in on the command line.
 
-This keeps CI hermetic and keeps the real-data gate runnable on a host that cannot reach the
-embedding host. The suggestion path is advisory, so it must never be the reason a check cannot
-run.
-
 Verified by: `.venv/bin/python -m pytest tests/test_suggest.py -k offline`
 
 #### Scenario: No backend configured
 - **WHEN** the sidecar runs with no embedding backend named
 - **THEN** it reports that no backend is configured and emits a document with zero
-  suggestions, distinguishable from a backend that ran and found nothing
+  suggestions whose `unranked` counts every candidate source, distinguishable from a backend
+  that ran and found nothing
 
 #### Scenario: No network on the default path
 - **WHEN** the sidecar runs with no backend named and no network is reachable
 - **THEN** it exits 0
+
+### Requirement: The document counts the sources left unranked
+The sidecar SHALL write `unranked` in every document: the number of distinct candidate source
+IDs that no suggestion in the document names. With no backend that is every candidate source;
+with one, it counts the sources excluded as textless or left with no legal target. stderr
+alone is not enough: a script reading only stdout must be able to tell an unranked run from
+one that ranked and found nothing.
+
+Verified by: `.venv/bin/python -m pytest tests/test_suggest.py -k "unranked or offline or program"`
+
+#### Scenario: Every source is attributed
+- **WHEN** every candidate source already carries an edge of the ranked kind
+- **THEN** the document's `unranked` is 0
+
+#### Scenario: A ranked run excludes a textless source
+- **WHEN** a backend ranks the textful sources and one source carries no text
+- **THEN** the document's `unranked` is 1 and its suggestions name only the textful sources
 
 ### Requirement: A node with no text is reported and excluded, never silently ranked
 A candidate node offering no text to rank on — no non-empty value for any attr the profile
@@ -185,8 +186,8 @@ empty, the sidecar SHALL emit a valid document with zero suggestions, report why
 exit 0.
 
 A textless node has no defined input to the ranking baseline, so any score computed for
-it is fabricated — the S35 live run produced 4,520 suggestions all at cosine 1.0000 from
-a register whose profile declared no rankable text, indistinguishable on stdout from a
+it is fabricated — a live run on a register whose profile declared no rankable text
+produced 4,520 suggestions, all at cosine 1.0000, indistinguishable on stdout from a
 strong ranking. Absent text is not malformed input, so the unreadable-input requirement
 does not cover it; it needs its own report. Exclusion happens before the embed call so
 an all-textless register never needs a backend at all.
@@ -240,3 +241,10 @@ Verified by: `.venv/bin/python -m pytest tests/test_suggest.py -k duplicat`
 
 - **WHEN** any ID occurs more than once among the candidates
 - **THEN** stderr reports how many occurrences were merged
+
+#### Scenario: A duplicated ID takes the kind the core keeps
+
+- **WHEN** an ID is declared first under a kind the edge kind does not allow, and
+  again under one it does
+- **THEN** the ID is not a candidate: the core keeps the first declaration, and a
+  pairing legal only for the later one would be an `EDGE_CONSTRAINT` once ingested

@@ -1,0 +1,36 @@
+name: ci-consumer
+profile_version: "1.0.0"
+
+adapter:
+  native: md
+  paths:
+    files: ["*.md"]
+  table:
+    id_column: "ID"
+    column_map:
+      "Description": "summary"
+      "Status": "status"
+    edge_columns:
+      "Traces To": "traces_to"
+
+# Deliberately unloadable: an unclosed flow sequence.
+node_kinds: [requirement
+  requirement:
+    id_pattern: "^REQ-[0-9]+$"
+    summary_attr: summary
+    orphan_ok: true
+    attrs:
+      summary: { type: string, required: true }
+      status: { type: string }
+
+edge_kinds:
+  traces_to:
+    allowed:
+      - [requirement, requirement]
+
+validations:
+  - COVERAGE:
+      target_kind: requirement
+      edge_kind: traces_to
+      where: { status: { eq: child } }
+      severity: warning

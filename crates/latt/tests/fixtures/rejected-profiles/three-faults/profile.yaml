@@ -1,0 +1,12 @@
+name: t
+profile_version: "1.0.0"
+node_kinds:
+  req:
+    id_pattern: "^REQ-\\d+$"
+edge_kinds:
+  derives:
+    allowed: [[req, req]]
+validations:
+  - VACANCY: {severity: loud}
+  - COVERAGE: {target_kinds: req, edge_kind: derives}
+  - UNTRACED: {severity: nope}

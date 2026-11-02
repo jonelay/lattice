@@ -1,0 +1,1824 @@
+## nodes  []
+1      -      unchanged
+2      -      view NodeList -> Tree; tree.root None -> Some("alpha/one")
+3      -      view NodeList -> Findings
+4      -      view NodeList -> Provenance; prov.root None -> Some("alpha/one")
+5      -      view NodeList -> Graph; graph.center None -> Some("alpha/one"); graph.cursor 0 -> 1
+q      QUIT   unchanged
+Q      QUIT   unchanged
+/      -      mode Normal -> Search
+n      -      unchanged
+N      -      unchanged
+p      -      preview None -> Some("registers/alpha.toml+2")
+f      -      mode Normal -> KindFilter
+F      -      unchanged
+d      -      unchanged
+c      -      status None -> Some("no comment action for kind item")
+C      -      unchanged
+g      -      unchanged
+G      -      nodes.cursor 0 -> 20
+s      -      status None -> Some("no state action for kind item")
+t      -      status None -> Some("no tag action for kind item")
+h      -      unchanged
+l      -      detail false -> true
+H      -      unchanged
+L      -      unchanged
+j      -      nodes.cursor 0 -> 1
+k      -      unchanged
+Space  -      unchanged
+-      -      unchanged
++      -      unchanged
+=      -      unchanged
+?      -      mode Normal -> Help
+r      RELOAD unchanged
+S      -      schema false -> true
+o      -      nodes.sort kind -> severity
+.      -      suppressed false -> true
+Esc    -      unchanged
+Enter  -      detail false -> true
+Tab    -      unchanged
+BS     -      unchanged
+Left   -      unchanged
+Right  -      detail false -> true
+Up     -      unchanged
+Down   -      nodes.cursor 0 -> 1
+PgUp   -      unchanged
+PgDn   -      nodes.cursor 0 -> 20
+Home   -      unchanged
+End    -      nodes.cursor 0 -> 20
+z      -      unchanged
+R      RELOAD+P unchanged
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      nodes.cursor 0 -> 20
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+
+## nodes/detail  [Enter]
+1      -      detail true -> false
+2      -      view NodeList -> Tree; detail true -> false; tree.root None -> Some("alpha/one")
+3      -      view NodeList -> Findings; detail true -> false
+4      -      view NodeList -> Provenance; detail true -> false; prov.root None -> Some("alpha/one")
+5      -      view NodeList -> Graph; detail true -> false; graph.center None -> Some("alpha/one"); graph.cursor 0 -> 1
+q      -      detail true -> false
+Q      QUIT   unchanged
+/      -      mode Normal -> Search
+n      -      unchanged
+N      -      unchanged
+p      -      preview None -> Some("registers/alpha.toml+2")
+f      -      mode Normal -> KindFilter
+F      -      unchanged
+d      -      unchanged
+c      -      status None -> Some("no comment action for kind item")
+C      -      unchanged
+g      -      unchanged
+G      -      nodes.cursor 0 -> 20
+s      -      status None -> Some("no state action for kind item")
+t      -      status None -> Some("no tag action for kind item")
+h      -      detail true -> false
+l      -      focus false -> true
+H      -      unchanged
+L      -      unchanged
+j      -      nodes.cursor 0 -> 1
+k      -      unchanged
+Space  -      unchanged
+-      -      unchanged
++      -      unchanged
+=      -      unchanged
+?      -      mode Normal -> Help
+r      RELOAD unchanged
+S      -      schema false -> true
+o      -      nodes.sort kind -> severity
+.      -      suppressed false -> true
+Esc    -      detail true -> false
+Enter  -      unchanged
+Tab    -      focus false -> true
+BS     -      unchanged
+Left   -      detail true -> false
+Right  -      focus false -> true
+Up     -      unchanged
+Down   -      nodes.cursor 0 -> 1
+PgUp   -      unchanged
+PgDn   -      nodes.cursor 0 -> 20
+Home   -      unchanged
+End    -      nodes.cursor 0 -> 20
+z      -      unchanged
+R      RELOAD+P unchanged
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      nodes.cursor 0 -> 20
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+
+## nodes/detail-focus  [Enter Tab]
+1      -      detail true -> false; focus true -> false
+2      -      view NodeList -> Tree; detail true -> false; focus true -> false; tree.root None -> Some("alpha/one")
+3      -      view NodeList -> Findings; detail true -> false; focus true -> false
+4      -      view NodeList -> Provenance; detail true -> false; focus true -> false; prov.root None -> Some("alpha/one")
+5      -      view NodeList -> Graph; detail true -> false; focus true -> false; graph.center None -> Some("alpha/one"); graph.cursor 0 -> 1
+q      -      focus true -> false
+Q      QUIT   unchanged
+/      -      mode Normal -> Search
+n      -      unchanged
+N      -      unchanged
+p      -      preview None -> Some("registers/alpha.toml+2")
+f      -      status None -> Some("kind filter: it filters the list; focus the list first")
+F      -      unchanged
+d      -      unchanged
+c      -      status None -> Some("no comment action for kind item")
+C      -      unchanged
+g      -      unchanged
+G      -      detail.cursor 0 -> 10
+s      -      status None -> Some("no state action for kind item")
+t      -      status None -> Some("no tag action for kind item")
+h      -      focus true -> false
+l      -      unchanged
+H      -      unchanged
+L      -      unchanged
+j      -      detail.cursor 0 -> 1
+k      -      unchanged
+Space  -      unchanged
+-      -      unchanged
++      -      unchanged
+=      -      unchanged
+?      -      mode Normal -> Help
+r      RELOAD unchanged
+S      -      schema false -> true
+o      -      nodes.sort kind -> severity
+.      -      suppressed false -> true
+Esc    -      focus true -> false
+Enter  -      unchanged
+Tab    -      focus true -> false
+BS     -      unchanged
+Left   -      focus true -> false
+Right  -      unchanged
+Up     -      unchanged
+Down   -      detail.cursor 0 -> 1
+PgUp   -      unchanged
+PgDn   -      detail.cursor 0 -> 10
+Home   -      unchanged
+End    -      detail.cursor 0 -> 10
+z      -      unchanged
+R      RELOAD+P unchanged
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      detail.cursor 0 -> 10
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+
+## nodes/followed-edge  [Enter Tab j j j j j j Enter]
+1      -      detail true -> false; focus true -> false; stack ["beta<NodeList@0"] -> []
+2      -      view NodeList -> Tree; detail true -> false; focus true -> false; stack ["beta<NodeList@0"] -> []; tree.root None -> Some("beta")
+3      -      view NodeList -> Findings; detail true -> false; focus true -> false; stack ["beta<NodeList@0"] -> []
+4      -      view NodeList -> Provenance; detail true -> false; focus true -> false; stack ["beta<NodeList@0"] -> []; prov.root None -> Some("beta")
+5      -      view NodeList -> Graph; detail true -> false; focus true -> false; stack ["beta<NodeList@0"] -> []; graph.center None -> Some("beta"); graph.cursor 0 -> 2
+q      -      detail.cursor 0 -> 6; stack ["beta<NodeList@0"] -> []
+Q      QUIT   unchanged
+/      -      mode Normal -> Search
+n      -      unchanged
+N      -      unchanged
+p      -      preview None -> Some("registers/beta.toml+0")
+f      -      status None -> Some("kind filter: it filters the list; focus the list first")
+F      -      unchanged
+d      -      unchanged
+c      -      status None -> Some("no comment action for kind register")
+C      -      unchanged
+g      -      unchanged
+G      -      detail.cursor 0 -> 7
+s      -      status None -> Some("no state action for kind register")
+t      -      status None -> Some("no tag action for kind register")
+h      -      detail.cursor 0 -> 6; stack ["beta<NodeList@0"] -> []
+l      -      unchanged
+H      -      unchanged
+L      -      unchanged
+j      -      detail.cursor 0 -> 1
+k      -      unchanged
+Space  -      unchanged
+-      -      unchanged
++      -      unchanged
+=      -      unchanged
+?      -      mode Normal -> Help
+r      RELOAD unchanged
+S      -      schema false -> true
+o      -      nodes.sort kind -> severity
+.      -      suppressed false -> true
+Esc    -      detail.cursor 0 -> 6; stack ["beta<NodeList@0"] -> []
+Enter  -      unchanged
+Tab    -      focus true -> false
+BS     -      unchanged
+Left   -      detail.cursor 0 -> 6; stack ["beta<NodeList@0"] -> []
+Right  -      unchanged
+Up     -      unchanged
+Down   -      detail.cursor 0 -> 1
+PgUp   -      unchanged
+PgDn   -      detail.cursor 0 -> 7
+Home   -      unchanged
+End    -      detail.cursor 0 -> 7
+z      -      unchanged
+R      RELOAD+P unchanged
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      detail.cursor 0 -> 7
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+
+## nodes/schema  [S]
+1      -      unchanged
+2      -      view NodeList -> Tree; tree.root None -> Some("alpha/one")
+3      -      view NodeList -> Findings
+4      -      view NodeList -> Provenance; prov.root None -> Some("alpha/one")
+5      -      view NodeList -> Graph; graph.center None -> Some("alpha/one"); graph.cursor 0 -> 1
+q      QUIT   unchanged
+Q      QUIT   unchanged
+/      -      mode Normal -> Search
+n      -      unchanged
+N      -      unchanged
+p      -      preview None -> Some("registers/alpha.toml+2")
+f      -      status None -> Some("kind filter: not in the schema view")
+F      -      unchanged
+d      -      unchanged
+c      -      status None -> Some("no node selected")
+C      -      unchanged
+g      -      unchanged
+G      -      schema.cursor 0 -> 5
+s      -      status None -> Some("no node selected")
+t      -      status None -> Some("no node selected")
+h      -      unchanged
+l      -      unchanged
+H      -      unchanged
+L      -      unchanged
+j      -      schema.cursor 0 -> 1
+k      -      unchanged
+Space  -      unchanged
+-      -      unchanged
++      -      unchanged
+=      -      unchanged
+?      -      mode Normal -> Help
+r      RELOAD unchanged
+S      -      schema true -> false
+o      -      nodes.sort kind -> severity
+.      -      suppressed false -> true
+Esc    -      unchanged
+Enter  -      unchanged
+Tab    -      unchanged
+BS     -      unchanged
+Left   -      unchanged
+Right  -      unchanged
+Up     -      unchanged
+Down   -      schema.cursor 0 -> 1
+PgUp   -      unchanged
+PgDn   -      schema.cursor 0 -> 5
+Home   -      unchanged
+End    -      schema.cursor 0 -> 5
+z      -      unchanged
+R      RELOAD+P unchanged
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      schema.cursor 0 -> 5
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+
+## findings  [3]
+1      -      view Findings -> NodeList
+2      -      view Findings -> Tree; tree.root None -> Some("alpha/two")
+3      -      unchanged
+4      -      view Findings -> Provenance; prov.root None -> Some("alpha/two")
+5      -      view Findings -> Graph; graph.center None -> Some("alpha/two")
+q      QUIT   unchanged
+Q      QUIT   unchanged
+/      -      mode Normal -> Search
+n      -      unchanged
+N      -      unchanged
+p      -      preview None -> Some("registers/alpha.toml+8")
+f      -      mode Normal -> KindFilter
+F      -      unchanged
+d      -      unchanged
+c      -      status None -> Some("no comment action for kind item")
+C      -      unchanged
+g      -      unchanged
+G      -      findings.cursor 0 -> 28
+s      -      status None -> Some("no state action for kind item")
+t      -      status None -> Some("no tag action for kind item")
+h      -      unchanged
+l      -      view Findings -> NodeList; detail false -> true; focus false -> true; stack [] -> ["alpha/two<Findings@0"]; nodes.cursor 0 -> 1
+H      -      unchanged
+L      -      unchanged
+j      -      findings.cursor 0 -> 1
+k      -      unchanged
+Space  -      unchanged
+-      -      unchanged
++      -      unchanged
+=      -      unchanged
+?      -      mode Normal -> Help
+r      RELOAD unchanged
+S      -      unchanged
+o      -      findings.sort kind -> severity
+.      -      suppressed false -> true
+Esc    -      unchanged
+Enter  -      view Findings -> NodeList; detail false -> true; focus false -> true; stack [] -> ["alpha/two<Findings@0"]; nodes.cursor 0 -> 1
+Tab    -      unchanged
+BS     -      unchanged
+Left   -      unchanged
+Right  -      view Findings -> NodeList; detail false -> true; focus false -> true; stack [] -> ["alpha/two<Findings@0"]; nodes.cursor 0 -> 1
+Up     -      unchanged
+Down   -      findings.cursor 0 -> 1
+PgUp   -      unchanged
+PgDn   -      findings.cursor 0 -> 20
+Home   -      unchanged
+End    -      findings.cursor 0 -> 28
+z      -      unchanged
+R      RELOAD+P unchanged
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      findings.cursor 0 -> 20
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+
+## findings/jumped  [3 Enter]
+1      -      detail true -> false; focus true -> false; stack ["alpha/two<Findings@0"] -> []
+2      -      view NodeList -> Tree; detail true -> false; focus true -> false; stack ["alpha/two<Findings@0"] -> []; tree.root None -> Some("alpha/two")
+3      -      view NodeList -> Findings; detail true -> false; focus true -> false; stack ["alpha/two<Findings@0"] -> []
+4      -      view NodeList -> Provenance; detail true -> false; focus true -> false; stack ["alpha/two<Findings@0"] -> []; prov.root None -> Some("alpha/two")
+5      -      view NodeList -> Graph; detail true -> false; focus true -> false; stack ["alpha/two<Findings@0"] -> []; graph.center None -> Some("alpha/two")
+q      -      view NodeList -> Findings; detail true -> false; focus true -> false; stack ["alpha/two<Findings@0"] -> []
+Q      QUIT   unchanged
+/      -      mode Normal -> Search
+n      -      unchanged
+N      -      unchanged
+p      -      preview None -> Some("registers/alpha.toml+8")
+f      -      status None -> Some("kind filter: it filters the list; focus the list first")
+F      -      unchanged
+d      -      unchanged
+c      -      status None -> Some("no comment action for kind item")
+C      -      unchanged
+g      -      unchanged
+G      -      detail.cursor 0 -> 13
+s      -      status None -> Some("no state action for kind item")
+t      -      status None -> Some("no tag action for kind item")
+h      -      view NodeList -> Findings; detail true -> false; focus true -> false; stack ["alpha/two<Findings@0"] -> []
+l      -      unchanged
+H      -      unchanged
+L      -      unchanged
+j      -      detail.cursor 0 -> 1
+k      -      unchanged
+Space  -      unchanged
+-      -      unchanged
++      -      unchanged
+=      -      unchanged
+?      -      mode Normal -> Help
+r      RELOAD unchanged
+S      -      schema false -> true
+o      -      nodes.sort kind -> severity
+.      -      suppressed false -> true
+Esc    -      view NodeList -> Findings; detail true -> false; focus true -> false; stack ["alpha/two<Findings@0"] -> []
+Enter  -      unchanged
+Tab    -      focus true -> false
+BS     -      unchanged
+Left   -      view NodeList -> Findings; detail true -> false; focus true -> false; stack ["alpha/two<Findings@0"] -> []
+Right  -      unchanged
+Up     -      unchanged
+Down   -      detail.cursor 0 -> 1
+PgUp   -      unchanged
+PgDn   -      detail.cursor 0 -> 13
+Home   -      unchanged
+End    -      detail.cursor 0 -> 13
+z      -      unchanged
+R      RELOAD+P unchanged
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      detail.cursor 0 -> 13
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+
+## tree  [2]
+1      -      view Tree -> NodeList
+2      -      unchanged
+3      -      view Tree -> Findings
+4      -      view Tree -> Provenance; prov.root None -> Some("alpha/one")
+5      -      view Tree -> Graph; graph.center None -> Some("alpha/one"); graph.cursor 0 -> 1
+q      QUIT   unchanged
+Q      QUIT   unchanged
+/      -      mode Normal -> Search
+n      -      unchanged
+N      -      unchanged
+p      -      preview None -> Some("registers/alpha.toml+2")
+f      -      mode Normal -> KindFilter
+F      -      mode Normal -> EdgeKindFilter
+d      -      tree.direction Forward -> Reverse
+c      -      status None -> Some("no comment action for kind item")
+C      -      unchanged
+g      -      unchanged
+G      -      unchanged
+s      -      status None -> Some("no state action for kind item")
+t      -      status None -> Some("no tag action for kind item")
+h      -      unchanged
+l      -      detail false -> true; focus false -> true; stack [] -> ["alpha/one<Tree@0"]
+H      -      unchanged
+L      -      unchanged
+j      -      unchanged
+k      -      unchanged
+Space  -      tree.expanded [] -> [0]
+-      -      unchanged
++      -      unchanged
+=      -      unchanged
+?      -      mode Normal -> Help
+r      RELOAD unchanged
+S      -      unchanged
+o      -      unchanged
+.      -      suppressed false -> true
+Esc    -      unchanged
+Enter  -      detail false -> true; focus false -> true; stack [] -> ["alpha/one<Tree@0"]
+Tab    -      unchanged
+BS     -      unchanged
+Left   -      unchanged
+Right  -      detail false -> true; focus false -> true; stack [] -> ["alpha/one<Tree@0"]
+Up     -      unchanged
+Down   -      unchanged
+PgUp   -      unchanged
+PgDn   -      unchanged
+Home   -      unchanged
+End    -      unchanged
+z      -      tree.scc_collapse false -> true
+R      RELOAD+P unchanged
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      unchanged
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+
+## tree/expanded  [2 Space]
+1      -      view Tree -> NodeList
+2      -      tree.expanded [0] -> []
+3      -      view Tree -> Findings
+4      -      view Tree -> Provenance; prov.root None -> Some("alpha/one")
+5      -      view Tree -> Graph; graph.center None -> Some("alpha/one"); graph.cursor 0 -> 1
+q      QUIT   unchanged
+Q      QUIT   unchanged
+/      -      mode Normal -> Search
+n      -      unchanged
+N      -      unchanged
+p      -      preview None -> Some("registers/alpha.toml+2")
+f      -      mode Normal -> KindFilter
+F      -      mode Normal -> EdgeKindFilter
+d      -      tree.direction Forward -> Reverse; tree.expanded [0] -> []
+c      -      status None -> Some("no comment action for kind item")
+C      -      unchanged
+g      -      unchanged
+G      -      tree.cursor 0 -> 2
+s      -      status None -> Some("no state action for kind item")
+t      -      status None -> Some("no tag action for kind item")
+h      -      tree.expanded [0] -> []
+l      -      detail false -> true; focus false -> true; stack [] -> ["alpha/one<Tree@0"]
+H      -      unchanged
+L      -      unchanged
+j      -      tree.cursor 0 -> 1
+k      -      unchanged
+Space  -      tree.expanded [0] -> []
+-      -      tree.expanded [0] -> []
++      -      unchanged
+=      -      unchanged
+?      -      mode Normal -> Help
+r      RELOAD unchanged
+S      -      unchanged
+o      -      unchanged
+.      -      suppressed false -> true
+Esc    -      unchanged
+Enter  -      detail false -> true; focus false -> true; stack [] -> ["alpha/one<Tree@0"]
+Tab    -      unchanged
+BS     -      unchanged
+Left   -      tree.expanded [0] -> []
+Right  -      detail false -> true; focus false -> true; stack [] -> ["alpha/one<Tree@0"]
+Up     -      unchanged
+Down   -      tree.cursor 0 -> 1
+PgUp   -      unchanged
+PgDn   -      tree.cursor 0 -> 2
+Home   -      unchanged
+End    -      tree.cursor 0 -> 2
+z      -      tree.scc_collapse false -> true
+R      RELOAD+P unchanged
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      tree.cursor 0 -> 2
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+
+## tree/stacked-detail-focus  [2 Space j Enter]
+1      -      view Tree -> NodeList; detail true -> false; focus true -> false; stack ["beta<Tree@1"] -> []
+2      -      tree.root Some("alpha/one") -> Some("beta"); tree.expanded [0] -> []; tree.cursor 1 -> 0
+3      -      view Tree -> Findings; detail true -> false; focus true -> false; stack ["beta<Tree@1"] -> []
+4      -      view Tree -> Provenance; detail true -> false; focus true -> false; stack ["beta<Tree@1"] -> []; prov.root None -> Some("beta")
+5      -      view Tree -> Graph; detail true -> false; focus true -> false; stack ["beta<Tree@1"] -> []; graph.center None -> Some("beta"); graph.cursor 0 -> 2
+q      -      detail true -> false; focus true -> false; stack ["beta<Tree@1"] -> []
+Q      QUIT   unchanged
+/      -      mode Normal -> Search
+n      -      unchanged
+N      -      unchanged
+p      -      preview None -> Some("registers/beta.toml+0")
+f      -      status None -> Some("kind filter: it filters the list; focus the list first")
+F      -      mode Normal -> EdgeKindFilter
+d      -      tree.direction Forward -> Reverse; tree.expanded [0] -> []; tree.cursor 1 -> 0
+c      -      status None -> Some("no comment action for kind register")
+C      -      unchanged
+g      -      unchanged
+G      -      detail.cursor 0 -> 7
+s      -      status None -> Some("no state action for kind register")
+t      -      status None -> Some("no tag action for kind register")
+h      -      detail true -> false; focus true -> false; stack ["beta<Tree@1"] -> []
+l      -      unchanged
+H      -      unchanged
+L      -      unchanged
+j      -      detail.cursor 0 -> 1
+k      -      unchanged
+Space  -      unchanged
+-      -      unchanged
++      -      unchanged
+=      -      unchanged
+?      -      mode Normal -> Help
+r      RELOAD unchanged
+S      -      unchanged
+o      -      unchanged
+.      -      suppressed false -> true
+Esc    -      detail true -> false; focus true -> false; stack ["beta<Tree@1"] -> []
+Enter  -      unchanged
+Tab    -      focus true -> false
+BS     -      unchanged
+Left   -      detail true -> false; focus true -> false; stack ["beta<Tree@1"] -> []
+Right  -      unchanged
+Up     -      unchanged
+Down   -      detail.cursor 0 -> 1
+PgUp   -      unchanged
+PgDn   -      detail.cursor 0 -> 7
+Home   -      unchanged
+End    -      detail.cursor 0 -> 7
+z      -      tree.scc_collapse false -> true
+R      RELOAD+P unchanged
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      detail.cursor 0 -> 7
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+
+## tree/stacked-list-focus  [2 Space j Enter Tab]
+1      -      view Tree -> NodeList; detail true -> false; stack ["beta<Tree@1"] -> []
+2      -      tree.root Some("alpha/one") -> Some("beta"); tree.expanded [0] -> []; tree.cursor 1 -> 0
+3      -      view Tree -> Findings; detail true -> false; stack ["beta<Tree@1"] -> []
+4      -      view Tree -> Provenance; detail true -> false; stack ["beta<Tree@1"] -> []; prov.root None -> Some("beta")
+5      -      view Tree -> Graph; detail true -> false; stack ["beta<Tree@1"] -> []; graph.center None -> Some("beta"); graph.cursor 0 -> 2
+q      -      detail true -> false; stack ["beta<Tree@1"] -> []
+Q      QUIT   unchanged
+/      -      mode Normal -> Search
+n      -      unchanged
+N      -      unchanged
+p      -      preview None -> Some("registers/beta.toml+0")
+f      -      mode Normal -> KindFilter
+F      -      mode Normal -> EdgeKindFilter
+d      -      tree.direction Forward -> Reverse; tree.expanded [0] -> []; tree.cursor 1 -> 0
+c      -      status None -> Some("no comment action for kind register")
+C      -      unchanged
+g      -      tree.cursor 1 -> 0
+G      -      tree.cursor 1 -> 2
+s      -      status None -> Some("no state action for kind register")
+t      -      status None -> Some("no tag action for kind register")
+h      -      detail true -> false; stack ["beta<Tree@1"] -> []
+l      -      focus false -> true
+H      -      unchanged
+L      -      unchanged
+j      -      tree.cursor 1 -> 2
+k      -      tree.cursor 1 -> 0
+Space  -      tree.expanded [0] -> [0, 1]
+-      -      unchanged
++      -      unchanged
+=      -      unchanged
+?      -      mode Normal -> Help
+r      RELOAD unchanged
+S      -      unchanged
+o      -      unchanged
+.      -      suppressed false -> true
+Esc    -      detail true -> false; stack ["beta<Tree@1"] -> []
+Enter  -      focus false -> true; stack ["beta<Tree@1"] -> ["beta<Tree@1", "beta<Tree@1"]
+Tab    -      focus false -> true
+BS     -      unchanged
+Left   -      detail true -> false; stack ["beta<Tree@1"] -> []
+Right  -      focus false -> true
+Up     -      tree.cursor 1 -> 0
+Down   -      tree.cursor 1 -> 2
+PgUp   -      tree.cursor 1 -> 0
+PgDn   -      tree.cursor 1 -> 2
+Home   -      tree.cursor 1 -> 0
+End    -      tree.cursor 1 -> 2
+z      -      tree.scc_collapse false -> true
+R      RELOAD+P unchanged
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      tree.cursor 1 -> 2
+C-u    -      tree.cursor 1 -> 0
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+
+## provenance  [4]
+1      -      view Provenance -> NodeList
+2      -      view Provenance -> Tree; tree.root None -> Some("alpha/one")
+3      -      view Provenance -> Findings
+4      -      unchanged
+5      -      view Provenance -> Graph; graph.center None -> Some("alpha/one"); graph.cursor 0 -> 1
+q      QUIT   unchanged
+Q      QUIT   unchanged
+/      -      mode Normal -> Search
+n      -      unchanged
+N      -      unchanged
+p      -      preview None -> Some("registers/alpha.toml+2")
+f      -      status None -> Some("kind filter: not in Provenance; F filters edge kinds")
+F      -      mode Normal -> EdgeKindFilter
+d      -      prov.direction Forward -> Reverse
+c      -      status None -> Some("no comment action for kind item")
+C      -      unchanged
+g      -      unchanged
+G      -      prov.cursor 0 -> 3
+s      -      status None -> Some("no state action for kind item")
+t      -      status None -> Some("no tag action for kind item")
+h      -      unchanged
+l      -      detail false -> true; focus false -> true; stack [] -> ["alpha/one<Provenance@0"]
+H      -      unchanged
+L      -      prov.h_scroll 0 -> 1
+j      -      prov.cursor 0 -> 1
+k      -      unchanged
+Space  -      unchanged
+-      -      unchanged
++      -      unchanged
+=      -      unchanged
+?      -      mode Normal -> Help
+r      RELOAD unchanged
+S      -      unchanged
+o      -      unchanged
+.      -      suppressed false -> true
+Esc    -      unchanged
+Enter  -      detail false -> true; focus false -> true; stack [] -> ["alpha/one<Provenance@0"]
+Tab    -      unchanged
+BS     -      unchanged
+Left   -      unchanged
+Right  -      detail false -> true; focus false -> true; stack [] -> ["alpha/one<Provenance@0"]
+Up     -      unchanged
+Down   -      prov.cursor 0 -> 1
+PgUp   -      unchanged
+PgDn   -      prov.cursor 0 -> 3
+Home   -      unchanged
+End    -      prov.cursor 0 -> 3
+z      -      unchanged
+R      RELOAD+P unchanged
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      prov.cursor 0 -> 3
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+
+## provenance/stacked  [4 Enter]
+1      -      view Provenance -> NodeList; detail true -> false; focus true -> false; stack ["alpha/one<Provenance@0"] -> []
+2      -      view Provenance -> Tree; detail true -> false; focus true -> false; stack ["alpha/one<Provenance@0"] -> []; tree.root None -> Some("alpha/one")
+3      -      view Provenance -> Findings; detail true -> false; focus true -> false; stack ["alpha/one<Provenance@0"] -> []
+4      -      detail true -> false; focus true -> false; stack ["alpha/one<Provenance@0"] -> []
+5      -      view Provenance -> Graph; detail true -> false; focus true -> false; stack ["alpha/one<Provenance@0"] -> []; graph.center None -> Some("alpha/one"); graph.cursor 0 -> 1
+q      -      detail true -> false; focus true -> false; stack ["alpha/one<Provenance@0"] -> []
+Q      QUIT   unchanged
+/      -      mode Normal -> Search
+n      -      unchanged
+N      -      unchanged
+p      -      preview None -> Some("registers/alpha.toml+2")
+f      -      status None -> Some("kind filter: not in Provenance; F filters edge kinds")
+F      -      mode Normal -> EdgeKindFilter
+d      -      prov.direction Forward -> Reverse
+c      -      status None -> Some("no comment action for kind item")
+C      -      unchanged
+g      -      unchanged
+G      -      detail.cursor 0 -> 10
+s      -      status None -> Some("no state action for kind item")
+t      -      status None -> Some("no tag action for kind item")
+h      -      detail true -> false; focus true -> false; stack ["alpha/one<Provenance@0"] -> []
+l      -      unchanged
+H      -      unchanged
+L      -      unchanged
+j      -      detail.cursor 0 -> 1
+k      -      unchanged
+Space  -      unchanged
+-      -      unchanged
++      -      unchanged
+=      -      unchanged
+?      -      mode Normal -> Help
+r      RELOAD unchanged
+S      -      unchanged
+o      -      unchanged
+.      -      suppressed false -> true
+Esc    -      detail true -> false; focus true -> false; stack ["alpha/one<Provenance@0"] -> []
+Enter  -      unchanged
+Tab    -      focus true -> false
+BS     -      unchanged
+Left   -      detail true -> false; focus true -> false; stack ["alpha/one<Provenance@0"] -> []
+Right  -      unchanged
+Up     -      unchanged
+Down   -      detail.cursor 0 -> 1
+PgUp   -      unchanged
+PgDn   -      detail.cursor 0 -> 10
+Home   -      unchanged
+End    -      detail.cursor 0 -> 10
+z      -      unchanged
+R      RELOAD+P unchanged
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      detail.cursor 0 -> 10
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+
+## graph  [5]
+1      -      view Graph -> NodeList
+2      -      view Graph -> Tree; tree.root None -> Some("alpha/one")
+3      -      view Graph -> Findings
+4      -      view Graph -> Provenance; prov.root None -> Some("alpha/one")
+5      -      unchanged
+q      QUIT   unchanged
+Q      QUIT   unchanged
+/      -      mode Normal -> Search
+n      -      unchanged
+N      -      unchanged
+p      -      preview None -> Some("registers/alpha.toml+2")
+f      -      mode Normal -> KindFilter
+F      -      mode Normal -> EdgeKindFilter
+d      -      graph.direction Forward -> Reverse
+c      -      status None -> Some("no comment action for kind item")
+C      -      graph.columns Default -> Full
+g      -      graph.cursor 1 -> 0
+G      -      graph.cursor 1 -> 4
+s      -      status None -> Some("no state action for kind item")
+t      -      status None -> Some("no tag action for kind item")
+h      -      unchanged
+l      -      unchanged
+H      -      unchanged
+L      -      unchanged
+j      -      graph.cursor 1 -> 2
+k      -      graph.cursor 1 -> 0
+Space  -      unchanged
+-      -      graph.radius 2 -> 1
++      -      graph.radius 2 -> 3
+=      -      graph.radius 2 -> 3
+?      -      mode Normal -> Help
+r      RELOAD unchanged
+S      -      unchanged
+o      -      unchanged
+.      -      suppressed false -> true
+Esc    -      unchanged
+Enter  -      unchanged
+Tab    -      detail false -> true; focus false -> true; stack [] -> ["alpha/one<Graph@1"]
+BS     -      unchanged
+Left   -      unchanged
+Right  -      unchanged
+Up     -      graph.cursor 1 -> 0
+Down   -      graph.cursor 1 -> 2
+PgUp   -      graph.cursor 1 -> 0
+PgDn   -      graph.cursor 1 -> 4
+Home   -      graph.cursor 1 -> 0
+End    -      graph.cursor 1 -> 4
+z      -      unchanged
+R      RELOAD+P unchanged
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      graph.cursor 1 -> 4
+C-u    -      graph.cursor 1 -> 0
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+
+## graph/recentered  [5 g Enter]
+1      -      view Graph -> NodeList
+2      -      view Graph -> Tree; tree.root None -> Some("alpha/two")
+3      -      view Graph -> Findings
+4      -      view Graph -> Provenance; prov.root None -> Some("alpha/two")
+5      -      unchanged
+q      QUIT   unchanged
+Q      QUIT   unchanged
+/      -      mode Normal -> Search
+n      -      unchanged
+N      -      unchanged
+p      -      preview None -> Some("registers/alpha.toml+8")
+f      -      mode Normal -> KindFilter
+F      -      mode Normal -> EdgeKindFilter
+d      -      graph.direction Forward -> Reverse
+c      -      status None -> Some("no comment action for kind item")
+C      -      graph.columns Default -> Full
+g      -      unchanged
+G      -      graph.cursor 0 -> 4
+s      -      status None -> Some("no state action for kind item")
+t      -      status None -> Some("no tag action for kind item")
+h      -      graph.center Some("alpha/two") -> Some("alpha/one"); graph.cursor 0 -> 1; graph.history ["alpha/one"] -> []
+l      -      unchanged
+H      -      unchanged
+L      -      unchanged
+j      -      graph.cursor 0 -> 1
+k      -      unchanged
+Space  -      unchanged
+-      -      graph.radius 2 -> 1
++      -      graph.radius 2 -> 3
+=      -      graph.radius 2 -> 3
+?      -      mode Normal -> Help
+r      RELOAD unchanged
+S      -      unchanged
+o      -      unchanged
+.      -      suppressed false -> true
+Esc    -      graph.center Some("alpha/two") -> Some("alpha/one"); graph.cursor 0 -> 1; graph.history ["alpha/one"] -> []
+Enter  -      unchanged
+Tab    -      detail false -> true; focus false -> true; stack [] -> ["alpha/two<Graph@0"]
+BS     -      graph.center Some("alpha/two") -> Some("alpha/one"); graph.cursor 0 -> 1; graph.history ["alpha/one"] -> []
+Left   -      graph.center Some("alpha/two") -> Some("alpha/one"); graph.cursor 0 -> 1; graph.history ["alpha/one"] -> []
+Right  -      unchanged
+Up     -      unchanged
+Down   -      graph.cursor 0 -> 1
+PgUp   -      unchanged
+PgDn   -      graph.cursor 0 -> 4
+Home   -      unchanged
+End    -      graph.cursor 0 -> 4
+z      -      unchanged
+R      RELOAD+P unchanged
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      graph.cursor 0 -> 4
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+
+## graph/tab-detail  [5 Tab]
+1      -      view Graph -> NodeList; detail true -> false; focus true -> false; stack ["alpha/one<Graph@1"] -> []
+2      -      view Graph -> Tree; detail true -> false; focus true -> false; stack ["alpha/one<Graph@1"] -> []; tree.root None -> Some("alpha/one")
+3      -      view Graph -> Findings; detail true -> false; focus true -> false; stack ["alpha/one<Graph@1"] -> []
+4      -      view Graph -> Provenance; detail true -> false; focus true -> false; stack ["alpha/one<Graph@1"] -> []; prov.root None -> Some("alpha/one")
+5      -      unchanged
+q      -      detail true -> false; focus true -> false; stack ["alpha/one<Graph@1"] -> []
+Q      QUIT   unchanged
+/      -      mode Normal -> Search
+n      -      unchanged
+N      -      unchanged
+p      -      preview None -> Some("registers/alpha.toml+2")
+f      -      status None -> Some("kind filter: it filters the list; focus the list first")
+F      -      mode Normal -> EdgeKindFilter
+d      -      graph.direction Forward -> Reverse
+c      -      status None -> Some("no comment action for kind item")
+C      -      unchanged
+g      -      unchanged
+G      -      detail.cursor 0 -> 10
+s      -      status None -> Some("no state action for kind item")
+t      -      status None -> Some("no tag action for kind item")
+h      -      detail true -> false; focus true -> false; stack ["alpha/one<Graph@1"] -> []
+l      -      unchanged
+H      -      unchanged
+L      -      unchanged
+j      -      detail.cursor 0 -> 1
+k      -      unchanged
+Space  -      unchanged
+-      -      unchanged
++      -      unchanged
+=      -      unchanged
+?      -      mode Normal -> Help
+r      RELOAD unchanged
+S      -      unchanged
+o      -      unchanged
+.      -      suppressed false -> true
+Esc    -      detail true -> false; focus true -> false; stack ["alpha/one<Graph@1"] -> []
+Enter  -      unchanged
+Tab    -      detail true -> false; focus true -> false; stack ["alpha/one<Graph@1"] -> []
+BS     -      unchanged
+Left   -      detail true -> false; focus true -> false; stack ["alpha/one<Graph@1"] -> []
+Right  -      unchanged
+Up     -      unchanged
+Down   -      detail.cursor 0 -> 1
+PgUp   -      unchanged
+PgDn   -      detail.cursor 0 -> 10
+Home   -      unchanged
+End    -      detail.cursor 0 -> 10
+z      -      unchanged
+R      RELOAD+P unchanged
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      detail.cursor 0 -> 10
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+
+## graph/searched  [5 / b e t a Enter]
+1      -      view Graph -> NodeList
+2      -      view Graph -> Tree; tree.root None -> Some("beta")
+3      -      view Graph -> Findings
+4      -      view Graph -> Provenance; prov.root None -> Some("beta")
+5      -      unchanged
+q      QUIT   unchanged
+Q      QUIT   unchanged
+/      -      mode Normal -> Search; buffer "beta" -> ""
+n      -      graph.cursor 2 -> 3
+N      -      graph.cursor 2 -> 3
+p      -      preview None -> Some("registers/beta.toml+0")
+f      -      mode Normal -> KindFilter
+F      -      mode Normal -> EdgeKindFilter
+d      -      graph.direction Forward -> Reverse
+c      -      status None -> Some("no comment action for kind register")
+C      -      graph.columns Default -> Full
+g      -      graph.cursor 2 -> 0
+G      -      graph.cursor 2 -> 4
+s      -      status None -> Some("no state action for kind register")
+t      -      status None -> Some("no tag action for kind register")
+h      -      unchanged
+l      -      graph.center Some("alpha/one") -> Some("beta"); graph.history [] -> ["alpha/one"]
+H      -      unchanged
+L      -      unchanged
+j      -      graph.cursor 2 -> 3
+k      -      graph.cursor 2 -> 1
+Space  -      unchanged
+-      -      graph.radius 2 -> 1
++      -      graph.radius 2 -> 3
+=      -      graph.radius 2 -> 3
+?      -      mode Normal -> Help
+r      RELOAD unchanged
+S      -      unchanged
+o      -      unchanged
+.      -      suppressed false -> true
+Esc    -      unchanged
+Enter  -      graph.center Some("alpha/one") -> Some("beta"); graph.history [] -> ["alpha/one"]
+Tab    -      detail false -> true; focus false -> true; stack [] -> ["beta<Graph@2"]
+BS     -      unchanged
+Left   -      unchanged
+Right  -      graph.center Some("alpha/one") -> Some("beta"); graph.history [] -> ["alpha/one"]
+Up     -      graph.cursor 2 -> 1
+Down   -      graph.cursor 2 -> 3
+PgUp   -      graph.cursor 2 -> 0
+PgDn   -      graph.cursor 2 -> 4
+Home   -      graph.cursor 2 -> 0
+End    -      graph.cursor 2 -> 4
+z      -      unchanged
+R      RELOAD+P unchanged
+C-c    QUIT   unchanged
+C-f    -      graph.cursor 2 -> 0; graph.search_filter false -> true
+C-d    -      graph.cursor 2 -> 4
+C-u    -      graph.cursor 2 -> 0
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+
+## mode/search  [/ x]
+1      -      buffer "x" -> "x1"
+2      -      buffer "x" -> "x2"
+3      -      buffer "x" -> "x3"
+4      -      buffer "x" -> "x4"
+5      -      buffer "x" -> "x5"
+q      -      buffer "x" -> "xq"
+Q      -      buffer "x" -> "xQ"
+/      -      buffer "x" -> "x/"
+n      -      buffer "x" -> "xn"
+N      -      buffer "x" -> "xN"
+p      -      buffer "x" -> "xp"
+f      -      buffer "x" -> "xf"
+F      -      buffer "x" -> "xF"
+d      -      buffer "x" -> "xd"
+c      -      buffer "x" -> "xc"
+C      -      buffer "x" -> "xC"
+g      -      buffer "x" -> "xg"
+G      -      buffer "x" -> "xG"
+s      -      buffer "x" -> "xs"
+t      -      buffer "x" -> "xt"
+h      -      buffer "x" -> "xh"
+l      -      buffer "x" -> "xl"
+H      -      buffer "x" -> "xH"
+L      -      buffer "x" -> "xL"
+j      -      buffer "x" -> "xj"
+k      -      buffer "x" -> "xk"
+Space  -      buffer "x" -> "x "
+-      -      buffer "x" -> "x-"
++      -      buffer "x" -> "x+"
+=      -      buffer "x" -> "x="
+?      -      buffer "x" -> "x?"
+r      -      buffer "x" -> "xr"
+S      -      buffer "x" -> "xS"
+o      -      buffer "x" -> "xo"
+.      -      buffer "x" -> "x."
+Esc    -      mode Search -> Normal
+Enter  -      mode Search -> Normal; nodes.cursor 0 -> 8; nodes.search None -> Some("x")
+Tab    -      unchanged
+BS     -      buffer "x" -> ""
+Left   -      unchanged
+Right  -      unchanged
+Up     -      unchanged
+Down   -      unchanged
+PgUp   -      unchanged
+PgDn   -      unchanged
+Home   -      unchanged
+End    -      unchanged
+z      -      buffer "x" -> "xz"
+R      -      buffer "x" -> "xR"
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      unchanged
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    -      buffer "x" -> "xQ"
+
+## mode/search-tree  [2 / x]
+1      -      buffer "x" -> "x1"
+2      -      buffer "x" -> "x2"
+3      -      buffer "x" -> "x3"
+4      -      buffer "x" -> "x4"
+5      -      buffer "x" -> "x5"
+q      -      buffer "x" -> "xq"
+Q      -      buffer "x" -> "xQ"
+/      -      buffer "x" -> "x/"
+n      -      buffer "x" -> "xn"
+N      -      buffer "x" -> "xN"
+p      -      buffer "x" -> "xp"
+f      -      buffer "x" -> "xf"
+F      -      buffer "x" -> "xF"
+d      -      buffer "x" -> "xd"
+c      -      buffer "x" -> "xc"
+C      -      buffer "x" -> "xC"
+g      -      buffer "x" -> "xg"
+G      -      buffer "x" -> "xG"
+s      -      buffer "x" -> "xs"
+t      -      buffer "x" -> "xt"
+h      -      buffer "x" -> "xh"
+l      -      buffer "x" -> "xl"
+H      -      buffer "x" -> "xH"
+L      -      buffer "x" -> "xL"
+j      -      buffer "x" -> "xj"
+k      -      buffer "x" -> "xk"
+Space  -      buffer "x" -> "x "
+-      -      buffer "x" -> "x-"
++      -      buffer "x" -> "x+"
+=      -      buffer "x" -> "x="
+?      -      buffer "x" -> "x?"
+r      -      buffer "x" -> "xr"
+S      -      buffer "x" -> "xS"
+o      -      buffer "x" -> "xo"
+.      -      buffer "x" -> "x."
+Esc    -      mode Search -> Normal
+Enter  -      mode Search -> Normal; tree.search None -> Some("x")
+Tab    -      unchanged
+BS     -      buffer "x" -> ""
+Left   -      unchanged
+Right  -      unchanged
+Up     -      unchanged
+Down   -      unchanged
+PgUp   -      unchanged
+PgDn   -      unchanged
+Home   -      unchanged
+End    -      unchanged
+z      -      buffer "x" -> "xz"
+R      -      buffer "x" -> "xR"
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      unchanged
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    -      buffer "x" -> "xQ"
+
+## mode/search-prov  [4 / x]
+1      -      buffer "x" -> "x1"
+2      -      buffer "x" -> "x2"
+3      -      buffer "x" -> "x3"
+4      -      buffer "x" -> "x4"
+5      -      buffer "x" -> "x5"
+q      -      buffer "x" -> "xq"
+Q      -      buffer "x" -> "xQ"
+/      -      buffer "x" -> "x/"
+n      -      buffer "x" -> "xn"
+N      -      buffer "x" -> "xN"
+p      -      buffer "x" -> "xp"
+f      -      buffer "x" -> "xf"
+F      -      buffer "x" -> "xF"
+d      -      buffer "x" -> "xd"
+c      -      buffer "x" -> "xc"
+C      -      buffer "x" -> "xC"
+g      -      buffer "x" -> "xg"
+G      -      buffer "x" -> "xG"
+s      -      buffer "x" -> "xs"
+t      -      buffer "x" -> "xt"
+h      -      buffer "x" -> "xh"
+l      -      buffer "x" -> "xl"
+H      -      buffer "x" -> "xH"
+L      -      buffer "x" -> "xL"
+j      -      buffer "x" -> "xj"
+k      -      buffer "x" -> "xk"
+Space  -      buffer "x" -> "x "
+-      -      buffer "x" -> "x-"
++      -      buffer "x" -> "x+"
+=      -      buffer "x" -> "x="
+?      -      buffer "x" -> "x?"
+r      -      buffer "x" -> "xr"
+S      -      buffer "x" -> "xS"
+o      -      buffer "x" -> "xo"
+.      -      buffer "x" -> "x."
+Esc    -      mode Search -> Normal
+Enter  -      mode Search -> Normal; prov.search None -> Some("x")
+Tab    -      unchanged
+BS     -      buffer "x" -> ""
+Left   -      unchanged
+Right  -      unchanged
+Up     -      unchanged
+Down   -      unchanged
+PgUp   -      unchanged
+PgDn   -      unchanged
+Home   -      unchanged
+End    -      unchanged
+z      -      buffer "x" -> "xz"
+R      -      buffer "x" -> "xR"
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      unchanged
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    -      buffer "x" -> "xQ"
+
+## mode/search-graph  [5 / x]
+1      -      buffer "x" -> "x1"
+2      -      buffer "x" -> "x2"
+3      -      buffer "x" -> "x3"
+4      -      buffer "x" -> "x4"
+5      -      buffer "x" -> "x5"
+q      -      buffer "x" -> "xq"
+Q      -      buffer "x" -> "xQ"
+/      -      buffer "x" -> "x/"
+n      -      buffer "x" -> "xn"
+N      -      buffer "x" -> "xN"
+p      -      buffer "x" -> "xp"
+f      -      buffer "x" -> "xf"
+F      -      buffer "x" -> "xF"
+d      -      buffer "x" -> "xd"
+c      -      buffer "x" -> "xc"
+C      -      buffer "x" -> "xC"
+g      -      buffer "x" -> "xg"
+G      -      buffer "x" -> "xG"
+s      -      buffer "x" -> "xs"
+t      -      buffer "x" -> "xt"
+h      -      buffer "x" -> "xh"
+l      -      buffer "x" -> "xl"
+H      -      buffer "x" -> "xH"
+L      -      buffer "x" -> "xL"
+j      -      buffer "x" -> "xj"
+k      -      buffer "x" -> "xk"
+Space  -      buffer "x" -> "x "
+-      -      buffer "x" -> "x-"
++      -      buffer "x" -> "x+"
+=      -      buffer "x" -> "x="
+?      -      buffer "x" -> "x?"
+r      -      buffer "x" -> "xr"
+S      -      buffer "x" -> "xS"
+o      -      buffer "x" -> "xo"
+.      -      buffer "x" -> "x."
+Esc    -      mode Search -> Normal
+Enter  -      mode Search -> Normal; graph.search None -> Some("x")
+Tab    -      unchanged
+BS     -      buffer "x" -> ""
+Left   -      unchanged
+Right  -      unchanged
+Up     -      unchanged
+Down   -      unchanged
+PgUp   -      unchanged
+PgDn   -      unchanged
+Home   -      unchanged
+End    -      unchanged
+z      -      buffer "x" -> "xz"
+R      -      buffer "x" -> "xR"
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      unchanged
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    -      buffer "x" -> "xQ"
+
+## mode/search-clear  [5 / b e t a Enter /]
+1      -      buffer "" -> "1"
+2      -      buffer "" -> "2"
+3      -      buffer "" -> "3"
+4      -      buffer "" -> "4"
+5      -      buffer "" -> "5"
+q      -      buffer "" -> "q"
+Q      -      buffer "" -> "Q"
+/      -      buffer "" -> "/"
+n      -      buffer "" -> "n"
+N      -      buffer "" -> "N"
+p      -      buffer "" -> "p"
+f      -      buffer "" -> "f"
+F      -      buffer "" -> "F"
+d      -      buffer "" -> "d"
+c      -      buffer "" -> "c"
+C      -      buffer "" -> "C"
+g      -      buffer "" -> "g"
+G      -      buffer "" -> "G"
+s      -      buffer "" -> "s"
+t      -      buffer "" -> "t"
+h      -      buffer "" -> "h"
+l      -      buffer "" -> "l"
+H      -      buffer "" -> "H"
+L      -      buffer "" -> "L"
+j      -      buffer "" -> "j"
+k      -      buffer "" -> "k"
+Space  -      buffer "" -> " "
+-      -      buffer "" -> "-"
++      -      buffer "" -> "+"
+=      -      buffer "" -> "="
+?      -      buffer "" -> "?"
+r      -      buffer "" -> "r"
+S      -      buffer "" -> "S"
+o      -      buffer "" -> "o"
+.      -      buffer "" -> "."
+Esc    -      mode Search -> Normal
+Enter  -      mode Search -> Normal; graph.search Some("beta") -> None
+Tab    -      unchanged
+BS     -      unchanged
+Left   -      unchanged
+Right  -      unchanged
+Up     -      unchanged
+Down   -      unchanged
+PgUp   -      unchanged
+PgDn   -      unchanged
+Home   -      unchanged
+End    -      unchanged
+z      -      buffer "" -> "z"
+R      -      buffer "" -> "R"
+C-c    QUIT   unchanged
+C-f    -      graph.cursor 2 -> 0; graph.search_filter false -> true
+C-d    -      unchanged
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    -      buffer "" -> "Q"
+
+## mode/kind-filter  [f]
+1      -      unchanged
+2      -      unchanged
+3      -      unchanged
+4      -      unchanged
+5      -      unchanged
+q      -      unchanged
+Q      QUIT   unchanged
+/      -      unchanged
+n      -      unchanged
+N      -      unchanged
+p      -      unchanged
+f      -      mode KindFilter -> Normal
+F      -      unchanged
+d      -      unchanged
+c      -      unchanged
+C      -      unchanged
+g      -      unchanged
+G      -      unchanged
+s      -      unchanged
+t      -      unchanged
+h      -      unchanged
+l      -      unchanged
+H      -      unchanged
+L      -      unchanged
+j      -      nodes.filter_cursor 0 -> 1
+k      -      unchanged
+Space  -      nodes.kinds 111 -> 011
+-      -      unchanged
++      -      unchanged
+=      -      unchanged
+?      -      unchanged
+r      -      unchanged
+S      -      unchanged
+o      -      unchanged
+.      -      unchanged
+Esc    -      mode KindFilter -> Normal
+Enter  -      mode KindFilter -> Normal
+Tab    -      unchanged
+BS     -      unchanged
+Left   -      unchanged
+Right  -      unchanged
+Up     -      unchanged
+Down   -      nodes.filter_cursor 0 -> 1
+PgUp   -      unchanged
+PgDn   -      unchanged
+Home   -      unchanged
+End    -      unchanged
+z      -      unchanged
+R      -      unchanged
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      unchanged
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+
+## mode/kind-filter-findings  [3 f]
+1      -      unchanged
+2      -      unchanged
+3      -      unchanged
+4      -      unchanged
+5      -      unchanged
+q      -      unchanged
+Q      QUIT   unchanged
+/      -      unchanged
+n      -      unchanged
+N      -      unchanged
+p      -      unchanged
+f      -      mode KindFilter -> Normal
+F      -      unchanged
+d      -      unchanged
+c      -      unchanged
+C      -      unchanged
+g      -      unchanged
+G      -      unchanged
+s      -      unchanged
+t      -      unchanged
+h      -      unchanged
+l      -      unchanged
+H      -      unchanged
+L      -      unchanged
+j      -      findings.filter_cursor 0 -> 1
+k      -      unchanged
+Space  -      findings.kinds 111 -> 011
+-      -      unchanged
++      -      unchanged
+=      -      unchanged
+?      -      unchanged
+r      -      unchanged
+S      -      unchanged
+o      -      unchanged
+.      -      unchanged
+Esc    -      mode KindFilter -> Normal
+Enter  -      mode KindFilter -> Normal
+Tab    -      unchanged
+BS     -      unchanged
+Left   -      unchanged
+Right  -      unchanged
+Up     -      unchanged
+Down   -      findings.filter_cursor 0 -> 1
+PgUp   -      unchanged
+PgDn   -      unchanged
+Home   -      unchanged
+End    -      unchanged
+z      -      unchanged
+R      -      unchanged
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      unchanged
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+
+## mode/kind-filter-tree  [2 f]
+1      -      unchanged
+2      -      unchanged
+3      -      unchanged
+4      -      unchanged
+5      -      unchanged
+q      -      unchanged
+Q      QUIT   unchanged
+/      -      unchanged
+n      -      unchanged
+N      -      unchanged
+p      -      unchanged
+f      -      mode KindFilter -> Normal
+F      -      unchanged
+d      -      unchanged
+c      -      unchanged
+C      -      unchanged
+g      -      unchanged
+G      -      unchanged
+s      -      unchanged
+t      -      unchanged
+h      -      unchanged
+l      -      unchanged
+H      -      unchanged
+L      -      unchanged
+j      -      tree.filter_cursor 0 -> 1
+k      -      unchanged
+Space  -      tree.kinds 111 -> 011
+-      -      unchanged
++      -      unchanged
+=      -      unchanged
+?      -      unchanged
+r      -      unchanged
+S      -      unchanged
+o      -      unchanged
+.      -      unchanged
+Esc    -      mode KindFilter -> Normal
+Enter  -      mode KindFilter -> Normal
+Tab    -      unchanged
+BS     -      unchanged
+Left   -      unchanged
+Right  -      unchanged
+Up     -      unchanged
+Down   -      tree.filter_cursor 0 -> 1
+PgUp   -      unchanged
+PgDn   -      unchanged
+Home   -      unchanged
+End    -      unchanged
+z      -      unchanged
+R      -      unchanged
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      unchanged
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+
+## provenance/f-refused  [4 f]
+1      -      view Provenance -> NodeList; status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+2      -      view Provenance -> Tree; status Some("kind filter: not in Provenance; F filters edge kinds") -> None; tree.root None -> Some("alpha/one")
+3      -      view Provenance -> Findings; status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+4      -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+5      -      view Provenance -> Graph; status Some("kind filter: not in Provenance; F filters edge kinds") -> None; graph.center None -> Some("alpha/one"); graph.cursor 0 -> 1
+q      QUIT   status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+Q      QUIT   status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+/      -      mode Normal -> Search; status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+n      -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+N      -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+p      -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None; preview None -> Some("registers/alpha.toml+2")
+f      -      unchanged
+F      -      mode Normal -> EdgeKindFilter; status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+d      -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None; prov.direction Forward -> Reverse
+c      -      status Some("kind filter: not in Provenance; F filters edge kinds") -> Some("no comment action for kind item")
+C      -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+g      -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+G      -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None; prov.cursor 0 -> 3
+s      -      status Some("kind filter: not in Provenance; F filters edge kinds") -> Some("no state action for kind item")
+t      -      status Some("kind filter: not in Provenance; F filters edge kinds") -> Some("no tag action for kind item")
+h      -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+l      -      detail false -> true; focus false -> true; stack [] -> ["alpha/one<Provenance@0"]; status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+H      -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+L      -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None; prov.h_scroll 0 -> 1
+j      -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None; prov.cursor 0 -> 1
+k      -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+Space  -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+-      -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None
++      -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+=      -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+?      -      mode Normal -> Help; status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+r      RELOAD status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+S      -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+o      -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+.      -      suppressed false -> true; status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+Esc    -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+Enter  -      detail false -> true; focus false -> true; stack [] -> ["alpha/one<Provenance@0"]; status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+Tab    -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+BS     -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+Left   -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+Right  -      detail false -> true; focus false -> true; stack [] -> ["alpha/one<Provenance@0"]; status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+Up     -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+Down   -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None; prov.cursor 0 -> 1
+PgUp   -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+PgDn   -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None; prov.cursor 0 -> 3
+Home   -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+End    -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None; prov.cursor 0 -> 3
+z      -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+R      RELOAD+P status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None; prov.cursor 0 -> 3
+C-u    -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+A-d    -      status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+S-Q    QUIT   status Some("kind filter: not in Provenance; F filters edge kinds") -> None
+
+## mode/kind-filter-graph  [5 f]
+1      -      unchanged
+2      -      unchanged
+3      -      unchanged
+4      -      unchanged
+5      -      unchanged
+q      -      unchanged
+Q      QUIT   unchanged
+/      -      unchanged
+n      -      unchanged
+N      -      unchanged
+p      -      unchanged
+f      -      mode KindFilter -> Normal
+F      -      unchanged
+d      -      unchanged
+c      -      unchanged
+C      -      unchanged
+g      -      unchanged
+G      -      unchanged
+s      -      unchanged
+t      -      unchanged
+h      -      unchanged
+l      -      unchanged
+H      -      unchanged
+L      -      unchanged
+j      -      graph.filter_cursor 0 -> 1
+k      -      unchanged
+Space  -      graph.kinds 111 -> 011
+-      -      unchanged
++      -      unchanged
+=      -      unchanged
+?      -      unchanged
+r      -      unchanged
+S      -      unchanged
+o      -      unchanged
+.      -      unchanged
+Esc    -      mode KindFilter -> Normal
+Enter  -      mode KindFilter -> Normal
+Tab    -      unchanged
+BS     -      unchanged
+Left   -      unchanged
+Right  -      unchanged
+Up     -      unchanged
+Down   -      graph.filter_cursor 0 -> 1
+PgUp   -      unchanged
+PgDn   -      unchanged
+Home   -      unchanged
+End    -      unchanged
+z      -      unchanged
+R      -      unchanged
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      unchanged
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+
+## mode/edge-filter  [2 F]
+1      -      unchanged
+2      -      unchanged
+3      -      unchanged
+4      -      unchanged
+5      -      unchanged
+q      -      unchanged
+Q      QUIT   unchanged
+/      -      unchanged
+n      -      unchanged
+N      -      unchanged
+p      -      unchanged
+f      -      unchanged
+F      -      mode EdgeKindFilter -> Normal
+d      -      unchanged
+c      -      unchanged
+C      -      unchanged
+g      -      unchanged
+G      -      unchanged
+s      -      unchanged
+t      -      unchanged
+h      -      unchanged
+l      -      unchanged
+H      -      unchanged
+L      -      unchanged
+j      -      tree.filter_cursor 0 -> 1
+k      -      unchanged
+Space  -      tree.edges 11 -> 01
+-      -      unchanged
++      -      unchanged
+=      -      unchanged
+?      -      unchanged
+r      -      unchanged
+S      -      unchanged
+o      -      unchanged
+.      -      unchanged
+Esc    -      mode EdgeKindFilter -> Normal
+Enter  -      mode EdgeKindFilter -> Normal
+Tab    -      unchanged
+BS     -      unchanged
+Left   -      unchanged
+Right  -      unchanged
+Up     -      unchanged
+Down   -      tree.filter_cursor 0 -> 1
+PgUp   -      unchanged
+PgDn   -      unchanged
+Home   -      unchanged
+End    -      unchanged
+z      -      unchanged
+R      -      unchanged
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      unchanged
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+
+## mode/edge-filter-prov  [4 F]
+1      -      unchanged
+2      -      unchanged
+3      -      unchanged
+4      -      unchanged
+5      -      unchanged
+q      -      unchanged
+Q      QUIT   unchanged
+/      -      unchanged
+n      -      unchanged
+N      -      unchanged
+p      -      unchanged
+f      -      unchanged
+F      -      mode EdgeKindFilter -> Normal
+d      -      unchanged
+c      -      unchanged
+C      -      unchanged
+g      -      unchanged
+G      -      unchanged
+s      -      unchanged
+t      -      unchanged
+h      -      unchanged
+l      -      unchanged
+H      -      unchanged
+L      -      unchanged
+j      -      prov.filter_cursor 0 -> 1
+k      -      unchanged
+Space  -      prov.edges 11 -> 01
+-      -      unchanged
++      -      unchanged
+=      -      unchanged
+?      -      unchanged
+r      -      unchanged
+S      -      unchanged
+o      -      unchanged
+.      -      unchanged
+Esc    -      mode EdgeKindFilter -> Normal
+Enter  -      mode EdgeKindFilter -> Normal
+Tab    -      unchanged
+BS     -      unchanged
+Left   -      unchanged
+Right  -      unchanged
+Up     -      unchanged
+Down   -      prov.filter_cursor 0 -> 1
+PgUp   -      unchanged
+PgDn   -      unchanged
+Home   -      unchanged
+End    -      unchanged
+z      -      unchanged
+R      -      unchanged
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      unchanged
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+
+## mode/edge-filter-graph  [5 F]
+1      -      unchanged
+2      -      unchanged
+3      -      unchanged
+4      -      unchanged
+5      -      unchanged
+q      -      unchanged
+Q      QUIT   unchanged
+/      -      unchanged
+n      -      unchanged
+N      -      unchanged
+p      -      unchanged
+f      -      unchanged
+F      -      mode EdgeKindFilter -> Normal
+d      -      unchanged
+c      -      unchanged
+C      -      unchanged
+g      -      unchanged
+G      -      unchanged
+s      -      unchanged
+t      -      unchanged
+h      -      unchanged
+l      -      unchanged
+H      -      unchanged
+L      -      unchanged
+j      -      graph.filter_cursor 0 -> 1
+k      -      unchanged
+Space  -      graph.edges 11 -> 01
+-      -      unchanged
++      -      unchanged
+=      -      unchanged
+?      -      unchanged
+r      -      unchanged
+S      -      unchanged
+o      -      unchanged
+.      -      unchanged
+Esc    -      mode EdgeKindFilter -> Normal
+Enter  -      mode EdgeKindFilter -> Normal
+Tab    -      unchanged
+BS     -      unchanged
+Left   -      unchanged
+Right  -      unchanged
+Up     -      unchanged
+Down   -      graph.filter_cursor 0 -> 1
+PgUp   -      unchanged
+PgDn   -      unchanged
+Home   -      unchanged
+End    -      unchanged
+z      -      unchanged
+R      -      unchanged
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      unchanged
+C-u    -      unchanged
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+
+## mode/help  [?]
+1      -      mode Help -> Normal
+2      -      mode Help -> Normal
+3      -      mode Help -> Normal
+4      -      mode Help -> Normal
+5      -      mode Help -> Normal
+q      -      mode Help -> Normal
+Q      QUIT   unchanged
+/      -      mode Help -> Normal
+n      -      mode Help -> Normal
+N      -      mode Help -> Normal
+p      -      mode Help -> Normal
+f      -      mode Help -> Normal
+F      -      mode Help -> Normal
+d      -      mode Help -> Normal
+c      -      mode Help -> Normal
+C      -      mode Help -> Normal
+g      -      unchanged
+G      -      unchanged
+s      -      mode Help -> Normal
+t      -      mode Help -> Normal
+h      -      mode Help -> Normal
+l      -      mode Help -> Normal
+H      -      mode Help -> Normal
+L      -      mode Help -> Normal
+j      -      unchanged
+k      -      unchanged
+Space  -      mode Help -> Normal
+-      -      mode Help -> Normal
++      -      mode Help -> Normal
+=      -      mode Help -> Normal
+?      -      mode Help -> Normal
+r      -      mode Help -> Normal
+S      -      mode Help -> Normal
+o      -      mode Help -> Normal
+.      -      mode Help -> Normal
+Esc    -      mode Help -> Normal
+Enter  -      mode Help -> Normal
+Tab    -      mode Help -> Normal
+BS     -      mode Help -> Normal
+Left   -      mode Help -> Normal
+Right  -      mode Help -> Normal
+Up     -      unchanged
+Down   -      unchanged
+PgUp   -      unchanged
+PgDn   -      unchanged
+Home   -      unchanged
+End    -      unchanged
+z      -      mode Help -> Normal
+R      -      mode Help -> Normal
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      unchanged
+C-u    -      unchanged
+A-d    -      mode Help -> Normal
+S-Q    QUIT   unchanged
+
+## overlay/preview  [p]
+1      -      unchanged
+2      -      unchanged
+3      -      unchanged
+4      -      unchanged
+5      -      unchanged
+q      -      preview Some("registers/alpha.toml+2") -> None
+Q      QUIT   unchanged
+/      -      unchanged
+n      -      unchanged
+N      -      unchanged
+p      -      preview Some("registers/alpha.toml+2") -> None
+f      -      unchanged
+F      -      unchanged
+d      -      unchanged
+c      -      unchanged
+C      -      unchanged
+g      -      preview Some("registers/alpha.toml+2") -> Some("registers/alpha.toml+0")
+G      -      preview Some("registers/alpha.toml+2") -> Some("registers/alpha.toml+25")
+s      -      unchanged
+t      -      unchanged
+h      -      unchanged
+l      -      unchanged
+H      -      unchanged
+L      -      unchanged
+j      -      preview Some("registers/alpha.toml+2") -> Some("registers/alpha.toml+3")
+k      -      preview Some("registers/alpha.toml+2") -> Some("registers/alpha.toml+1")
+Space  -      unchanged
+-      -      unchanged
++      -      unchanged
+=      -      unchanged
+?      -      unchanged
+r      -      unchanged
+S      -      unchanged
+o      -      unchanged
+.      -      unchanged
+Esc    -      preview Some("registers/alpha.toml+2") -> None
+Enter  -      unchanged
+Tab    -      unchanged
+BS     -      unchanged
+Left   -      unchanged
+Right  -      unchanged
+Up     -      preview Some("registers/alpha.toml+2") -> Some("registers/alpha.toml+1")
+Down   -      preview Some("registers/alpha.toml+2") -> Some("registers/alpha.toml+3")
+PgUp   -      preview Some("registers/alpha.toml+2") -> Some("registers/alpha.toml+0")
+PgDn   -      preview Some("registers/alpha.toml+2") -> Some("registers/alpha.toml+22")
+Home   -      preview Some("registers/alpha.toml+2") -> Some("registers/alpha.toml+0")
+End    -      preview Some("registers/alpha.toml+2") -> Some("registers/alpha.toml+25")
+z      -      unchanged
+R      -      unchanged
+C-c    QUIT   unchanged
+C-f    -      unchanged
+C-d    -      preview Some("registers/alpha.toml+2") -> Some("registers/alpha.toml+22")
+C-u    -      preview Some("registers/alpha.toml+2") -> Some("registers/alpha.toml+0")
+A-d    -      unchanged
+S-Q    QUIT   unchanged
+

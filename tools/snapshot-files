@@ -1,0 +1,35 @@
+# Repository paths the GitHub release snapshot ships (+) or withholds (-), one per
+# line. Read by tools/release-snapshot.sh from the revision it snapshots. Every
+# tracked file must fall under an entry; the longest matching entry decides.
++ .github
++ .gitignore
++ AGENTS.md
++ CHANGELOG.md
++ CONTRIBUTING.md
++ Cargo.lock
++ Cargo.toml
++ LICENSE-APACHE
++ LICENSE-MIT
++ README.md
++ adapters
++ skills
++ benchmarks
++ clippy.toml
++ contracts
++ crates
+- crates/latt-eval
++ docs
++ openspec/config.yaml
++ openspec/specs
++ profiles
++ pyproject.toml
++ rust-toolchain.toml
++ tests
++ tools
+- .claude
+- CLAUDE.md
+- .gitlab-ci.yml
+- PROPOSAL.md
+- notes
+- openspec/changes
+- openspec/specs/agent-docs-eval

@@ -25,6 +25,16 @@ node_kinds:
         values: [new, backlog, blocked, inprogress, done, wontdo]
       assignee: { type: string }
       tags:     { type: list, items: string }
+    # Owner actions for `latt browse` (c, s, a, t, e and the ! menu). Opt-in:
+    # a profile with actions runs programs, so uncomment only in a profile you
+    # trust. See docs/profiles.md, "actions".
+    # actions:
+    #   comment: { run: ["ent", "comment", "{id}"], mode: interactive }
+    #   state:   { run: ["ent", "state", "{id}"], mode: interactive }
+    #   assign:  { run: ["ent", "assign", "{id}"], mode: interactive }
+    #   tag:     { run: ["ent", "tag", "{id}"], mode: capture }
+    #   edit:    { run: ["ent", "edit", "{id}"], mode: interactive }
+    #   show:    { run: ["ent", "show", "{id}"], mode: capture }
 
 edge_kinds:
   depends_on:

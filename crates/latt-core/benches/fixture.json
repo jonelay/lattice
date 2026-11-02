@@ -1,0 +1,259 @@
+{
+  "schema_version": "1.0",
+  "id": "synthetic-components-v5",
+  "description": "Deterministic registers: an item chain where every sixteenth node omits one required attribute, the same chain carrying one of each defect class per cadence window, a forked, citing chain whose profile carries EDGE_WHERE, EDGE_COUNT and SUPPRESS entries, and the chain with a line for every attr and the declaring node of every edge. Adapter scales are registers a native adapter reads from files: TOML arrays of tables, Markdown pipe tables, and prose with section cross-references.",
+  "missing_ordinal_every": 16,
+  "scales": [
+    {
+      "label": "256-nodes",
+      "generator": "synthetic-chain-v1",
+      "nodes": 256,
+      "edges": 255,
+      "expected": {
+        "adapter_issues_fnv1a64": "cbf29ce484222325",
+        "counts_fnv1a64": "cc758e368d0ce62d",
+        "findings": {
+          "counts": {
+            "ATTR_REQUIRED": 16,
+            "UNREFERENCED": 1,
+            "UNTRACED": 1
+          },
+          "order_fnv1a64": "b960f655e873e5d3"
+        },
+        "graph_fnv1a64": "c0afec93d6d2b5f2",
+        "json_findings": {
+          "bytes": 3928,
+          "fnv1a64": "346f69e1492d589b"
+        },
+        "reach": {
+          "count": 255,
+          "fnv1a64": "a6616522cb35cf0b"
+        },
+        "reach_resolved": {
+          "count": 255,
+          "fnv1a64": "eb675022934a13b1",
+          "tainted": 0
+        },
+        "service_counts_fnv1a64": "cc758e368d0ce62d"
+      }
+    },
+    {
+      "label": "16384-nodes",
+      "generator": "synthetic-chain-v1",
+      "nodes": 16384,
+      "edges": 16383,
+      "expected": {
+        "adapter_issues_fnv1a64": "cbf29ce484222325",
+        "counts_fnv1a64": "e5af0e8d47f6438b",
+        "findings": {
+          "counts": {
+            "ATTR_REQUIRED": 1024,
+            "UNREFERENCED": 1,
+            "UNTRACED": 1
+          },
+          "order_fnv1a64": "64968d174a271cbc"
+        },
+        "graph_fnv1a64": "2c228ceb79db27e1",
+        "json_findings": {
+          "bytes": 229774,
+          "fnv1a64": "9d5d1ca0d72f2902"
+        },
+        "reach": {
+          "count": 16383,
+          "fnv1a64": "1199f510ab9bf12f"
+        },
+        "reach_resolved": {
+          "count": 16383,
+          "fnv1a64": "0105d8a4aac80275",
+          "tainted": 0
+        },
+        "service_counts_fnv1a64": "e5af0e8d47f6438b"
+      }
+    },
+    {
+      "label": "defects-1024-nodes",
+      "generator": "synthetic-defects-v1",
+      "chain_nodes": 1024,
+      "nodes": 1048,
+      "edges": 1119,
+      "expected": {
+        "adapter_issues_fnv1a64": "7e46240e5a0b64b2",
+        "counts_fnv1a64": "d7d2107db38718b4",
+        "findings": {
+          "counts": {
+            "ADAPTER_REPORTED": 8,
+            "ATTR_REQUIRED": 64,
+            "PARSE_ERROR": 8,
+            "UNKNOWN_KIND": 32,
+            "UNREFERENCED": 1,
+            "UNTRACED": 9,
+            "VACANCY": 48
+          },
+          "order_fnv1a64": "cb030d349c909792"
+        },
+        "graph_fnv1a64": "58c1b3fe51a52b58",
+        "json_findings": {
+          "bytes": 39018,
+          "fnv1a64": "6ab48e566866293c"
+        },
+        "reach": {
+          "count": 1047,
+          "fnv1a64": "91a6f95b13e871e8"
+        },
+        "reach_resolved": {
+          "count": 1047,
+          "fnv1a64": "26fcde113b937164",
+          "tainted": 8
+        },
+        "service_counts_fnv1a64": "d7d2107db38718b4"
+      }
+    },
+    {
+      "label": "rules-4096-nodes",
+      "generator": "synthetic-rules-v1",
+      "chain_nodes": 4096,
+      "nodes": 4096,
+      "edges": 5375,
+      "expected": {
+        "adapter_issues_fnv1a64": "cbf29ce484222325",
+        "counts_fnv1a64": "fef0568e2e791b1f",
+        "findings": {
+          "counts": {
+            "EDGE_COUNT": 768,
+            "EDGE_WHERE": 852,
+            "UNREFERENCED": 1,
+            "UNTRACED": 1
+          },
+          "order_fnv1a64": "0991bd2f7dd97ca2"
+        },
+        "graph_fnv1a64": "b48810517c686449",
+        "json_findings": {
+          "bytes": 422492,
+          "fnv1a64": "7da701393461c69e"
+        },
+        "reach": {
+          "count": 4095,
+          "fnv1a64": "f11ca4c604c05f13"
+        },
+        "reach_resolved": {
+          "count": 4095,
+          "fnv1a64": "167951a02d669f59",
+          "tainted": 0
+        },
+        "service_counts_fnv1a64": "fef0568e2e791b1f"
+      }
+    },
+    {
+      "label": "located-16384-nodes",
+      "generator": "synthetic-located-v1",
+      "chain_nodes": 16384,
+      "nodes": 16384,
+      "edges": 16383,
+      "expected": {
+        "adapter_issues_fnv1a64": "cbf29ce484222325",
+        "counts_fnv1a64": "e5af0e8d47f6438b",
+        "findings": {
+          "counts": {
+            "ATTR_REQUIRED": 1024,
+            "UNREFERENCED": 1,
+            "UNTRACED": 1
+          },
+          "order_fnv1a64": "fcff08c8f6a0cf1b"
+        },
+        "graph_fnv1a64": "6fdf730695ccdb99",
+        "json_findings": {
+          "bytes": 232288,
+          "fnv1a64": "856b14831bd66fa5"
+        },
+        "reach": {
+          "count": 16383,
+          "fnv1a64": "1199f510ab9bf12f"
+        },
+        "reach_resolved": {
+          "count": 16383,
+          "fnv1a64": "0105d8a4aac80275",
+          "tainted": 0
+        },
+        "service_counts_fnv1a64": "e5af0e8d47f6438b"
+      }
+    }
+  ],
+  "adapter_scales": [
+    {
+      "label": "toml-16384-rows",
+      "adapter": "toml",
+      "generator": "synthetic-toml-v1",
+      "parameters": {
+        "rows": 16384,
+        "files": 16
+      },
+      "nodes": 16384,
+      "edges": 49146,
+      "expected": {
+        "document": {
+          "bytes": 14381541,
+          "fnv1a64": "2b0759dbb5762310"
+        },
+        "edges": 49146,
+        "findings": {
+          "UNREAD_ENTRIES": 16
+        },
+        "nodes": 16384
+      }
+    },
+    {
+      "label": "md-32768-rows",
+      "adapter": "md",
+      "generator": "synthetic-md-v1",
+      "parameters": {
+        "rows": 32768,
+        "files": 32,
+        "tables": 4
+      },
+      "nodes": 32768,
+      "edges": 66044,
+      "expected": {
+        "document": {
+          "bytes": 13616610,
+          "fnv1a64": "71990e31c2ce1c19"
+        },
+        "edges": 66044,
+        "findings": {
+          "PARSE_ERROR": 32
+        },
+        "nodes": 32768
+      }
+    },
+    {
+      "label": "prose-xref-8192-sections",
+      "adapter": "prose-xref",
+      "generator": "synthetic-prose-xref-v1",
+      "parameters": {
+        "files": 256,
+        "sections": 32
+      },
+      "nodes": 8704,
+      "edges": 24576,
+      "expected": {
+        "document": {
+          "bytes": 5560569,
+          "fnv1a64": "f5da0c6529385a9c"
+        },
+        "edges": 24576,
+        "findings": {
+          "PARSE_ERROR": 256
+        },
+        "nodes": 8704
+      }
+    }
+  ],
+  "policy": {
+    "warm_up_seconds": 1,
+    "measurement_seconds": 3,
+    "sample_size": 50,
+    "parse_includes_result_drop": true,
+    "ingest_setup_excludes_parsing": true,
+    "text_ingest_includes_result_drop": true,
+    "adapter_includes_profile_load_and_document_drop": true
+  }
+}

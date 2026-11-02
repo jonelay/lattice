@@ -1,0 +1,11 @@
+{
+  "group_id": "query",
+  "function_id": "reach",
+  "value_str": "rules-4096-nodes",
+  "throughput": {
+    "Elements": 4096
+  },
+  "full_id": "query/reach/rules-4096-nodes",
+  "directory_name": "query/reach/rules-4096-nodes",
+  "title": "query/reach/rules-4096-nodes"
+}

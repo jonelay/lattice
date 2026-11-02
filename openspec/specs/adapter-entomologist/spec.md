@@ -1,4 +1,4 @@
-# adapter-entomologist Specification
+# latt-adapter-entomologist Specification
 
 ## Purpose
 Reads an entomologist ("ent") issue register — one directory per issue, one plain
@@ -15,8 +15,7 @@ The adapter SHALL read issues from the target repository's data branch, resolvin
 ref that happens to carry the name is never read. The chosen ref SHALL be
 resolved to a single commit before any content is read, and all reads SHALL go
 through that commit, so the graph comes from one snapshot even while a sync is
-rewriting the branch. It SHALL NOT read the worktree: ent stores issues on an
-orphan branch precisely so they never appear there.
+rewriting the branch. It SHALL NOT read the worktree.
 
 The target SHALL be the root of the repository that is read: the adapter
 compares the target path against git's resolved top-level directory (both
@@ -28,7 +27,7 @@ register that is absent or mislocated is a finding, not an adapter that broke.
 A `git` binary that cannot be run at all is a broken setup: the adapter fails
 rather than reporting, and the core surfaces that as exit 2.
 
-Verified by: `.venv/bin/python -m pytest tests/test_adapter_entomologist.py -k branch`
+Verified by: `.venv/bin/python -m pytest tests/test_adapter_entomologist.py -k "branch or corrupt_object"`
 
 #### Scenario: Local branch preferred
 
@@ -55,7 +54,8 @@ Verified by: `.venv/bin/python -m pytest tests/test_adapter_entomologist.py -k b
 #### Scenario: Target is in no git repository
 
 - **WHEN** the target directory is not inside any git repository
-- **THEN** the adapter emits a `PARSE_ERROR` saying so and exits 0
+- **THEN** the adapter emits a `PARSE_ERROR` saying so, carrying git's own
+  stderr so a refusal such as `safe.directory` is not misread, and exits 0
 
 #### Scenario: The resolved ref cannot be listed
 
@@ -63,6 +63,13 @@ Verified by: `.venv/bin/python -m pytest tests/test_adapter_entomologist.py -k b
   commit fails — for example the ref names an object that does not exist
 - **THEN** the adapter emits a `PARSE_ERROR` naming the failed listing, emits
   no nodes, and exits 0
+
+#### Scenario: git reports a problem during the object exchange
+
+- **WHEN** `git cat-file --batch` exits non-zero, or exits 0 with a complaint on
+  stderr — as it does for a corrupt loose object, answering `missing`
+- **THEN** the adapter emits one `PARSE_ERROR` carrying git's stderr beside the
+  per-path findings, and exits 0
 
 #### Scenario: Target is nested inside some other repository
 
@@ -81,14 +88,15 @@ that must resolve.
 The node carries, when the file exists and decodes, `summary` (the first line of
 the `description` file, which ent documents as git-commit style), `author`,
 `assignee` and `tags` (one list element per file under `tags/`); `state` is
-always carried, per its own requirement below.
+always carried, per its own requirement below. A tag is its filename with ent's
+escape undone, as ent's own reader does: `,0` is `,` and `,1` is `/`. A filename
+with any other escape, or ending in `,`, SHALL be a `PARSE_ERROR` naming the file,
+and that tag is omitted from the list.
 
 Requiredness is profile data, not adapter code: the profile SHALL mark
 `summary`, `author` and `state` required, and the adapter SHALL emit the node
 with whatever fields exist. An issue missing one of those files then surfaces as
-`ATTR_REQUIRED` at validation — one finding, owned by the layer that owns the
-vocabulary — rather than as an adapter that either invents a value or drops the
-node.
+`ATTR_REQUIRED` at validation.
 
 The profile marks the kind `orphan_ok`: an issue with no dependency edges is
 the normal shape of a flat tracker, not a finding, and `query orphans` still
@@ -104,6 +112,13 @@ Verified by: `.venv/bin/python -m pytest tests/test_adapter_entomologist.py -k i
   with `summary` set to the description's first line, and `author`, `state`,
   `assignee` and a two-element `tags` list carried as attrs
 
+#### Scenario: Escaped tag filenames
+
+- **WHEN** an issue's `tags/` holds `ui,1v0.1`, `a,0b`, `plain`, `bad,9` and
+  `trailing,`
+- **THEN** its `tags` attr is `a,b`, `plain` and `ui/v0.1`, and one `PARSE_ERROR`
+  names each of `bad,9` and `trailing,`
+
 #### Scenario: Description absent
 
 - **WHEN** an issue directory has no `description` file
@@ -114,10 +129,9 @@ Verified by: `.venv/bin/python -m pytest tests/test_adapter_entomologist.py -k i
 
 The adapter SHALL carry the `state` file's content as the `state` attr verbatim
 (trimmed), and SHALL apply ent's documented default of `new` when the file is
-absent — ent's own reader does exactly that. The default applies to absence
-only: an *undecodable* `state` file is treated like any other unreadable fetched
-field — `PARSE_ERROR`, attr omitted, `ATTR_REQUIRED` at validation — because
-defaulting it would rewrite a value that exists but cannot be read. The adapter
+absent. The default applies to absence only: an *undecodable* `state` file is
+treated like any other unreadable fetched field — `PARSE_ERROR`, attr omitted,
+`ATTR_REQUIRED` at validation. The adapter
 SHALL NOT validate the value against a state vocabulary: the vocabulary is profile data (an `enum`
 attr), so a state ent adds later surfaces as a profile finding, not as an adapter
 that silently rejects or rewrites it.
@@ -153,7 +167,7 @@ Verified by: `.venv/bin/python -m pytest tests/test_adapter_entomologist.py -k e
 #### Scenario: Dependency on an absent issue
 
 - **WHEN** a `dependencies/` file names an id no issue directory declares
-- **THEN** the adapter still emits the edge, and `lattice validate` reports
+- **THEN** the adapter still emits the edge, and `latt validate` reports
   `VACANCY` for it
 
 ### Requirement: Recognized-but-unrepresented content is deliberate, unrecognized content is reported
@@ -163,7 +177,7 @@ The adapter recognizes, and deliberately does not represent, `creation_time`,
 `comments/<32-hex>/(author|creation_time|description)` exactly. Comments are
 ent's conversation surface, not register structure: the adapter SHALL pass over
 recognized-unrepresented paths without an issue and SHALL NOT fetch their
-content, since a file that contributes nothing to the graph cannot shrink it.
+content.
 
 Any other file on the branch — a field name the adapter has no reader for, a
 stray file inside a `comments/` tree, or a top-level entry that is neither an
@@ -211,7 +225,7 @@ Verified by: `.venv/bin/python -m pytest tests/test_adapter_entomologist.py -k u
 
 ### Requirement: Serve as the branch-read gate
 
-`lattice validate` run with the entomologist profile and adapter against the
+`latt validate` run with the entomologist profile and adapter against the
 builder-constructed mini-ent fixture repository SHALL exit 1 — the fixture's
 malformed shapes make that deterministic — and the interface document SHALL carry
 exactly the node set, edge set, and finding code+path multiset the fixture
@@ -227,7 +241,7 @@ Verified by: `.venv/bin/python -m pytest tests/test_adapter_entomologist.py -k g
 
 #### Scenario: Gate run over the fixture
 
-- **WHEN** `lattice validate` runs with the entomologist profile and adapter
+- **WHEN** `latt validate` runs with the entomologist profile and adapter
   against the fixture repository the test builder constructs
 - **THEN** it exits 1, and the interface document carries exactly the fixture's
   declared nodes, edges, and finding multiset — nothing missing, nothing extra
@@ -238,3 +252,37 @@ Verified by: `.venv/bin/python -m pytest tests/test_adapter_entomologist.py -k g
   against a fixture containing an issue with unreadable content
 - **THEN** it writes an interface document to stdout and exits 0, carrying the
   unreadable content as findings rather than as a non-zero exit
+
+### Requirement: Every git call the adapter runs is bounded
+The adapter SHALL wait for each `git` invocation, including the single
+`cat-file --batch` exchange, no longer than the bound the resolved profile declares as
+`adapter.command_timeout_seconds`, defaulting to 60 seconds when the key is absent.
+A value that is not a non-negative integer SHALL fail profile loading with exit 2,
+never read as the default.
+When the bound expires the adapter SHALL terminate that process and SHALL produce one
+`PARSE_ERROR` naming the command and the bound in seconds. A ref resolution that
+expires yields an otherwise empty document; a `cat-file` exchange that expires yields
+every node the tree listing names, without the content the exchange did not return,
+and a `PARSE_ERROR` for the exchange. In
+both cases the adapter SHALL exit 0. This is distinct from a `git` binary that cannot
+be run at all, which remains a broken setup and a non-zero exit.
+
+Verified by: `.venv/bin/python -m pytest tests/test_adapter_entomologist.py -k "git_hangs or mistyped_command_timeout or cannot_be_run"`,
+`cargo test -p latt-adapter process`, `cargo test -p latt --bin latt-adapter-entomologist descendant` and `cargo test -p latt --bin latt-adapter-entomologist command_timeout_defaults`.
+
+#### Scenario: Ref resolution does not answer
+- **WHEN** the resolved profile declares `adapter.command_timeout_seconds: 1` and the
+  `git` on `PATH` does not exit within one second for `rev-parse`
+- **THEN** the adapter emits a `PARSE_ERROR` naming `git rev-parse` and the
+  one-second bound, emits no nodes, and exits 0
+
+#### Scenario: A descendant holding the request pipe does not extend the bound
+- **WHEN** the `cat-file --batch` request exceeds the pipe buffer, the `git` on
+  `PATH` never reads it, and a process it started inherits the pipe and outlives it
+- **THEN** the exchange ends at the bound with the timeout reported, not when the
+  descendant releases the pipe
+
+#### Scenario: git cannot be run
+- **WHEN** no `git` program can be started
+- **THEN** the adapter writes no interface document and exits non-zero, naming git,
+  so `latt validate` exits 2

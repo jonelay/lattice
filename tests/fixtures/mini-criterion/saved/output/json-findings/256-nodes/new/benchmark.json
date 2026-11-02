@@ -1,0 +1,11 @@
+{
+  "group_id": "output",
+  "function_id": "json-findings",
+  "value_str": "256-nodes",
+  "throughput": {
+    "Elements": 256
+  },
+  "full_id": "output/json-findings/256-nodes",
+  "directory_name": "output/json-findings/256-nodes",
+  "title": "output/json-findings/256-nodes"
+}

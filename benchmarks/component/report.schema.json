@@ -1,0 +1,223 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jonelay/lattice/blob/main/benchmarks/component/report.schema.json",
+  "title": "Lattice component benchmark record",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_unix_seconds",
+    "source",
+    "toolchain",
+    "environment",
+    "lattice_features",
+    "baseline",
+    "fixture",
+    "measurements"
+  ],
+  "properties": {
+    "schema_version": { "enum": ["2.0", "2.1", "2.2"] },
+    "generated_unix_seconds": { "type": "integer", "minimum": 0 },
+    "source": {
+      "type": "object",
+      "required": ["commit", "working_tree_dirty"],
+      "properties": {
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "working_tree_dirty": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "toolchain": {
+      "type": "object",
+      "required": ["rustc", "criterion"],
+      "properties": {
+        "rustc": { "type": "string", "pattern": "^rustc " },
+        "criterion": { "const": "0.8.2" }
+      },
+      "additionalProperties": false
+    },
+    "environment": {
+      "type": "object",
+      "required": ["os", "architecture", "cpu", "runner_class"],
+      "properties": {
+        "os": { "type": "string", "minLength": 1 },
+        "architecture": { "type": "string", "minLength": 1 },
+        "cpu": { "type": "string", "minLength": 1 },
+        "runner_class": { "enum": ["local", "github-actions", "gitlab-ci"] }
+      },
+      "additionalProperties": false
+    },
+    "lattice_features": { "const": "default" },
+    "baseline": {
+      "type": "object",
+      "required": ["requested", "mode"],
+      "properties": {
+        "requested": { "type": ["string", "null"], "minLength": 1 },
+        "mode": { "enum": ["none", "saved", "compared"] }
+      },
+      "additionalProperties": false
+    },
+    "fixture": {
+      "type": "object",
+      "required": ["schema_version", "id", "scales", "policy"],
+      "properties": {
+        "schema_version": { "const": "1.0" },
+        "id": { "type": "string", "minLength": 1 },
+        "scales": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["label", "nodes", "edges"],
+            "properties": {
+              "label": { "type": "string", "minLength": 1 },
+              "nodes": { "type": "integer", "minimum": 1 },
+              "edges": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "adapter_scales": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["label", "adapter", "generator", "nodes", "edges"],
+            "properties": {
+              "label": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+              "adapter": { "type": "string", "minLength": 1 },
+              "generator": { "type": "string", "minLength": 1 },
+              "nodes": { "type": "integer", "minimum": 1 },
+              "edges": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "policy": { "type": "object" }
+      }
+    },
+    "measurements": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "pattern": "^[a-z]+/[a-z-]+/[a-z0-9-]+$" },
+      "additionalProperties": { "$ref": "#/$defs/measurement" }
+    }
+  },
+  "additionalProperties": false,
+  "if": { "properties": { "schema_version": { "const": "2.2" } } },
+  "then": {
+    "properties": {
+      "measurements": {
+        "additionalProperties": { "required": ["body", "timing"] }
+      }
+    }
+  },
+  "$defs": {
+    "nanosecond_estimate": {
+      "type": "object",
+      "required": [
+        "point_estimate_nanoseconds",
+        "standard_error_nanoseconds",
+        "confidence_interval"
+      ],
+      "properties": {
+        "point_estimate_nanoseconds": { "type": "number", "minimum": 0 },
+        "standard_error_nanoseconds": { "type": "number", "minimum": 0 },
+        "confidence_interval": {
+          "type": "object",
+          "required": [
+            "confidence_level",
+            "lower_bound_nanoseconds",
+            "upper_bound_nanoseconds"
+          ],
+          "properties": {
+            "confidence_level": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+            "lower_bound_nanoseconds": { "type": "number", "minimum": 0 },
+            "upper_bound_nanoseconds": { "type": "number", "minimum": 0 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "ratio_estimate": {
+      "type": "object",
+      "required": ["point_estimate_ratio", "standard_error_ratio", "confidence_interval"],
+      "properties": {
+        "point_estimate_ratio": { "type": "number" },
+        "standard_error_ratio": { "type": "number", "minimum": 0 },
+        "confidence_interval": {
+          "type": "object",
+          "required": ["confidence_level", "lower_bound_ratio", "upper_bound_ratio"],
+          "properties": {
+            "confidence_level": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+            "lower_bound_ratio": { "type": "number" },
+            "upper_bound_ratio": { "type": "number" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "measurement": {
+      "type": "object",
+      "required": [
+        "mean",
+        "median",
+        "std_dev",
+        "median_abs_dev",
+        "tukey_fences_nanoseconds",
+        "throughput",
+        "change"
+      ],
+      "properties": {
+        "mean": { "$ref": "#/$defs/nanosecond_estimate" },
+        "median": { "$ref": "#/$defs/nanosecond_estimate" },
+        "std_dev": { "$ref": "#/$defs/nanosecond_estimate" },
+        "median_abs_dev": { "$ref": "#/$defs/nanosecond_estimate" },
+        "tukey_fences_nanoseconds": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": { "type": "number" }
+        },
+        "throughput": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "required": ["basis", "elements"],
+              "properties": {
+                "basis": { "const": "nodes" },
+                "elements": { "type": "integer", "minimum": 1 }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "body": { "type": "string", "pattern": "^[0-9]+$" },
+        "timing": {
+          "type": "object",
+          "required": ["setup", "input_drop", "output_drop"],
+          "properties": {
+            "setup": { "enum": ["none", "parse-document"] },
+            "input_drop": { "enum": ["timed", "untimed", "borrowed"] },
+            "output_drop": { "enum": ["timed", "untimed"] }
+          },
+          "additionalProperties": false
+        },
+        "change": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "required": ["mean", "median"],
+              "properties": {
+                "mean": { "$ref": "#/$defs/ratio_estimate" },
+                "median": { "$ref": "#/$defs/ratio_estimate" }
+              },
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

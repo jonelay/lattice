@@ -1,0 +1,1622 @@
+{
+  "clean/json/at": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"entries\": [\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"C1\",\n      \"kind\": \"claim\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 5\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"R1\",\n      \"kind\": \"reading\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 17\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 55\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 65\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A1\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 29\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 75\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 85\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A2\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 41\n      }\n    }\n  ],\n  \"findings\": [],\n  \"path\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\"\n}\n"
+  },
+  "clean/json/at-absolute": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"entries\": [],\n  \"findings\": [],\n  \"path\": \"<TARGET>/empty.txt\"\n}\n"
+  },
+  "clean/json/at-dir": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"entries\": [\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"C1\",\n      \"kind\": \"claim\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 5\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"R1\",\n      \"kind\": \"reading\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 17\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 55\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 65\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A1\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 29\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 75\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 85\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A2\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 41\n      }\n    }\n  ],\n  \"findings\": [],\n  \"path\": \"crates/latt-core/tests/fixtures/embedding\"\n}\n"
+  },
+  "clean/json/at-empty": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"entries\": [],\n  \"findings\": [],\n  \"path\": \"empty.txt\"\n}\n"
+  },
+  "clean/json/at-missing": {
+    "exit": 2,
+    "stderr": "Error: path 'missing.txt' does not exist under the target and no provenance names it\n",
+    "stdout": ""
+  },
+  "clean/json/counts": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"edges\": {\n    \"about\": 2,\n    \"uses\": 2\n  },\n  \"nodes\": {\n    \"assertion\": 2,\n    \"claim\": 1,\n    \"reading\": 1\n  }\n}\n"
+  },
+  "clean/json/counts-filter": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"edges\": {\n    \"about\": 2,\n    \"uses\": 2\n  },\n  \"nodes\": {\n    \"assertion\": 2,\n    \"claim\": 1,\n    \"reading\": 1\n  }\n}\n"
+  },
+  "clean/json/coverage": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"kinds\": [\n    {\n      \"incoming\": 0,\n      \"incoming_pct\": 0.0,\n      \"kind\": \"assertion\",\n      \"outgoing\": 2,\n      \"outgoing_pct\": 100.0,\n      \"total\": 2\n    },\n    {\n      \"incoming\": 1,\n      \"incoming_pct\": 100.0,\n      \"kind\": \"claim\",\n      \"outgoing\": 0,\n      \"outgoing_pct\": 0.0,\n      \"total\": 1\n    },\n    {\n      \"incoming\": 1,\n      \"incoming_pct\": 100.0,\n      \"kind\": \"reading\",\n      \"outgoing\": 0,\n      \"outgoing_pct\": 0.0,\n      \"total\": 1\n    }\n  ]\n}\n"
+  },
+  "clean/json/no-path": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"edges\": [],\n  \"found\": false,\n  \"nodes\": [],\n  \"src\": \"R1\",\n  \"tgt\": \"A1\"\n}\n"
+  },
+  "clean/json/orphans": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"kind_filter\": null,\n  \"orphans\": []\n}\n"
+  },
+  "clean/json/path": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"edges\": [\n    \"uses\"\n  ],\n  \"found\": true,\n  \"nodes\": [\n    \"A1\",\n    \"R1\"\n  ],\n  \"src\": \"A1\",\n  \"tgt\": \"R1\"\n}\n"
+  },
+  "clean/json/reach": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"direction\": \"reaches\",\n  \"edge_kinds\": [],\n  \"nodes\": [\n    {\n      \"id\": \"C1\",\n      \"kind\": \"claim\",\n      \"tainted\": false\n    },\n    {\n      \"id\": \"R1\",\n      \"kind\": \"reading\",\n      \"tainted\": false\n    }\n  ],\n  \"origin\": \"A1\"\n}\n"
+  },
+  "clean/json/reverse": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"direction\": \"reached-by\",\n  \"edge_kinds\": [],\n  \"nodes\": [\n    {\n      \"id\": \"A1\",\n      \"kind\": \"assertion\"\n    },\n    {\n      \"id\": \"A2\",\n      \"kind\": \"assertion\"\n    }\n  ],\n  \"origin\": \"R1\"\n}\n"
+  },
+  "clean/json/strict": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"findings\": [],\n  \"scope\": {\n    \"edges\": {\n      \"about\": 2,\n      \"uses\": 2\n    },\n    \"files\": 1,\n    \"nodes\": {\n      \"assertion\": 2,\n      \"claim\": 1,\n      \"reading\": 1\n    }\n  }\n}\n"
+  },
+  "clean/json/summary": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"edge_counts\": {\n    \"about\": 2,\n    \"uses\": 2\n  },\n  \"finding_counts\": [],\n  \"node_counts\": {\n    \"assertion\": 2,\n    \"claim\": 1,\n    \"reading\": 1\n  }\n}\n"
+  },
+  "clean/json/trace": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"entries\": [\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"C1\",\n      \"kind\": \"claim\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 5\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"R1\",\n      \"kind\": \"reading\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 17\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 55\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 65\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A1\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 29\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 75\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 85\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A2\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 41\n      }\n    }\n  ],\n  \"header\": {\n    \"lattice_version\": \"0.8.0\",\n    \"profile\": \"embedding-fixture\",\n    \"profile_version\": \"1.0.0\",\n    \"trace_version\": \"2\"\n  },\n  \"pathways\": [],\n  \"unattachable_findings\": []\n}\n"
+  },
+  "clean/json/trace-strict": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"entries\": [\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"C1\",\n      \"kind\": \"claim\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 5\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"R1\",\n      \"kind\": \"reading\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 17\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 55\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 65\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A1\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 29\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 75\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 85\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A2\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 41\n      }\n    }\n  ],\n  \"header\": {\n    \"lattice_version\": \"0.8.0\",\n    \"profile\": \"embedding-fixture\",\n    \"profile_version\": \"1.0.0\",\n    \"trace_version\": \"2\"\n  },\n  \"pathways\": [],\n  \"unattachable_findings\": []\n}\n"
+  },
+  "clean/json/unknown-edge": {
+    "exit": 2,
+    "stderr": "Error: unknown edge kind 'missing': the profile declares [\"about\", \"uses\"]\n",
+    "stdout": ""
+  },
+  "clean/json/unknown-kind": {
+    "exit": 2,
+    "stderr": "Error: unknown node kind 'missing': the profile declares [\"assertion\", \"claim\", \"reading\"]\n",
+    "stdout": ""
+  },
+  "clean/json/unknown-node": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'RX'\n",
+    "stdout": ""
+  },
+  "clean/json/validate": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"findings\": [],\n  \"scope\": {\n    \"edges\": {\n      \"about\": 2,\n      \"uses\": 2\n    },\n    \"files\": 1,\n    \"nodes\": {\n      \"assertion\": 2,\n      \"claim\": 1,\n      \"reading\": 1\n    }\n  }\n}\n"
+  },
+  "clean/plain/at": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "id:C1 kind:claim edges:0 findings:0\nid:R1 kind:reading edges:0 findings:0\nid:A1 kind:assertion edges:2 findings:0\nid:A2 kind:assertion edges:2 findings:0\n"
+  },
+  "clean/plain/at-absolute": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No entries or findings at <TARGET>/empty.txt.\n"
+  },
+  "clean/plain/at-dir": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "id:C1 kind:claim edges:0 findings:0\nid:R1 kind:reading edges:0 findings:0\nid:A1 kind:assertion edges:2 findings:0\nid:A2 kind:assertion edges:2 findings:0\n"
+  },
+  "clean/plain/at-empty": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No entries or findings at empty.txt.\n"
+  },
+  "clean/plain/at-missing": {
+    "exit": 2,
+    "stderr": "Error: path 'missing.txt' does not exist under the target and no provenance names it\n",
+    "stdout": ""
+  },
+  "clean/plain/counts": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "node assertion 2\nnode claim 1\nnode reading 1\nedge about 2\nedge uses 2\n"
+  },
+  "clean/plain/counts-filter": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "node assertion 2\nnode claim 1\nnode reading 1\nedge about 2\nedge uses 2\n"
+  },
+  "clean/plain/coverage": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "kind:assertion total:2 incoming:0 incoming_pct:0.0 outgoing:2 outgoing_pct:100.0\nkind:claim total:1 incoming:1 incoming_pct:100.0 outgoing:0 outgoing_pct:0.0\nkind:reading total:1 incoming:1 incoming_pct:100.0 outgoing:0 outgoing_pct:0.0\n"
+  },
+  "clean/plain/no-path": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No path from R1 to A1.\n"
+  },
+  "clean/plain/orphans": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No orphans.\n"
+  },
+  "clean/plain/path": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "A1 -[uses]-> R1\n"
+  },
+  "clean/plain/reach": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "C1 claim\nR1 reading\n"
+  },
+  "clean/plain/reverse": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "A1 assertion\nA2 assertion\n"
+  },
+  "clean/plain/strict": {
+    "exit": 0,
+    "stderr": "scope: 1 files; nodes assertion 2, claim 1, reading 1; edges about 2, uses 2\n",
+    "stdout": ""
+  },
+  "clean/plain/summary": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "node assertion 2\nnode claim 1\nnode reading 1\nedge about 2\nedge uses 2\n"
+  },
+  "clean/plain/trace": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "id:C1 kind:claim edges:0 findings:0\nid:R1 kind:reading edges:0 findings:0\nid:A1 kind:assertion edges:2 findings:0\nid:A2 kind:assertion edges:2 findings:0\n"
+  },
+  "clean/plain/trace-strict": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "id:C1 kind:claim edges:0 findings:0\nid:R1 kind:reading edges:0 findings:0\nid:A1 kind:assertion edges:2 findings:0\nid:A2 kind:assertion edges:2 findings:0\n"
+  },
+  "clean/plain/unknown-edge": {
+    "exit": 2,
+    "stderr": "Error: unknown edge kind 'missing': the profile declares [\"about\", \"uses\"]\n",
+    "stdout": ""
+  },
+  "clean/plain/unknown-kind": {
+    "exit": 2,
+    "stderr": "Error: unknown node kind 'missing': the profile declares [\"assertion\", \"claim\", \"reading\"]\n",
+    "stdout": ""
+  },
+  "clean/plain/unknown-node": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'RX'\n",
+    "stdout": ""
+  },
+  "clean/plain/validate": {
+    "exit": 0,
+    "stderr": "scope: 1 files; nodes assertion 2, claim 1, reading 1; edges about 2, uses 2\n",
+    "stdout": ""
+  },
+  "clean/rich/at": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "ID                   Kind       Key Attr                       Edges Finds\n--------------------------------------------------------------------------\nC1                   claim                                         0     0\nR1                   reading                                       0     0\nA1                   assertion                                     2     0\nA2                   assertion                                     2     0\n\n4 entries, 0 finding(s) at crates/latt-core/tests/fixtures/embedding/actor-a.json\n"
+  },
+  "clean/rich/at-absolute": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No entries or findings at <TARGET>/empty.txt.\n"
+  },
+  "clean/rich/at-dir": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "ID                   Kind       Key Attr                       Edges Finds\n--------------------------------------------------------------------------\nC1                   claim                                         0     0\nR1                   reading                                       0     0\nA1                   assertion                                     2     0\nA2                   assertion                                     2     0\n\n4 entries, 0 finding(s) at crates/latt-core/tests/fixtures/embedding\n"
+  },
+  "clean/rich/at-empty": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No entries or findings at empty.txt.\n"
+  },
+  "clean/rich/at-missing": {
+    "exit": 2,
+    "stderr": "Error: path 'missing.txt' does not exist under the target and no provenance names it\n",
+    "stdout": ""
+  },
+  "clean/rich/counts": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "Nodes\n  assertion                2\n  claim                    1\n  reading                  1\nEdges\n  about                    2\n  uses                     2\n"
+  },
+  "clean/rich/counts-filter": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "Nodes\n  assertion                2\n  claim                    1\n  reading                  1\nEdges\n  about                    2\n  uses                     2\n"
+  },
+  "clean/rich/coverage": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "Kind                 Total       Incoming       Outgoing\n--------------------------------------------------------\nassertion                2       0 (0.0%)     2 (100.0%)\nclaim                    1     1 (100.0%)       0 (0.0%)\nreading                  1     1 (100.0%)       0 (0.0%)\n\n3 kind(s)\n"
+  },
+  "clean/rich/no-path": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No path from R1 to A1.\n"
+  },
+  "clean/rich/orphans": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No orphans.\n"
+  },
+  "clean/rich/path": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "A1 -[uses]-> R1\n\n1 edge(s)\n"
+  },
+  "clean/rich/reach": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "reaches A1 (all edge kinds)\nC1                   claim\nR1                   reading\n\n2 node(s), 0 tainted\n"
+  },
+  "clean/rich/reverse": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "reached-by R1 (all edge kinds)\nA1                   assertion\nA2                   assertion\n\n2 node(s)\n"
+  },
+  "clean/rich/strict": {
+    "exit": 0,
+    "stderr": "scope: 1 files; nodes assertion 2, claim 1, reading 1; edges about 2, uses 2\n",
+    "stdout": "No findings.\n"
+  },
+  "clean/rich/summary": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "Nodes\n  assertion                          2\n  claim                              1\n  reading                            1\nEdges\n  about                              2\n  uses                               2\nFindings\n"
+  },
+  "clean/rich/trace": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "ID                   Kind       Key Attr                       Edges Finds\n--------------------------------------------------------------------------\nC1                   claim                                         0     0\nR1                   reading                                       0     0\nA1                   assertion                                     2     0\nA2                   assertion                                     2     0\n\n4 entries, no findings\n"
+  },
+  "clean/rich/trace-strict": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "ID                   Kind       Key Attr                       Edges Finds\n--------------------------------------------------------------------------\nC1                   claim                                         0     0\nR1                   reading                                       0     0\nA1                   assertion                                     2     0\nA2                   assertion                                     2     0\n\n4 entries, no findings\n"
+  },
+  "clean/rich/unknown-edge": {
+    "exit": 2,
+    "stderr": "Error: unknown edge kind 'missing': the profile declares [\"about\", \"uses\"]\n",
+    "stdout": ""
+  },
+  "clean/rich/unknown-kind": {
+    "exit": 2,
+    "stderr": "Error: unknown node kind 'missing': the profile declares [\"assertion\", \"claim\", \"reading\"]\n",
+    "stdout": ""
+  },
+  "clean/rich/unknown-node": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'RX'\n",
+    "stdout": ""
+  },
+  "clean/rich/validate": {
+    "exit": 0,
+    "stderr": "scope: 1 files; nodes assertion 2, claim 1, reading 1; edges about 2, uses 2\n",
+    "stdout": "No findings.\n"
+  },
+  "diff/json": {
+    "exit": 0,
+    "stderr": "HEAD:\n{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 1,\n      \"message\": \"after diagnostic\",\n      \"node_id\": null,\n      \"severity\": \"error\"\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"pathways_changed\": [],\n  \"edges_added\": [],\n  \"edges_changed\": [],\n  \"edges_removed\": [],\n  \"nodes_added\": [],\n  \"nodes_changed\": [\n    {\n      \"attrs_a\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"attrs_b\": {\n        \"group\": \"fixture\",\n        \"status\": \"changed\"\n      },\n      \"id\": \"C1\",\n      \"kind\": \"claim\"\n    }\n  ],\n  \"nodes_removed\": [],\n  \"rev_a\": \"HEAD~1\",\n  \"rev_b\": \"HEAD\"\n}\n"
+  },
+  "diff/plain": {
+    "exit": 0,
+    "stderr": "HEAD:\nERROR PARSE_ERROR input.json:1 after diagnostic\n",
+    "stdout": "node changed C1 claim\n"
+  },
+  "diff/rich": {
+    "exit": 0,
+    "stderr": "HEAD:\nERROR   PARSE_ERROR          input.json:1                   after diagnostic\n\n1 error(s)\n",
+    "stdout": "HEAD~1 -> HEAD\nnode changed C1 claim\n\n1 difference(s)\n"
+  },
+  "empty/json/at": {
+    "exit": 2,
+    "stderr": "Error: path 'crates/latt-core/tests/fixtures/embedding/actor-a.json' does not exist under the target and no provenance names it\n",
+    "stdout": ""
+  },
+  "empty/json/at-absolute": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"entries\": [],\n  \"findings\": [],\n  \"path\": \"<TARGET>/empty.txt\"\n}\n"
+  },
+  "empty/json/at-dir": {
+    "exit": 2,
+    "stderr": "Error: path 'crates/latt-core/tests/fixtures/embedding' does not exist under the target and no provenance names it\n",
+    "stdout": ""
+  },
+  "empty/json/at-empty": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"entries\": [],\n  \"findings\": [],\n  \"path\": \"empty.txt\"\n}\n"
+  },
+  "empty/json/at-missing": {
+    "exit": 2,
+    "stderr": "Error: path 'missing.txt' does not exist under the target and no provenance names it\n",
+    "stdout": ""
+  },
+  "empty/json/counts": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"edges\": {\n    \"about\": 0,\n    \"uses\": 0\n  },\n  \"nodes\": {\n    \"assertion\": 0,\n    \"claim\": 0,\n    \"reading\": 0\n  }\n}\n"
+  },
+  "empty/json/counts-filter": {
+    "exit": 0,
+    "stderr": "Warning: filter attr 'status' appears on no node\n",
+    "stdout": "{\n  \"edges\": {\n    \"about\": 0,\n    \"uses\": 0\n  },\n  \"nodes\": {\n    \"assertion\": 0,\n    \"claim\": 0,\n    \"reading\": 0\n  }\n}\n"
+  },
+  "empty/json/coverage": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"kinds\": [\n    {\n      \"incoming\": 0,\n      \"incoming_pct\": 0.0,\n      \"kind\": \"assertion\",\n      \"outgoing\": 0,\n      \"outgoing_pct\": 0.0,\n      \"total\": 0\n    },\n    {\n      \"incoming\": 0,\n      \"incoming_pct\": 0.0,\n      \"kind\": \"claim\",\n      \"outgoing\": 0,\n      \"outgoing_pct\": 0.0,\n      \"total\": 0\n    },\n    {\n      \"incoming\": 0,\n      \"incoming_pct\": 0.0,\n      \"kind\": \"reading\",\n      \"outgoing\": 0,\n      \"outgoing_pct\": 0.0,\n      \"total\": 0\n    }\n  ]\n}\n"
+  },
+  "empty/json/no-path": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'R1'\n",
+    "stdout": ""
+  },
+  "empty/json/orphans": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"kind_filter\": null,\n  \"orphans\": []\n}\n"
+  },
+  "empty/json/path": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'A1'\n",
+    "stdout": ""
+  },
+  "empty/json/reach": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'A1'\n",
+    "stdout": ""
+  },
+  "empty/json/reverse": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'R1'\n",
+    "stdout": ""
+  },
+  "empty/json/strict": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"findings\": [\n    {\n      \"code\": \"EMPTY_KIND\",\n      \"file\": \"<profile>\",\n      \"line\": 0,\n      \"message\": \"edge kind 'about' has no edge\",\n      \"node_id\": null,\n      \"severity\": \"info\"\n    },\n    {\n      \"code\": \"EMPTY_KIND\",\n      \"file\": \"<profile>\",\n      \"line\": 0,\n      \"message\": \"edge kind 'uses' has no edge\",\n      \"node_id\": null,\n      \"severity\": \"info\"\n    },\n    {\n      \"code\": \"EMPTY_KIND\",\n      \"file\": \"<profile>\",\n      \"line\": 0,\n      \"message\": \"node kind 'assertion' has no node\",\n      \"node_id\": null,\n      \"severity\": \"info\"\n    },\n    {\n      \"code\": \"EMPTY_KIND\",\n      \"file\": \"<profile>\",\n      \"line\": 0,\n      \"message\": \"node kind 'claim' has no node\",\n      \"node_id\": null,\n      \"severity\": \"info\"\n    },\n    {\n      \"code\": \"EMPTY_KIND\",\n      \"file\": \"<profile>\",\n      \"line\": 0,\n      \"message\": \"node kind 'reading' has no node\",\n      \"node_id\": null,\n      \"severity\": \"info\"\n    }\n  ],\n  \"scope\": {\n    \"edges\": {\n      \"about\": 0,\n      \"uses\": 0\n    },\n    \"files\": 0,\n    \"nodes\": {\n      \"assertion\": 0,\n      \"claim\": 0,\n      \"reading\": 0\n    }\n  }\n}\n"
+  },
+  "empty/json/summary": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"edge_counts\": {\n    \"about\": 0,\n    \"uses\": 0\n  },\n  \"finding_counts\": [\n    {\n      \"code\": \"EMPTY_KIND\",\n      \"count\": 5,\n      \"severity\": \"info\"\n    }\n  ],\n  \"node_counts\": {\n    \"assertion\": 0,\n    \"claim\": 0,\n    \"reading\": 0\n  }\n}\n"
+  },
+  "empty/json/trace": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"entries\": [],\n  \"header\": {\n    \"lattice_version\": \"0.8.0\",\n    \"profile\": \"embedding-fixture\",\n    \"profile_version\": \"1.0.0\",\n    \"trace_version\": \"2\"\n  },\n  \"pathways\": [],\n  \"unattachable_findings\": [\n    {\n      \"code\": \"EMPTY_KIND\",\n      \"file\": \"<profile>\",\n      \"line\": 0,\n      \"message\": \"edge kind 'about' has no edge\",\n      \"severity\": \"info\"\n    },\n    {\n      \"code\": \"EMPTY_KIND\",\n      \"file\": \"<profile>\",\n      \"line\": 0,\n      \"message\": \"edge kind 'uses' has no edge\",\n      \"severity\": \"info\"\n    },\n    {\n      \"code\": \"EMPTY_KIND\",\n      \"file\": \"<profile>\",\n      \"line\": 0,\n      \"message\": \"node kind 'assertion' has no node\",\n      \"severity\": \"info\"\n    },\n    {\n      \"code\": \"EMPTY_KIND\",\n      \"file\": \"<profile>\",\n      \"line\": 0,\n      \"message\": \"node kind 'claim' has no node\",\n      \"severity\": \"info\"\n    },\n    {\n      \"code\": \"EMPTY_KIND\",\n      \"file\": \"<profile>\",\n      \"line\": 0,\n      \"message\": \"node kind 'reading' has no node\",\n      \"severity\": \"info\"\n    }\n  ]\n}\n"
+  },
+  "empty/json/trace-strict": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"entries\": [],\n  \"header\": {\n    \"lattice_version\": \"0.8.0\",\n    \"profile\": \"embedding-fixture\",\n    \"profile_version\": \"1.0.0\",\n    \"trace_version\": \"2\"\n  },\n  \"pathways\": [],\n  \"unattachable_findings\": [\n    {\n      \"code\": \"EMPTY_KIND\",\n      \"file\": \"<profile>\",\n      \"line\": 0,\n      \"message\": \"edge kind 'about' has no edge\",\n      \"severity\": \"info\"\n    },\n    {\n      \"code\": \"EMPTY_KIND\",\n      \"file\": \"<profile>\",\n      \"line\": 0,\n      \"message\": \"edge kind 'uses' has no edge\",\n      \"severity\": \"info\"\n    },\n    {\n      \"code\": \"EMPTY_KIND\",\n      \"file\": \"<profile>\",\n      \"line\": 0,\n      \"message\": \"node kind 'assertion' has no node\",\n      \"severity\": \"info\"\n    },\n    {\n      \"code\": \"EMPTY_KIND\",\n      \"file\": \"<profile>\",\n      \"line\": 0,\n      \"message\": \"node kind 'claim' has no node\",\n      \"severity\": \"info\"\n    },\n    {\n      \"code\": \"EMPTY_KIND\",\n      \"file\": \"<profile>\",\n      \"line\": 0,\n      \"message\": \"node kind 'reading' has no node\",\n      \"severity\": \"info\"\n    }\n  ]\n}\n"
+  },
+  "empty/json/unknown-edge": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'A1'\n",
+    "stdout": ""
+  },
+  "empty/json/unknown-kind": {
+    "exit": 2,
+    "stderr": "Error: unknown node kind 'missing': the profile declares [\"assertion\", \"claim\", \"reading\"]\n",
+    "stdout": ""
+  },
+  "empty/json/unknown-node": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'RX'\n",
+    "stdout": ""
+  },
+  "empty/json/validate": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"findings\": [\n    {\n      \"code\": \"EMPTY_KIND\",\n      \"file\": \"<profile>\",\n      \"line\": 0,\n      \"message\": \"edge kind 'about' has no edge\",\n      \"node_id\": null,\n      \"severity\": \"info\"\n    },\n    {\n      \"code\": \"EMPTY_KIND\",\n      \"file\": \"<profile>\",\n      \"line\": 0,\n      \"message\": \"edge kind 'uses' has no edge\",\n      \"node_id\": null,\n      \"severity\": \"info\"\n    },\n    {\n      \"code\": \"EMPTY_KIND\",\n      \"file\": \"<profile>\",\n      \"line\": 0,\n      \"message\": \"node kind 'assertion' has no node\",\n      \"node_id\": null,\n      \"severity\": \"info\"\n    },\n    {\n      \"code\": \"EMPTY_KIND\",\n      \"file\": \"<profile>\",\n      \"line\": 0,\n      \"message\": \"node kind 'claim' has no node\",\n      \"node_id\": null,\n      \"severity\": \"info\"\n    },\n    {\n      \"code\": \"EMPTY_KIND\",\n      \"file\": \"<profile>\",\n      \"line\": 0,\n      \"message\": \"node kind 'reading' has no node\",\n      \"node_id\": null,\n      \"severity\": \"info\"\n    }\n  ],\n  \"scope\": {\n    \"edges\": {\n      \"about\": 0,\n      \"uses\": 0\n    },\n    \"files\": 0,\n    \"nodes\": {\n      \"assertion\": 0,\n      \"claim\": 0,\n      \"reading\": 0\n    }\n  }\n}\n"
+  },
+  "empty/plain/at": {
+    "exit": 2,
+    "stderr": "Error: path 'crates/latt-core/tests/fixtures/embedding/actor-a.json' does not exist under the target and no provenance names it\n",
+    "stdout": ""
+  },
+  "empty/plain/at-absolute": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No entries or findings at <TARGET>/empty.txt.\n"
+  },
+  "empty/plain/at-dir": {
+    "exit": 2,
+    "stderr": "Error: path 'crates/latt-core/tests/fixtures/embedding' does not exist under the target and no provenance names it\n",
+    "stdout": ""
+  },
+  "empty/plain/at-empty": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No entries or findings at empty.txt.\n"
+  },
+  "empty/plain/at-missing": {
+    "exit": 2,
+    "stderr": "Error: path 'missing.txt' does not exist under the target and no provenance names it\n",
+    "stdout": ""
+  },
+  "empty/plain/counts": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "node assertion 0\nnode claim 0\nnode reading 0\nedge about 0\nedge uses 0\n"
+  },
+  "empty/plain/counts-filter": {
+    "exit": 0,
+    "stderr": "Warning: filter attr 'status' appears on no node\n",
+    "stdout": "node assertion 0\nnode claim 0\nnode reading 0\nedge about 0\nedge uses 0\n"
+  },
+  "empty/plain/coverage": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "kind:assertion total:0 incoming:0 incoming_pct:0.0 outgoing:0 outgoing_pct:0.0\nkind:claim total:0 incoming:0 incoming_pct:0.0 outgoing:0 outgoing_pct:0.0\nkind:reading total:0 incoming:0 incoming_pct:0.0 outgoing:0 outgoing_pct:0.0\n"
+  },
+  "empty/plain/no-path": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'R1'\n",
+    "stdout": ""
+  },
+  "empty/plain/orphans": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No orphans.\n"
+  },
+  "empty/plain/path": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'A1'\n",
+    "stdout": ""
+  },
+  "empty/plain/reach": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'A1'\n",
+    "stdout": ""
+  },
+  "empty/plain/reverse": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'R1'\n",
+    "stdout": ""
+  },
+  "empty/plain/strict": {
+    "exit": 0,
+    "stderr": "scope: 0 files; nodes assertion 0, claim 0, reading 0; edges about 0, uses 0\n",
+    "stdout": "INFO EMPTY_KIND <profile>:0 edge kind 'about' has no edge\nINFO EMPTY_KIND <profile>:0 edge kind 'uses' has no edge\nINFO EMPTY_KIND <profile>:0 node kind 'assertion' has no node\nINFO EMPTY_KIND <profile>:0 node kind 'claim' has no node\nINFO EMPTY_KIND <profile>:0 node kind 'reading' has no node\n"
+  },
+  "empty/plain/summary": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "node assertion 0\nnode claim 0\nnode reading 0\nedge about 0\nedge uses 0\nfinding EMPTY_KIND info 5\n"
+  },
+  "empty/plain/trace": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "\nUnattachable findings:\n  INFO EMPTY_KIND <profile>:0 edge kind 'about' has no edge\n  INFO EMPTY_KIND <profile>:0 edge kind 'uses' has no edge\n  INFO EMPTY_KIND <profile>:0 node kind 'assertion' has no node\n  INFO EMPTY_KIND <profile>:0 node kind 'claim' has no node\n  INFO EMPTY_KIND <profile>:0 node kind 'reading' has no node\n"
+  },
+  "empty/plain/trace-strict": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "\nUnattachable findings:\n  INFO EMPTY_KIND <profile>:0 edge kind 'about' has no edge\n  INFO EMPTY_KIND <profile>:0 edge kind 'uses' has no edge\n  INFO EMPTY_KIND <profile>:0 node kind 'assertion' has no node\n  INFO EMPTY_KIND <profile>:0 node kind 'claim' has no node\n  INFO EMPTY_KIND <profile>:0 node kind 'reading' has no node\n"
+  },
+  "empty/plain/unknown-edge": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'A1'\n",
+    "stdout": ""
+  },
+  "empty/plain/unknown-kind": {
+    "exit": 2,
+    "stderr": "Error: unknown node kind 'missing': the profile declares [\"assertion\", \"claim\", \"reading\"]\n",
+    "stdout": ""
+  },
+  "empty/plain/unknown-node": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'RX'\n",
+    "stdout": ""
+  },
+  "empty/plain/validate": {
+    "exit": 0,
+    "stderr": "scope: 0 files; nodes assertion 0, claim 0, reading 0; edges about 0, uses 0\n",
+    "stdout": "INFO EMPTY_KIND <profile>:0 edge kind 'about' has no edge\nINFO EMPTY_KIND <profile>:0 edge kind 'uses' has no edge\nINFO EMPTY_KIND <profile>:0 node kind 'assertion' has no node\nINFO EMPTY_KIND <profile>:0 node kind 'claim' has no node\nINFO EMPTY_KIND <profile>:0 node kind 'reading' has no node\n"
+  },
+  "empty/rich/at": {
+    "exit": 2,
+    "stderr": "Error: path 'crates/latt-core/tests/fixtures/embedding/actor-a.json' does not exist under the target and no provenance names it\n",
+    "stdout": ""
+  },
+  "empty/rich/at-absolute": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No entries or findings at <TARGET>/empty.txt.\n"
+  },
+  "empty/rich/at-dir": {
+    "exit": 2,
+    "stderr": "Error: path 'crates/latt-core/tests/fixtures/embedding' does not exist under the target and no provenance names it\n",
+    "stdout": ""
+  },
+  "empty/rich/at-empty": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No entries or findings at empty.txt.\n"
+  },
+  "empty/rich/at-missing": {
+    "exit": 2,
+    "stderr": "Error: path 'missing.txt' does not exist under the target and no provenance names it\n",
+    "stdout": ""
+  },
+  "empty/rich/counts": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "Nodes\n  assertion                0\n  claim                    0\n  reading                  0\nEdges\n  about                    0\n  uses                     0\n"
+  },
+  "empty/rich/counts-filter": {
+    "exit": 0,
+    "stderr": "Warning: filter attr 'status' appears on no node\n",
+    "stdout": "Nodes\n  assertion                0\n  claim                    0\n  reading                  0\nEdges\n  about                    0\n  uses                     0\n"
+  },
+  "empty/rich/coverage": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "Kind                 Total       Incoming       Outgoing\n--------------------------------------------------------\nassertion                0       0 (0.0%)       0 (0.0%)\nclaim                    0       0 (0.0%)       0 (0.0%)\nreading                  0       0 (0.0%)       0 (0.0%)\n\n3 kind(s)\n"
+  },
+  "empty/rich/no-path": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'R1'\n",
+    "stdout": ""
+  },
+  "empty/rich/orphans": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No orphans.\n"
+  },
+  "empty/rich/path": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'A1'\n",
+    "stdout": ""
+  },
+  "empty/rich/reach": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'A1'\n",
+    "stdout": ""
+  },
+  "empty/rich/reverse": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'R1'\n",
+    "stdout": ""
+  },
+  "empty/rich/strict": {
+    "exit": 0,
+    "stderr": "scope: 0 files; nodes assertion 0, claim 0, reading 0; edges about 0, uses 0\n",
+    "stdout": "INFO    EMPTY_KIND           <profile>:0                    edge kind 'about' has no edge\nINFO    EMPTY_KIND           <profile>:0                    edge kind 'uses' has no edge\nINFO    EMPTY_KIND           <profile>:0                    node kind 'assertion' has no node\nINFO    EMPTY_KIND           <profile>:0                    node kind 'claim' has no node\nINFO    EMPTY_KIND           <profile>:0                    node kind 'reading' has no node\n\n5 info(s)\n"
+  },
+  "empty/rich/summary": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "Nodes\n  assertion                          0\n  claim                              0\n  reading                            0\nEdges\n  about                              0\n  uses                               0\nFindings\n  EMPTY_KIND info                    5\n"
+  },
+  "empty/rich/trace": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "ID                   Kind       Key Attr                       Edges Finds\n--------------------------------------------------------------------------\n\nUnattachable findings:\n  INFO    EMPTY_KIND <profile>:0 edge kind 'about' has no edge\n  INFO    EMPTY_KIND <profile>:0 edge kind 'uses' has no edge\n  INFO    EMPTY_KIND <profile>:0 node kind 'assertion' has no node\n  INFO    EMPTY_KIND <profile>:0 node kind 'claim' has no node\n  INFO    EMPTY_KIND <profile>:0 node kind 'reading' has no node\n\n0 entries, 5 info(s)\n"
+  },
+  "empty/rich/trace-strict": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "ID                   Kind       Key Attr                       Edges Finds\n--------------------------------------------------------------------------\n\nUnattachable findings:\n  INFO    EMPTY_KIND <profile>:0 edge kind 'about' has no edge\n  INFO    EMPTY_KIND <profile>:0 edge kind 'uses' has no edge\n  INFO    EMPTY_KIND <profile>:0 node kind 'assertion' has no node\n  INFO    EMPTY_KIND <profile>:0 node kind 'claim' has no node\n  INFO    EMPTY_KIND <profile>:0 node kind 'reading' has no node\n\n0 entries, 5 info(s)\n"
+  },
+  "empty/rich/unknown-edge": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'A1'\n",
+    "stdout": ""
+  },
+  "empty/rich/unknown-kind": {
+    "exit": 2,
+    "stderr": "Error: unknown node kind 'missing': the profile declares [\"assertion\", \"claim\", \"reading\"]\n",
+    "stdout": ""
+  },
+  "empty/rich/unknown-node": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'RX'\n",
+    "stdout": ""
+  },
+  "empty/rich/validate": {
+    "exit": 0,
+    "stderr": "scope: 0 files; nodes assertion 0, claim 0, reading 0; edges about 0, uses 0\n",
+    "stdout": "INFO    EMPTY_KIND           <profile>:0                    edge kind 'about' has no edge\nINFO    EMPTY_KIND           <profile>:0                    edge kind 'uses' has no edge\nINFO    EMPTY_KIND           <profile>:0                    node kind 'assertion' has no node\nINFO    EMPTY_KIND           <profile>:0                    node kind 'claim' has no node\nINFO    EMPTY_KIND           <profile>:0                    node kind 'reading' has no node\n\n5 info(s)\n"
+  },
+  "invalid-summary/json": {
+    "exit": 2,
+    "stderr": "Error: SUMMARY config requires node_kind, status_attr, group_by_attr\n",
+    "stdout": ""
+  },
+  "invalid-summary/plain": {
+    "exit": 2,
+    "stderr": "Error: SUMMARY config requires node_kind, status_attr, group_by_attr\n",
+    "stdout": ""
+  },
+  "invalid-summary/rich": {
+    "exit": 2,
+    "stderr": "Error: SUMMARY config requires node_kind, status_attr, group_by_attr\n",
+    "stdout": ""
+  },
+  "overlay/json": {
+    "exit": 1,
+    "stderr": "",
+    "stdout": "{\n  \"findings\": [\n    {\n      \"code\": \"SUGGESTED_EDGE\",\n      \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n      \"line\": 29,\n      \"message\": \"'A1' uses 'A2' (score 0.5000, fixture): fixture\",\n      \"node_id\": \"A1\",\n      \"severity\": \"hint\"\n    },\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 1,\n      \"message\": \"after diagnostic\",\n      \"node_id\": null,\n      \"severity\": \"error\"\n    }\n  ],\n  \"scope\": {\n    \"edges\": {\n      \"about\": 2,\n      \"uses\": 2\n    },\n    \"files\": 1,\n    \"nodes\": {\n      \"assertion\": 2,\n      \"claim\": 1,\n      \"reading\": 1\n    }\n  }\n}\n"
+  },
+  "overlay/plain": {
+    "exit": 1,
+    "stderr": "scope: 1 files; nodes assertion 2, claim 1, reading 1; edges about 2, uses 2\n",
+    "stdout": "HINT SUGGESTED_EDGE crates/latt-core/tests/fixtures/embedding/actor-a.json:29 'A1' uses 'A2' (score 0.5000, fixture): fixture\nERROR PARSE_ERROR input.json:1 after diagnostic\n"
+  },
+  "overlay/rich": {
+    "exit": 1,
+    "stderr": "scope: 1 files; nodes assertion 2, claim 1, reading 1; edges about 2, uses 2\n",
+    "stdout": "HINT    SUGGESTED_EDGE       crates/latt-core/tests/fixtures/embedding/actor-a.json:29 'A1' uses 'A2' (score 0.5000, fixture): fixture\nERROR   PARSE_ERROR          input.json:1                   after diagnostic\n\n1 error(s), 1 hint(s)\n"
+  },
+  "rollup-error/json/at": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"entries\": [\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"C1\",\n      \"kind\": \"claim\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 5\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"R1\",\n      \"kind\": \"reading\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 17\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 55\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 65\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A1\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 29\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 75\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 85\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A2\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 41\n      }\n    }\n  ],\n  \"findings\": [],\n  \"path\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\"\n}\n"
+  },
+  "rollup-error/json/at-absolute": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"entries\": [],\n  \"findings\": [],\n  \"path\": \"<TARGET>/empty.txt\"\n}\n"
+  },
+  "rollup-error/json/at-dir": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"entries\": [\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"C1\",\n      \"kind\": \"claim\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 5\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"R1\",\n      \"kind\": \"reading\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 17\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 55\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 65\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A1\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 29\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 75\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 85\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A2\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 41\n      }\n    }\n  ],\n  \"findings\": [],\n  \"path\": \"crates/latt-core/tests/fixtures/embedding\"\n}\n"
+  },
+  "rollup-error/json/at-empty": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"entries\": [],\n  \"findings\": [],\n  \"path\": \"empty.txt\"\n}\n"
+  },
+  "rollup-error/json/at-missing": {
+    "exit": 2,
+    "stderr": "Error: path 'missing.txt' does not exist under the target and no provenance names it\n",
+    "stdout": ""
+  },
+  "rollup-error/json/counts": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"edges\": {\n    \"about\": 2,\n    \"uses\": 2\n  },\n  \"nodes\": {\n    \"assertion\": 2,\n    \"claim\": 1,\n    \"reading\": 1\n  }\n}\n"
+  },
+  "rollup-error/json/counts-filter": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"edges\": {\n    \"about\": 2,\n    \"uses\": 2\n  },\n  \"nodes\": {\n    \"assertion\": 2,\n    \"claim\": 1,\n    \"reading\": 1\n  }\n}\n"
+  },
+  "rollup-error/json/coverage": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"kinds\": [\n    {\n      \"incoming\": 0,\n      \"incoming_pct\": 0.0,\n      \"kind\": \"assertion\",\n      \"outgoing\": 2,\n      \"outgoing_pct\": 100.0,\n      \"total\": 2\n    },\n    {\n      \"incoming\": 1,\n      \"incoming_pct\": 100.0,\n      \"kind\": \"claim\",\n      \"outgoing\": 0,\n      \"outgoing_pct\": 0.0,\n      \"total\": 1\n    },\n    {\n      \"incoming\": 1,\n      \"incoming_pct\": 100.0,\n      \"kind\": \"reading\",\n      \"outgoing\": 0,\n      \"outgoing_pct\": 0.0,\n      \"total\": 1\n    }\n  ]\n}\n"
+  },
+  "rollup-error/json/no-path": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"edges\": [],\n  \"found\": false,\n  \"nodes\": [],\n  \"src\": \"R1\",\n  \"tgt\": \"A1\"\n}\n"
+  },
+  "rollup-error/json/orphans": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"kind_filter\": null,\n  \"orphans\": []\n}\n"
+  },
+  "rollup-error/json/path": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"edges\": [\n    \"uses\"\n  ],\n  \"found\": true,\n  \"nodes\": [\n    \"A1\",\n    \"R1\"\n  ],\n  \"src\": \"A1\",\n  \"tgt\": \"R1\"\n}\n"
+  },
+  "rollup-error/json/reach": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"direction\": \"reaches\",\n  \"edge_kinds\": [],\n  \"nodes\": [\n    {\n      \"id\": \"C1\",\n      \"kind\": \"claim\",\n      \"tainted\": false\n    },\n    {\n      \"id\": \"R1\",\n      \"kind\": \"reading\",\n      \"tainted\": false\n    }\n  ],\n  \"origin\": \"A1\"\n}\n"
+  },
+  "rollup-error/json/reverse": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"direction\": \"reached-by\",\n  \"edge_kinds\": [],\n  \"nodes\": [\n    {\n      \"id\": \"A1\",\n      \"kind\": \"assertion\"\n    },\n    {\n      \"id\": \"A2\",\n      \"kind\": \"assertion\"\n    }\n  ],\n  \"origin\": \"R1\"\n}\n"
+  },
+  "rollup-error/json/strict": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ],\n  \"scope\": {\n    \"edges\": {\n      \"about\": 2,\n      \"uses\": 2\n    },\n    \"files\": 1,\n    \"nodes\": {\n      \"assertion\": 2,\n      \"claim\": 1,\n      \"reading\": 1\n    }\n  }\n}\n"
+  },
+  "rollup-error/json/summary": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"groups\": [\n    {\n      \"group\": \"fixture\",\n      \"settled\": 2,\n      \"total\": 2\n    }\n  ],\n  \"totals\": {\n    \"settled\": 2,\n    \"total\": 2\n  }\n}\n"
+  },
+  "rollup-error/json/trace": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"entries\": [\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"C1\",\n      \"kind\": \"claim\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 5\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"R1\",\n      \"kind\": \"reading\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 17\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 55\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 65\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A1\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 29\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 75\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 85\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A2\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 41\n      }\n    }\n  ],\n  \"header\": {\n    \"lattice_version\": \"0.8.0\",\n    \"profile\": \"embedding-fixture\",\n    \"profile_version\": \"1.0.0\",\n    \"trace_version\": \"2\"\n  },\n  \"pathways\": [],\n  \"unattachable_findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n"
+  },
+  "rollup-error/json/trace-strict": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"entries\": [\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"C1\",\n      \"kind\": \"claim\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 5\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"R1\",\n      \"kind\": \"reading\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 17\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 55\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 65\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A1\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 29\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 75\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 85\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A2\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 41\n      }\n    }\n  ],\n  \"header\": {\n    \"lattice_version\": \"0.8.0\",\n    \"profile\": \"embedding-fixture\",\n    \"profile_version\": \"1.0.0\",\n    \"trace_version\": \"2\"\n  },\n  \"pathways\": [],\n  \"unattachable_findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n"
+  },
+  "rollup-error/json/unknown-edge": {
+    "exit": 2,
+    "stderr": "Error: unknown edge kind 'missing': the profile declares [\"about\", \"uses\"]\n",
+    "stdout": ""
+  },
+  "rollup-error/json/unknown-kind": {
+    "exit": 2,
+    "stderr": "Error: unknown node kind 'missing': the profile declares [\"assertion\", \"claim\", \"reading\"]\n",
+    "stdout": ""
+  },
+  "rollup-error/json/unknown-node": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'RX'\n",
+    "stdout": ""
+  },
+  "rollup-error/json/validate": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ],\n  \"scope\": {\n    \"edges\": {\n      \"about\": 2,\n      \"uses\": 2\n    },\n    \"files\": 1,\n    \"nodes\": {\n      \"assertion\": 2,\n      \"claim\": 1,\n      \"reading\": 1\n    }\n  }\n}\n"
+  },
+  "rollup-error/plain/at": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "id:C1 kind:claim edges:0 findings:0\nid:R1 kind:reading edges:0 findings:0\nid:A1 kind:assertion edges:2 findings:0\nid:A2 kind:assertion edges:2 findings:0\n"
+  },
+  "rollup-error/plain/at-absolute": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No entries or findings at <TARGET>/empty.txt.\n"
+  },
+  "rollup-error/plain/at-dir": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "id:C1 kind:claim edges:0 findings:0\nid:R1 kind:reading edges:0 findings:0\nid:A1 kind:assertion edges:2 findings:0\nid:A2 kind:assertion edges:2 findings:0\n"
+  },
+  "rollup-error/plain/at-empty": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No entries or findings at empty.txt.\n"
+  },
+  "rollup-error/plain/at-missing": {
+    "exit": 2,
+    "stderr": "Error: path 'missing.txt' does not exist under the target and no provenance names it\n",
+    "stdout": ""
+  },
+  "rollup-error/plain/counts": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "node assertion 2\nnode claim 1\nnode reading 1\nedge about 2\nedge uses 2\n"
+  },
+  "rollup-error/plain/counts-filter": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "node assertion 2\nnode claim 1\nnode reading 1\nedge about 2\nedge uses 2\n"
+  },
+  "rollup-error/plain/coverage": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "kind:assertion total:2 incoming:0 incoming_pct:0.0 outgoing:2 outgoing_pct:100.0\nkind:claim total:1 incoming:1 incoming_pct:100.0 outgoing:0 outgoing_pct:0.0\nkind:reading total:1 incoming:1 incoming_pct:100.0 outgoing:0 outgoing_pct:0.0\n"
+  },
+  "rollup-error/plain/no-path": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No path from R1 to A1.\n"
+  },
+  "rollup-error/plain/orphans": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No orphans.\n"
+  },
+  "rollup-error/plain/path": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "A1 -[uses]-> R1\n"
+  },
+  "rollup-error/plain/reach": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "C1 claim\nR1 reading\n"
+  },
+  "rollup-error/plain/reverse": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "A1 assertion\nA2 assertion\n"
+  },
+  "rollup-error/plain/strict": {
+    "exit": 0,
+    "stderr": "scope: 1 files; nodes assertion 2, claim 1, reading 1; edges about 2, uses 2\n",
+    "stdout": ""
+  },
+  "rollup-error/plain/summary": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "fixture: settled=2 total=2\n"
+  },
+  "rollup-error/plain/trace": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "id:C1 kind:claim edges:0 findings:0\nid:R1 kind:reading edges:0 findings:0\nid:A1 kind:assertion edges:2 findings:0\nid:A2 kind:assertion edges:2 findings:0\n"
+  },
+  "rollup-error/plain/trace-strict": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "id:C1 kind:claim edges:0 findings:0\nid:R1 kind:reading edges:0 findings:0\nid:A1 kind:assertion edges:2 findings:0\nid:A2 kind:assertion edges:2 findings:0\n"
+  },
+  "rollup-error/plain/unknown-edge": {
+    "exit": 2,
+    "stderr": "Error: unknown edge kind 'missing': the profile declares [\"about\", \"uses\"]\n",
+    "stdout": ""
+  },
+  "rollup-error/plain/unknown-kind": {
+    "exit": 2,
+    "stderr": "Error: unknown node kind 'missing': the profile declares [\"assertion\", \"claim\", \"reading\"]\n",
+    "stdout": ""
+  },
+  "rollup-error/plain/unknown-node": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'RX'\n",
+    "stdout": ""
+  },
+  "rollup-error/plain/validate": {
+    "exit": 0,
+    "stderr": "scope: 1 files; nodes assertion 2, claim 1, reading 1; edges about 2, uses 2\n",
+    "stdout": ""
+  },
+  "rollup-error/rich/at": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "ID                   Kind       Key Attr                       Edges Finds\n--------------------------------------------------------------------------\nC1                   claim                                         0     0\nR1                   reading                                       0     0\nA1                   assertion                                     2     0\nA2                   assertion                                     2     0\n\n4 entries, 0 finding(s) at crates/latt-core/tests/fixtures/embedding/actor-a.json\n"
+  },
+  "rollup-error/rich/at-absolute": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No entries or findings at <TARGET>/empty.txt.\n"
+  },
+  "rollup-error/rich/at-dir": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "ID                   Kind       Key Attr                       Edges Finds\n--------------------------------------------------------------------------\nC1                   claim                                         0     0\nR1                   reading                                       0     0\nA1                   assertion                                     2     0\nA2                   assertion                                     2     0\n\n4 entries, 0 finding(s) at crates/latt-core/tests/fixtures/embedding\n"
+  },
+  "rollup-error/rich/at-empty": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No entries or findings at empty.txt.\n"
+  },
+  "rollup-error/rich/at-missing": {
+    "exit": 2,
+    "stderr": "Error: path 'missing.txt' does not exist under the target and no provenance names it\n",
+    "stdout": ""
+  },
+  "rollup-error/rich/counts": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "Nodes\n  assertion                2\n  claim                    1\n  reading                  1\nEdges\n  about                    2\n  uses                     2\n"
+  },
+  "rollup-error/rich/counts-filter": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "Nodes\n  assertion                2\n  claim                    1\n  reading                  1\nEdges\n  about                    2\n  uses                     2\n"
+  },
+  "rollup-error/rich/coverage": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "Kind                 Total       Incoming       Outgoing\n--------------------------------------------------------\nassertion                2       0 (0.0%)     2 (100.0%)\nclaim                    1     1 (100.0%)       0 (0.0%)\nreading                  1     1 (100.0%)       0 (0.0%)\n\n3 kind(s)\n"
+  },
+  "rollup-error/rich/no-path": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No path from R1 to A1.\n"
+  },
+  "rollup-error/rich/orphans": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No orphans.\n"
+  },
+  "rollup-error/rich/path": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "A1 -[uses]-> R1\n\n1 edge(s)\n"
+  },
+  "rollup-error/rich/reach": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "reaches A1 (all edge kinds)\nC1                   claim\nR1                   reading\n\n2 node(s), 0 tainted\n"
+  },
+  "rollup-error/rich/reverse": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "reached-by R1 (all edge kinds)\nA1                   assertion\nA2                   assertion\n\n2 node(s)\n"
+  },
+  "rollup-error/rich/strict": {
+    "exit": 0,
+    "stderr": "scope: 1 files; nodes assertion 2, claim 1, reading 1; edges about 2, uses 2\n",
+    "stdout": "No findings.\n"
+  },
+  "rollup-error/rich/summary": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "Group                          Settl Total\n------------------------------------------\nfixture                            2     2\n------------------------------------------\nTOTAL                              2     2\n"
+  },
+  "rollup-error/rich/trace": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "ID                   Kind       Key Attr                       Edges Finds\n--------------------------------------------------------------------------\nC1                   claim                                         0     0\nR1                   reading                                       0     0\nA1                   assertion                                     2     0\nA2                   assertion                                     2     0\n\n4 entries, no findings\n"
+  },
+  "rollup-error/rich/trace-strict": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "ID                   Kind       Key Attr                       Edges Finds\n--------------------------------------------------------------------------\nC1                   claim                                         0     0\nR1                   reading                                       0     0\nA1                   assertion                                     2     0\nA2                   assertion                                     2     0\n\n4 entries, no findings\n"
+  },
+  "rollup-error/rich/unknown-edge": {
+    "exit": 2,
+    "stderr": "Error: unknown edge kind 'missing': the profile declares [\"about\", \"uses\"]\n",
+    "stdout": ""
+  },
+  "rollup-error/rich/unknown-kind": {
+    "exit": 2,
+    "stderr": "Error: unknown node kind 'missing': the profile declares [\"assertion\", \"claim\", \"reading\"]\n",
+    "stdout": ""
+  },
+  "rollup-error/rich/unknown-node": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'RX'\n",
+    "stdout": ""
+  },
+  "rollup-error/rich/validate": {
+    "exit": 0,
+    "stderr": "scope: 1 files; nodes assertion 2, claim 1, reading 1; edges about 2, uses 2\n",
+    "stdout": "No findings.\n"
+  },
+  "suppressed-error/json/at": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"entries\": [\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"C1\",\n      \"kind\": \"claim\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 5\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"R1\",\n      \"kind\": \"reading\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 17\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 55\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 65\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A1\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 29\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 75\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 85\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A2\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 41\n      }\n    }\n  ],\n  \"findings\": [],\n  \"path\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\"\n}\n"
+  },
+  "suppressed-error/json/at-absolute": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"entries\": [],\n  \"findings\": [],\n  \"path\": \"<TARGET>/empty.txt\"\n}\n"
+  },
+  "suppressed-error/json/at-dir": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"entries\": [\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"C1\",\n      \"kind\": \"claim\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 5\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"R1\",\n      \"kind\": \"reading\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 17\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 55\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 65\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A1\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 29\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 75\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 85\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A2\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 41\n      }\n    }\n  ],\n  \"findings\": [],\n  \"path\": \"crates/latt-core/tests/fixtures/embedding\"\n}\n"
+  },
+  "suppressed-error/json/at-empty": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"entries\": [],\n  \"findings\": [],\n  \"path\": \"empty.txt\"\n}\n"
+  },
+  "suppressed-error/json/at-missing": {
+    "exit": 2,
+    "stderr": "Error: path 'missing.txt' does not exist under the target and no provenance names it\n",
+    "stdout": ""
+  },
+  "suppressed-error/json/counts": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"edges\": {\n    \"about\": 2,\n    \"uses\": 2\n  },\n  \"nodes\": {\n    \"assertion\": 2,\n    \"claim\": 1,\n    \"reading\": 1\n  }\n}\n"
+  },
+  "suppressed-error/json/counts-filter": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"edges\": {\n    \"about\": 2,\n    \"uses\": 2\n  },\n  \"nodes\": {\n    \"assertion\": 2,\n    \"claim\": 1,\n    \"reading\": 1\n  }\n}\n"
+  },
+  "suppressed-error/json/coverage": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"kinds\": [\n    {\n      \"incoming\": 0,\n      \"incoming_pct\": 0.0,\n      \"kind\": \"assertion\",\n      \"outgoing\": 2,\n      \"outgoing_pct\": 100.0,\n      \"total\": 2\n    },\n    {\n      \"incoming\": 1,\n      \"incoming_pct\": 100.0,\n      \"kind\": \"claim\",\n      \"outgoing\": 0,\n      \"outgoing_pct\": 0.0,\n      \"total\": 1\n    },\n    {\n      \"incoming\": 1,\n      \"incoming_pct\": 100.0,\n      \"kind\": \"reading\",\n      \"outgoing\": 0,\n      \"outgoing_pct\": 0.0,\n      \"total\": 1\n    }\n  ]\n}\n"
+  },
+  "suppressed-error/json/no-path": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"edges\": [],\n  \"found\": false,\n  \"nodes\": [],\n  \"src\": \"R1\",\n  \"tgt\": \"A1\"\n}\n"
+  },
+  "suppressed-error/json/orphans": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"kind_filter\": null,\n  \"orphans\": []\n}\n"
+  },
+  "suppressed-error/json/path": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"edges\": [\n    \"uses\"\n  ],\n  \"found\": true,\n  \"nodes\": [\n    \"A1\",\n    \"R1\"\n  ],\n  \"src\": \"A1\",\n  \"tgt\": \"R1\"\n}\n"
+  },
+  "suppressed-error/json/reach": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"direction\": \"reaches\",\n  \"edge_kinds\": [],\n  \"nodes\": [\n    {\n      \"id\": \"C1\",\n      \"kind\": \"claim\",\n      \"tainted\": false\n    },\n    {\n      \"id\": \"R1\",\n      \"kind\": \"reading\",\n      \"tainted\": false\n    }\n  ],\n  \"origin\": \"A1\"\n}\n"
+  },
+  "suppressed-error/json/reverse": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"direction\": \"reached-by\",\n  \"edge_kinds\": [],\n  \"nodes\": [\n    {\n      \"id\": \"A1\",\n      \"kind\": \"assertion\"\n    },\n    {\n      \"id\": \"A2\",\n      \"kind\": \"assertion\"\n    }\n  ],\n  \"origin\": \"R1\"\n}\n"
+  },
+  "suppressed-error/json/strict": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ],\n  \"scope\": {\n    \"edges\": {\n      \"about\": 2,\n      \"uses\": 2\n    },\n    \"files\": 1,\n    \"nodes\": {\n      \"assertion\": 2,\n      \"claim\": 1,\n      \"reading\": 1\n    }\n  }\n}\n"
+  },
+  "suppressed-error/json/summary": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"edge_counts\": {\n    \"about\": 2,\n    \"uses\": 2\n  },\n  \"finding_counts\": [],\n  \"node_counts\": {\n    \"assertion\": 2,\n    \"claim\": 1,\n    \"reading\": 1\n  }\n}\n"
+  },
+  "suppressed-error/json/trace": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"entries\": [\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"C1\",\n      \"kind\": \"claim\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 5\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"R1\",\n      \"kind\": \"reading\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 17\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 55\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 65\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A1\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 29\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 75\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 85\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A2\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 41\n      }\n    }\n  ],\n  \"header\": {\n    \"lattice_version\": \"0.8.0\",\n    \"profile\": \"embedding-fixture\",\n    \"profile_version\": \"1.0.0\",\n    \"trace_version\": \"2\"\n  },\n  \"pathways\": [],\n  \"unattachable_findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n"
+  },
+  "suppressed-error/json/trace-strict": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"entries\": [\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"C1\",\n      \"kind\": \"claim\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 5\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"R1\",\n      \"kind\": \"reading\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 17\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 55\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 65\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A1\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 29\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 75\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 85\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A2\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 41\n      }\n    }\n  ],\n  \"header\": {\n    \"lattice_version\": \"0.8.0\",\n    \"profile\": \"embedding-fixture\",\n    \"profile_version\": \"1.0.0\",\n    \"trace_version\": \"2\"\n  },\n  \"pathways\": [],\n  \"unattachable_findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ]\n}\n"
+  },
+  "suppressed-error/json/unknown-edge": {
+    "exit": 2,
+    "stderr": "Error: unknown edge kind 'missing': the profile declares [\"about\", \"uses\"]\n",
+    "stdout": ""
+  },
+  "suppressed-error/json/unknown-kind": {
+    "exit": 2,
+    "stderr": "Error: unknown node kind 'missing': the profile declares [\"assertion\", \"claim\", \"reading\"]\n",
+    "stdout": ""
+  },
+  "suppressed-error/json/unknown-node": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'RX'\n",
+    "stdout": ""
+  },
+  "suppressed-error/json/validate": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"suppressed\": true\n    }\n  ],\n  \"scope\": {\n    \"edges\": {\n      \"about\": 2,\n      \"uses\": 2\n    },\n    \"files\": 1,\n    \"nodes\": {\n      \"assertion\": 2,\n      \"claim\": 1,\n      \"reading\": 1\n    }\n  }\n}\n"
+  },
+  "suppressed-error/plain/at": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "id:C1 kind:claim edges:0 findings:0\nid:R1 kind:reading edges:0 findings:0\nid:A1 kind:assertion edges:2 findings:0\nid:A2 kind:assertion edges:2 findings:0\n"
+  },
+  "suppressed-error/plain/at-absolute": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No entries or findings at <TARGET>/empty.txt.\n"
+  },
+  "suppressed-error/plain/at-dir": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "id:C1 kind:claim edges:0 findings:0\nid:R1 kind:reading edges:0 findings:0\nid:A1 kind:assertion edges:2 findings:0\nid:A2 kind:assertion edges:2 findings:0\n"
+  },
+  "suppressed-error/plain/at-empty": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No entries or findings at empty.txt.\n"
+  },
+  "suppressed-error/plain/at-missing": {
+    "exit": 2,
+    "stderr": "Error: path 'missing.txt' does not exist under the target and no provenance names it\n",
+    "stdout": ""
+  },
+  "suppressed-error/plain/counts": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "node assertion 2\nnode claim 1\nnode reading 1\nedge about 2\nedge uses 2\n"
+  },
+  "suppressed-error/plain/counts-filter": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "node assertion 2\nnode claim 1\nnode reading 1\nedge about 2\nedge uses 2\n"
+  },
+  "suppressed-error/plain/coverage": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "kind:assertion total:2 incoming:0 incoming_pct:0.0 outgoing:2 outgoing_pct:100.0\nkind:claim total:1 incoming:1 incoming_pct:100.0 outgoing:0 outgoing_pct:0.0\nkind:reading total:1 incoming:1 incoming_pct:100.0 outgoing:0 outgoing_pct:0.0\n"
+  },
+  "suppressed-error/plain/no-path": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No path from R1 to A1.\n"
+  },
+  "suppressed-error/plain/orphans": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No orphans.\n"
+  },
+  "suppressed-error/plain/path": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "A1 -[uses]-> R1\n"
+  },
+  "suppressed-error/plain/reach": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "C1 claim\nR1 reading\n"
+  },
+  "suppressed-error/plain/reverse": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "A1 assertion\nA2 assertion\n"
+  },
+  "suppressed-error/plain/strict": {
+    "exit": 0,
+    "stderr": "scope: 1 files; nodes assertion 2, claim 1, reading 1; edges about 2, uses 2\n",
+    "stdout": ""
+  },
+  "suppressed-error/plain/summary": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "node assertion 2\nnode claim 1\nnode reading 1\nedge about 2\nedge uses 2\n"
+  },
+  "suppressed-error/plain/trace": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "id:C1 kind:claim edges:0 findings:0\nid:R1 kind:reading edges:0 findings:0\nid:A1 kind:assertion edges:2 findings:0\nid:A2 kind:assertion edges:2 findings:0\n"
+  },
+  "suppressed-error/plain/trace-strict": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "id:C1 kind:claim edges:0 findings:0\nid:R1 kind:reading edges:0 findings:0\nid:A1 kind:assertion edges:2 findings:0\nid:A2 kind:assertion edges:2 findings:0\n"
+  },
+  "suppressed-error/plain/unknown-edge": {
+    "exit": 2,
+    "stderr": "Error: unknown edge kind 'missing': the profile declares [\"about\", \"uses\"]\n",
+    "stdout": ""
+  },
+  "suppressed-error/plain/unknown-kind": {
+    "exit": 2,
+    "stderr": "Error: unknown node kind 'missing': the profile declares [\"assertion\", \"claim\", \"reading\"]\n",
+    "stdout": ""
+  },
+  "suppressed-error/plain/unknown-node": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'RX'\n",
+    "stdout": ""
+  },
+  "suppressed-error/plain/validate": {
+    "exit": 0,
+    "stderr": "scope: 1 files; nodes assertion 2, claim 1, reading 1; edges about 2, uses 2\n",
+    "stdout": ""
+  },
+  "suppressed-error/rich/at": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "ID                   Kind       Key Attr                       Edges Finds\n--------------------------------------------------------------------------\nC1                   claim                                         0     0\nR1                   reading                                       0     0\nA1                   assertion                                     2     0\nA2                   assertion                                     2     0\n\n4 entries, 0 finding(s) at crates/latt-core/tests/fixtures/embedding/actor-a.json\n"
+  },
+  "suppressed-error/rich/at-absolute": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No entries or findings at <TARGET>/empty.txt.\n"
+  },
+  "suppressed-error/rich/at-dir": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "ID                   Kind       Key Attr                       Edges Finds\n--------------------------------------------------------------------------\nC1                   claim                                         0     0\nR1                   reading                                       0     0\nA1                   assertion                                     2     0\nA2                   assertion                                     2     0\n\n4 entries, 0 finding(s) at crates/latt-core/tests/fixtures/embedding\n"
+  },
+  "suppressed-error/rich/at-empty": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No entries or findings at empty.txt.\n"
+  },
+  "suppressed-error/rich/at-missing": {
+    "exit": 2,
+    "stderr": "Error: path 'missing.txt' does not exist under the target and no provenance names it\n",
+    "stdout": ""
+  },
+  "suppressed-error/rich/counts": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "Nodes\n  assertion                2\n  claim                    1\n  reading                  1\nEdges\n  about                    2\n  uses                     2\n"
+  },
+  "suppressed-error/rich/counts-filter": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "Nodes\n  assertion                2\n  claim                    1\n  reading                  1\nEdges\n  about                    2\n  uses                     2\n"
+  },
+  "suppressed-error/rich/coverage": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "Kind                 Total       Incoming       Outgoing\n--------------------------------------------------------\nassertion                2       0 (0.0%)     2 (100.0%)\nclaim                    1     1 (100.0%)       0 (0.0%)\nreading                  1     1 (100.0%)       0 (0.0%)\n\n3 kind(s)\n"
+  },
+  "suppressed-error/rich/no-path": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No path from R1 to A1.\n"
+  },
+  "suppressed-error/rich/orphans": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "No orphans.\n"
+  },
+  "suppressed-error/rich/path": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "A1 -[uses]-> R1\n\n1 edge(s)\n"
+  },
+  "suppressed-error/rich/reach": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "reaches A1 (all edge kinds)\nC1                   claim\nR1                   reading\n\n2 node(s), 0 tainted\n"
+  },
+  "suppressed-error/rich/reverse": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "reached-by R1 (all edge kinds)\nA1                   assertion\nA2                   assertion\n\n2 node(s)\n"
+  },
+  "suppressed-error/rich/strict": {
+    "exit": 0,
+    "stderr": "scope: 1 files; nodes assertion 2, claim 1, reading 1; edges about 2, uses 2\n",
+    "stdout": "No findings.\n"
+  },
+  "suppressed-error/rich/summary": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "Nodes\n  assertion                          2\n  claim                              1\n  reading                            1\nEdges\n  about                              2\n  uses                               2\nFindings\n"
+  },
+  "suppressed-error/rich/trace": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "ID                   Kind       Key Attr                       Edges Finds\n--------------------------------------------------------------------------\nC1                   claim                                         0     0\nR1                   reading                                       0     0\nA1                   assertion                                     2     0\nA2                   assertion                                     2     0\n\n4 entries, no findings\n"
+  },
+  "suppressed-error/rich/trace-strict": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "ID                   Kind       Key Attr                       Edges Finds\n--------------------------------------------------------------------------\nC1                   claim                                         0     0\nR1                   reading                                       0     0\nA1                   assertion                                     2     0\nA2                   assertion                                     2     0\n\n4 entries, no findings\n"
+  },
+  "suppressed-error/rich/unknown-edge": {
+    "exit": 2,
+    "stderr": "Error: unknown edge kind 'missing': the profile declares [\"about\", \"uses\"]\n",
+    "stdout": ""
+  },
+  "suppressed-error/rich/unknown-kind": {
+    "exit": 2,
+    "stderr": "Error: unknown node kind 'missing': the profile declares [\"assertion\", \"claim\", \"reading\"]\n",
+    "stdout": ""
+  },
+  "suppressed-error/rich/unknown-node": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'RX'\n",
+    "stdout": ""
+  },
+  "suppressed-error/rich/validate": {
+    "exit": 0,
+    "stderr": "scope: 1 files; nodes assertion 2, claim 1, reading 1; edges about 2, uses 2\n",
+    "stdout": "No findings.\n"
+  },
+  "warning/json/at": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"warning\"\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"entries\": [\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"C1\",\n      \"kind\": \"claim\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 5\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"R1\",\n      \"kind\": \"reading\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 17\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 55\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 65\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A1\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 29\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 75\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 85\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A2\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 41\n      }\n    }\n  ],\n  \"findings\": [],\n  \"path\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\"\n}\n"
+  },
+  "warning/json/at-absolute": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"warning\"\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"entries\": [],\n  \"findings\": [],\n  \"path\": \"<TARGET>/empty.txt\"\n}\n"
+  },
+  "warning/json/at-dir": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"warning\"\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"entries\": [\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"C1\",\n      \"kind\": \"claim\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 5\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"R1\",\n      \"kind\": \"reading\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 17\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 55\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 65\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A1\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 29\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 75\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 85\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A2\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 41\n      }\n    }\n  ],\n  \"findings\": [],\n  \"path\": \"crates/latt-core/tests/fixtures/embedding\"\n}\n"
+  },
+  "warning/json/at-empty": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"warning\"\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"entries\": [],\n  \"findings\": [],\n  \"path\": \"empty.txt\"\n}\n"
+  },
+  "warning/json/at-missing": {
+    "exit": 2,
+    "stderr": "Error: path 'missing.txt' does not exist under the target and no provenance names it\n",
+    "stdout": ""
+  },
+  "warning/json/counts": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"warning\"\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"edges\": {\n    \"about\": 2,\n    \"uses\": 2\n  },\n  \"nodes\": {\n    \"assertion\": 2,\n    \"claim\": 1,\n    \"reading\": 1\n  }\n}\n"
+  },
+  "warning/json/counts-filter": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"warning\"\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"edges\": {\n    \"about\": 2,\n    \"uses\": 2\n  },\n  \"nodes\": {\n    \"assertion\": 2,\n    \"claim\": 1,\n    \"reading\": 1\n  }\n}\n"
+  },
+  "warning/json/coverage": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"warning\"\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"kinds\": [\n    {\n      \"incoming\": 0,\n      \"incoming_pct\": 0.0,\n      \"kind\": \"assertion\",\n      \"outgoing\": 2,\n      \"outgoing_pct\": 100.0,\n      \"total\": 2\n    },\n    {\n      \"incoming\": 1,\n      \"incoming_pct\": 100.0,\n      \"kind\": \"claim\",\n      \"outgoing\": 0,\n      \"outgoing_pct\": 0.0,\n      \"total\": 1\n    },\n    {\n      \"incoming\": 1,\n      \"incoming_pct\": 100.0,\n      \"kind\": \"reading\",\n      \"outgoing\": 0,\n      \"outgoing_pct\": 0.0,\n      \"total\": 1\n    }\n  ]\n}\n"
+  },
+  "warning/json/no-path": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"warning\"\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"edges\": [],\n  \"found\": false,\n  \"nodes\": [],\n  \"src\": \"R1\",\n  \"tgt\": \"A1\"\n}\n"
+  },
+  "warning/json/orphans": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"warning\"\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"kind_filter\": null,\n  \"orphans\": []\n}\n"
+  },
+  "warning/json/path": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"warning\"\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"edges\": [\n    \"uses\"\n  ],\n  \"found\": true,\n  \"nodes\": [\n    \"A1\",\n    \"R1\"\n  ],\n  \"src\": \"A1\",\n  \"tgt\": \"R1\"\n}\n"
+  },
+  "warning/json/reach": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"warning\"\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"direction\": \"reaches\",\n  \"edge_kinds\": [],\n  \"nodes\": [\n    {\n      \"id\": \"C1\",\n      \"kind\": \"claim\",\n      \"tainted\": false\n    },\n    {\n      \"id\": \"R1\",\n      \"kind\": \"reading\",\n      \"tainted\": false\n    }\n  ],\n  \"origin\": \"A1\"\n}\n"
+  },
+  "warning/json/reverse": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"warning\"\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"direction\": \"reached-by\",\n  \"edge_kinds\": [],\n  \"nodes\": [\n    {\n      \"id\": \"A1\",\n      \"kind\": \"assertion\"\n    },\n    {\n      \"id\": \"A2\",\n      \"kind\": \"assertion\"\n    }\n  ],\n  \"origin\": \"R1\"\n}\n"
+  },
+  "warning/json/strict": {
+    "exit": 1,
+    "stderr": "",
+    "stdout": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"error\"\n    }\n  ],\n  \"scope\": {\n    \"edges\": {\n      \"about\": 2,\n      \"uses\": 2\n    },\n    \"files\": 1,\n    \"nodes\": {\n      \"assertion\": 2,\n      \"claim\": 1,\n      \"reading\": 1\n    }\n  }\n}\n"
+  },
+  "warning/json/summary": {
+    "exit": 0,
+    "stderr": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"warning\"\n    }\n  ]\n}\n",
+    "stdout": "{\n  \"edge_counts\": {\n    \"about\": 2,\n    \"uses\": 2\n  },\n  \"finding_counts\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"count\": 1,\n      \"severity\": \"warning\"\n    }\n  ],\n  \"node_counts\": {\n    \"assertion\": 2,\n    \"claim\": 1,\n    \"reading\": 1\n  }\n}\n"
+  },
+  "warning/json/trace": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"entries\": [\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"C1\",\n      \"kind\": \"claim\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 5\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"R1\",\n      \"kind\": \"reading\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 17\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 55\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 65\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A1\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 29\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 75\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 85\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A2\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 41\n      }\n    }\n  ],\n  \"header\": {\n    \"lattice_version\": \"0.8.0\",\n    \"profile\": \"embedding-fixture\",\n    \"profile_version\": \"1.0.0\",\n    \"trace_version\": \"2\"\n  },\n  \"pathways\": [],\n  \"unattachable_findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"severity\": \"warning\"\n    }\n  ]\n}\n"
+  },
+  "warning/json/trace-strict": {
+    "exit": 1,
+    "stderr": "",
+    "stdout": "{\n  \"entries\": [\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"C1\",\n      \"kind\": \"claim\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 5\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [],\n      \"findings\": [],\n      \"id\": \"R1\",\n      \"kind\": \"reading\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 17\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 55\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 65\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A1\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 29\n      }\n    },\n    {\n      \"attrs\": {\n        \"group\": \"fixture\",\n        \"status\": \"settled\"\n      },\n      \"edges\": [\n        {\n          \"tgt\": \"C1\",\n          \"kind\": \"about\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 75\n          }\n        },\n        {\n          \"tgt\": \"R1\",\n          \"kind\": \"uses\",\n          \"attrs\": {},\n          \"provenance\": {\n            \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n            \"line\": 85\n          }\n        }\n      ],\n      \"findings\": [],\n      \"id\": \"A2\",\n      \"kind\": \"assertion\",\n      \"provenance\": {\n        \"file\": \"crates/latt-core/tests/fixtures/embedding/actor-a.json\",\n        \"line\": 41\n      }\n    }\n  ],\n  \"header\": {\n    \"lattice_version\": \"0.8.0\",\n    \"profile\": \"embedding-fixture\",\n    \"profile_version\": \"1.0.0\",\n    \"trace_version\": \"2\"\n  },\n  \"pathways\": [],\n  \"unattachable_findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"severity\": \"error\"\n    }\n  ]\n}\n"
+  },
+  "warning/json/unknown-edge": {
+    "exit": 2,
+    "stderr": "Error: unknown edge kind 'missing': the profile declares [\"about\", \"uses\"]\n",
+    "stdout": ""
+  },
+  "warning/json/unknown-kind": {
+    "exit": 2,
+    "stderr": "Error: unknown node kind 'missing': the profile declares [\"assertion\", \"claim\", \"reading\"]\n",
+    "stdout": ""
+  },
+  "warning/json/unknown-node": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'RX'\n",
+    "stdout": ""
+  },
+  "warning/json/validate": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\n  \"findings\": [\n    {\n      \"code\": \"PARSE_ERROR\",\n      \"file\": \"input.json\",\n      \"line\": 9,\n      \"message\": \"visible malformed row\",\n      \"node_id\": null,\n      \"severity\": \"warning\"\n    }\n  ],\n  \"scope\": {\n    \"edges\": {\n      \"about\": 2,\n      \"uses\": 2\n    },\n    \"files\": 1,\n    \"nodes\": {\n      \"assertion\": 2,\n      \"claim\": 1,\n      \"reading\": 1\n    }\n  }\n}\n"
+  },
+  "warning/plain/at": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR input.json:9 visible malformed row\n",
+    "stdout": "id:C1 kind:claim edges:0 findings:0\nid:R1 kind:reading edges:0 findings:0\nid:A1 kind:assertion edges:2 findings:0\nid:A2 kind:assertion edges:2 findings:0\n"
+  },
+  "warning/plain/at-absolute": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR input.json:9 visible malformed row\n",
+    "stdout": "No entries or findings at <TARGET>/empty.txt.\n"
+  },
+  "warning/plain/at-dir": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR input.json:9 visible malformed row\n",
+    "stdout": "id:C1 kind:claim edges:0 findings:0\nid:R1 kind:reading edges:0 findings:0\nid:A1 kind:assertion edges:2 findings:0\nid:A2 kind:assertion edges:2 findings:0\n"
+  },
+  "warning/plain/at-empty": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR input.json:9 visible malformed row\n",
+    "stdout": "No entries or findings at empty.txt.\n"
+  },
+  "warning/plain/at-missing": {
+    "exit": 2,
+    "stderr": "Error: path 'missing.txt' does not exist under the target and no provenance names it\n",
+    "stdout": ""
+  },
+  "warning/plain/counts": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR input.json:9 visible malformed row\n",
+    "stdout": "node assertion 2\nnode claim 1\nnode reading 1\nedge about 2\nedge uses 2\n"
+  },
+  "warning/plain/counts-filter": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR input.json:9 visible malformed row\n",
+    "stdout": "node assertion 2\nnode claim 1\nnode reading 1\nedge about 2\nedge uses 2\n"
+  },
+  "warning/plain/coverage": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR input.json:9 visible malformed row\n",
+    "stdout": "kind:assertion total:2 incoming:0 incoming_pct:0.0 outgoing:2 outgoing_pct:100.0\nkind:claim total:1 incoming:1 incoming_pct:100.0 outgoing:0 outgoing_pct:0.0\nkind:reading total:1 incoming:1 incoming_pct:100.0 outgoing:0 outgoing_pct:0.0\n"
+  },
+  "warning/plain/no-path": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR input.json:9 visible malformed row\n",
+    "stdout": "No path from R1 to A1.\n"
+  },
+  "warning/plain/orphans": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR input.json:9 visible malformed row\n",
+    "stdout": "No orphans.\n"
+  },
+  "warning/plain/path": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR input.json:9 visible malformed row\n",
+    "stdout": "A1 -[uses]-> R1\n"
+  },
+  "warning/plain/reach": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR input.json:9 visible malformed row\n",
+    "stdout": "C1 claim\nR1 reading\n"
+  },
+  "warning/plain/reverse": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR input.json:9 visible malformed row\n",
+    "stdout": "A1 assertion\nA2 assertion\n"
+  },
+  "warning/plain/strict": {
+    "exit": 1,
+    "stderr": "scope: 1 files; nodes assertion 2, claim 1, reading 1; edges about 2, uses 2\n",
+    "stdout": "ERROR PARSE_ERROR input.json:9 visible malformed row\n"
+  },
+  "warning/plain/summary": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR input.json:9 visible malformed row\n",
+    "stdout": "node assertion 2\nnode claim 1\nnode reading 1\nedge about 2\nedge uses 2\nfinding PARSE_ERROR warning 1\n"
+  },
+  "warning/plain/trace": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "id:C1 kind:claim edges:0 findings:0\nid:R1 kind:reading edges:0 findings:0\nid:A1 kind:assertion edges:2 findings:0\nid:A2 kind:assertion edges:2 findings:0\n\nUnattachable findings:\n  WARNING PARSE_ERROR input.json:9 visible malformed row\n"
+  },
+  "warning/plain/trace-strict": {
+    "exit": 1,
+    "stderr": "",
+    "stdout": "id:C1 kind:claim edges:0 findings:0\nid:R1 kind:reading edges:0 findings:0\nid:A1 kind:assertion edges:2 findings:0\nid:A2 kind:assertion edges:2 findings:0\n\nUnattachable findings:\n  ERROR PARSE_ERROR input.json:9 visible malformed row\n"
+  },
+  "warning/plain/unknown-edge": {
+    "exit": 2,
+    "stderr": "Error: unknown edge kind 'missing': the profile declares [\"about\", \"uses\"]\n",
+    "stdout": ""
+  },
+  "warning/plain/unknown-kind": {
+    "exit": 2,
+    "stderr": "Error: unknown node kind 'missing': the profile declares [\"assertion\", \"claim\", \"reading\"]\n",
+    "stdout": ""
+  },
+  "warning/plain/unknown-node": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'RX'\n",
+    "stdout": ""
+  },
+  "warning/plain/validate": {
+    "exit": 0,
+    "stderr": "scope: 1 files; nodes assertion 2, claim 1, reading 1; edges about 2, uses 2\n",
+    "stdout": "WARNING PARSE_ERROR input.json:9 visible malformed row\n"
+  },
+  "warning/rich/at": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR          input.json:9                   visible malformed row\n\n1 warning(s)\n",
+    "stdout": "ID                   Kind       Key Attr                       Edges Finds\n--------------------------------------------------------------------------\nC1                   claim                                         0     0\nR1                   reading                                       0     0\nA1                   assertion                                     2     0\nA2                   assertion                                     2     0\n\n4 entries, 0 finding(s) at crates/latt-core/tests/fixtures/embedding/actor-a.json\n"
+  },
+  "warning/rich/at-absolute": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR          input.json:9                   visible malformed row\n\n1 warning(s)\n",
+    "stdout": "No entries or findings at <TARGET>/empty.txt.\n"
+  },
+  "warning/rich/at-dir": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR          input.json:9                   visible malformed row\n\n1 warning(s)\n",
+    "stdout": "ID                   Kind       Key Attr                       Edges Finds\n--------------------------------------------------------------------------\nC1                   claim                                         0     0\nR1                   reading                                       0     0\nA1                   assertion                                     2     0\nA2                   assertion                                     2     0\n\n4 entries, 0 finding(s) at crates/latt-core/tests/fixtures/embedding\n"
+  },
+  "warning/rich/at-empty": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR          input.json:9                   visible malformed row\n\n1 warning(s)\n",
+    "stdout": "No entries or findings at empty.txt.\n"
+  },
+  "warning/rich/at-missing": {
+    "exit": 2,
+    "stderr": "Error: path 'missing.txt' does not exist under the target and no provenance names it\n",
+    "stdout": ""
+  },
+  "warning/rich/counts": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR          input.json:9                   visible malformed row\n\n1 warning(s)\n",
+    "stdout": "Nodes\n  assertion                2\n  claim                    1\n  reading                  1\nEdges\n  about                    2\n  uses                     2\n"
+  },
+  "warning/rich/counts-filter": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR          input.json:9                   visible malformed row\n\n1 warning(s)\n",
+    "stdout": "Nodes\n  assertion                2\n  claim                    1\n  reading                  1\nEdges\n  about                    2\n  uses                     2\n"
+  },
+  "warning/rich/coverage": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR          input.json:9                   visible malformed row\n\n1 warning(s)\n",
+    "stdout": "Kind                 Total       Incoming       Outgoing\n--------------------------------------------------------\nassertion                2       0 (0.0%)     2 (100.0%)\nclaim                    1     1 (100.0%)       0 (0.0%)\nreading                  1     1 (100.0%)       0 (0.0%)\n\n3 kind(s)\n"
+  },
+  "warning/rich/no-path": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR          input.json:9                   visible malformed row\n\n1 warning(s)\n",
+    "stdout": "No path from R1 to A1.\n"
+  },
+  "warning/rich/orphans": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR          input.json:9                   visible malformed row\n\n1 warning(s)\n",
+    "stdout": "No orphans.\n"
+  },
+  "warning/rich/path": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR          input.json:9                   visible malformed row\n\n1 warning(s)\n",
+    "stdout": "A1 -[uses]-> R1\n\n1 edge(s)\n"
+  },
+  "warning/rich/reach": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR          input.json:9                   visible malformed row\n\n1 warning(s)\n",
+    "stdout": "reaches A1 (all edge kinds)\nC1                   claim\nR1                   reading\n\n2 node(s), 0 tainted\n"
+  },
+  "warning/rich/reverse": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR          input.json:9                   visible malformed row\n\n1 warning(s)\n",
+    "stdout": "reached-by R1 (all edge kinds)\nA1                   assertion\nA2                   assertion\n\n2 node(s)\n"
+  },
+  "warning/rich/strict": {
+    "exit": 1,
+    "stderr": "scope: 1 files; nodes assertion 2, claim 1, reading 1; edges about 2, uses 2\n",
+    "stdout": "ERROR   PARSE_ERROR          input.json:9                   visible malformed row\n\n1 error(s)\n"
+  },
+  "warning/rich/summary": {
+    "exit": 0,
+    "stderr": "WARNING PARSE_ERROR          input.json:9                   visible malformed row\n\n1 warning(s)\n",
+    "stdout": "Nodes\n  assertion                          2\n  claim                              1\n  reading                            1\nEdges\n  about                              2\n  uses                               2\nFindings\n  PARSE_ERROR warning                1\n"
+  },
+  "warning/rich/trace": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "ID                   Kind       Key Attr                       Edges Finds\n--------------------------------------------------------------------------\nC1                   claim                                         0     0\nR1                   reading                                       0     0\nA1                   assertion                                     2     0\nA2                   assertion                                     2     0\n\nUnattachable findings:\n  WARNING PARSE_ERROR input.json:9 visible malformed row\n\n4 entries, 1 warning(s)\n"
+  },
+  "warning/rich/trace-strict": {
+    "exit": 1,
+    "stderr": "",
+    "stdout": "ID                   Kind       Key Attr                       Edges Finds\n--------------------------------------------------------------------------\nC1                   claim                                         0     0\nR1                   reading                                       0     0\nA1                   assertion                                     2     0\nA2                   assertion                                     2     0\n\nUnattachable findings:\n  ERROR   PARSE_ERROR input.json:9 visible malformed row\n\n4 entries, 1 error(s)\n"
+  },
+  "warning/rich/unknown-edge": {
+    "exit": 2,
+    "stderr": "Error: unknown edge kind 'missing': the profile declares [\"about\", \"uses\"]\n",
+    "stdout": ""
+  },
+  "warning/rich/unknown-kind": {
+    "exit": 2,
+    "stderr": "Error: unknown node kind 'missing': the profile declares [\"assertion\", \"claim\", \"reading\"]\n",
+    "stdout": ""
+  },
+  "warning/rich/unknown-node": {
+    "exit": 2,
+    "stderr": "Error: unknown node 'RX'\n",
+    "stdout": ""
+  },
+  "warning/rich/validate": {
+    "exit": 0,
+    "stderr": "scope: 1 files; nodes assertion 2, claim 1, reading 1; edges about 2, uses 2\n",
+    "stdout": "WARNING PARSE_ERROR          input.json:9                   visible malformed row\n\n1 warning(s)\n"
+  }
+}

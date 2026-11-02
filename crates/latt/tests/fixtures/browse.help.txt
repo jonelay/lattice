@@ -1,0 +1,216 @@
+## nodes
+footer: f filter | o sort | S schema | ? help
+[Global]
+  1                        Nodes
+  2                        Tree
+  3                        Findings
+  4                        Provenance
+  5                        Graph
+  Q/Ctrl-C                 Quit
+  q                        Back / quit
+  /                        Search
+  n/N                      Next/prev match
+  e                        Edit (owner tool, else $EDITOR)
+  A                        Note on finding (notes file)
+  c                        Comment (owner tool)
+  s                        Change state (owner tool)
+  a                        Assign (owner tool)
+  t                        Tag (owner tool)
+  !                        Owner actions
+  p                        Preview file
+  f                        Kind filter
+  j/k ↓/↑                  Down / up
+  l/h →/←                  Deeper / back
+  g/G Home/End             Top / bottom
+  PgDn/PgUp Ctrl-D/Ctrl-U  Page down / up
+  .                        Toggle suppressed
+  r                        Reload register
+  R                        Reload profile and register
+  ?                        This help
+[Node list]
+  Enter                    Open detail
+  Tab                      Focus detail
+  o                        Cycle sort
+  S                        Schema view
+
+## nodes/schema
+footer: f filter | o sort | S schema | ? help
+[Global]
+  1                        Nodes
+  2                        Tree
+  3                        Findings
+  4                        Provenance
+  5                        Graph
+  Q/Ctrl-C                 Quit
+  q                        Back / quit
+  /                        Search
+  n/N                      Next/prev match
+  e                        Edit (owner tool, else $EDITOR)
+  A                        Note on finding (notes file)
+  c                        Comment (owner tool)
+  s                        Change state (owner tool)
+  a                        Assign (owner tool)
+  t                        Tag (owner tool)
+  !                        Owner actions
+  p                        Preview file
+  f                        Kind filter
+  j/k ↓/↑                  Down / up
+  l/h →/←                  Deeper / back
+  g/G Home/End             Top / bottom
+  PgDn/PgUp Ctrl-D/Ctrl-U  Page down / up
+  .                        Toggle suppressed
+  r                        Reload register
+  R                        Reload profile and register
+  ?                        This help
+[Node list]
+  Enter                    Open detail
+  Tab                      Focus detail
+  o                        Cycle sort
+  S                        Schema view
+
+## tree
+footer: f filter | d direction | F edge filter | ? help
+[Global]
+  1                        Nodes
+  2                        Tree
+  3                        Findings
+  4                        Provenance
+  5                        Graph
+  Q/Ctrl-C                 Quit
+  q                        Back / quit
+  /                        Search
+  n/N                      Next/prev match
+  e                        Edit (owner tool, else $EDITOR)
+  A                        Note on finding (notes file)
+  c                        Comment (owner tool)
+  s                        Change state (owner tool)
+  a                        Assign (owner tool)
+  t                        Tag (owner tool)
+  !                        Owner actions
+  p                        Preview file
+  f                        Kind filter
+  j/k ↓/↑                  Down / up
+  l/h →/←                  Deeper / back
+  g/G Home/End             Top / bottom
+  PgDn/PgUp Ctrl-D/Ctrl-U  Page down / up
+  .                        Toggle suppressed
+  r                        Reload register
+  R                        Reload profile and register
+  ?                        This help
+[Tree]
+  Enter                    Open detail
+  Space                    Expand node
+  -                        Collapse node
+  z                        Collapse cycles
+  d                        Toggle direction
+  F                        Edge-kind filter
+  Tab                      Focus detail
+
+## findings
+footer: f filter | o sort | . suppressed | ? help
+[Global]
+  1                        Nodes
+  2                        Tree
+  3                        Findings
+  4                        Provenance
+  5                        Graph
+  Q/Ctrl-C                 Quit
+  q                        Back / quit
+  /                        Search
+  n/N                      Next/prev match
+  e                        Edit (owner tool, else $EDITOR)
+  A                        Note on finding (notes file)
+  c                        Comment (owner tool)
+  s                        Change state (owner tool)
+  a                        Assign (owner tool)
+  t                        Tag (owner tool)
+  !                        Owner actions
+  p                        Preview file
+  f                        Kind filter
+  j/k ↓/↑                  Down / up
+  l/h →/←                  Deeper / back
+  g/G Home/End             Top / bottom
+  PgDn/PgUp Ctrl-D/Ctrl-U  Page down / up
+  .                        Toggle suppressed
+  r                        Reload register
+  R                        Reload profile and register
+  ?                        This help
+[Findings]
+  Enter                    Jump to node
+  o                        Cycle sort
+
+## provenance
+footer: d direction | F edge filter | H/L scroll | ? help
+[Global]
+  1                        Nodes
+  2                        Tree
+  3                        Findings
+  4                        Provenance
+  5                        Graph
+  Q/Ctrl-C                 Quit
+  q                        Back / quit
+  /                        Search
+  n/N                      Next/prev match
+  e                        Edit (owner tool, else $EDITOR)
+  A                        Note on finding (notes file)
+  c                        Comment (owner tool)
+  s                        Change state (owner tool)
+  a                        Assign (owner tool)
+  t                        Tag (owner tool)
+  !                        Owner actions
+  p                        Preview file
+  f                        Kind filter
+  j/k ↓/↑                  Down / up
+  l/h →/←                  Deeper / back
+  g/G Home/End             Top / bottom
+  PgDn/PgUp Ctrl-D/Ctrl-U  Page down / up
+  .                        Toggle suppressed
+  r                        Reload register
+  R                        Reload profile and register
+  ?                        This help
+[Provenance]
+  Enter                    Open detail
+  d                        Toggle direction
+  F                        Edge-kind filter
+  H/L                      Scroll left/right
+  Tab                      Focus detail
+
+## graph
+footer: f filter | d direction | +/- radius | F edge filter | C columns | ? help
+[Global]
+  1                        Nodes
+  2                        Tree
+  3                        Findings
+  4                        Provenance
+  5                        Graph
+  Q/Ctrl-C                 Quit
+  q                        Back / quit
+  /                        Search
+  n/N                      Next/prev match
+  e                        Edit (owner tool, else $EDITOR)
+  A                        Note on finding (notes file)
+  c                        Comment (owner tool)
+  s                        Change state (owner tool)
+  a                        Assign (owner tool)
+  t                        Tag (owner tool)
+  !                        Owner actions
+  p                        Preview file
+  f                        Kind filter
+  j/k ↓/↑                  Down / up
+  l/h →/←                  Deeper / back
+  g/G Home/End             Top / bottom
+  PgDn/PgUp Ctrl-D/Ctrl-U  Page down / up
+  .                        Toggle suppressed
+  r                        Reload register
+  R                        Reload profile and register
+  ?                        This help
+[Graph]
+  Enter                    Re-center on node
+  Backspace                Back (pop center)
+  Tab                      Toggle detail
+  +/-                      Depth radius
+  F                        Edge-kind filter
+  d                        Toggle direction
+  C                        Cycle columns
+  &/Ctrl-F                 Toggle search filter
+

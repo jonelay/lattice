@@ -1,6 +1,20 @@
 #!/bin/sh
-# Contract entry point for the entomologist adapter: the program `--adapter` names.
-# Resolves the binary relative to this file so the caller's cwd and PATH do not
-# decide which adapter implementation reads the register.
+# Contract entry point for the entomologist adapter: the program `--adapter ./adapters/entomologist`
+# names. The external Rust adapter's shim; the native adapters' shims run `latt adapter <name>`.
+#
+# The binary is looked for where each kind of setup puts it: on PATH beside
+# `latt` (a release install), then under `$CARGO_TARGET_DIR`, then in this
+# checkout's `target/debug`. The first found runs.
+name=latt-adapter-entomologist
+if command -v "$name" >/dev/null 2>&1; then
+    exec "$name" "$@"
+fi
+if [ -n "$CARGO_TARGET_DIR" ] && [ -x "$CARGO_TARGET_DIR/debug/$name" ]; then
+    exec "$CARGO_TARGET_DIR/debug/$name" "$@"
+fi
 here=$(dirname "$0")
-exec "$here/../target/debug/adapter-entomologist" "$@"
+if [ -x "$here/../target/debug/$name" ]; then
+    exec "$here/../target/debug/$name" "$@"
+fi
+echo "$0: $name not found on PATH, under \$CARGO_TARGET_DIR/debug, or at $here/../target/debug; install the release binaries or run cargo build" >&2
+exit 127

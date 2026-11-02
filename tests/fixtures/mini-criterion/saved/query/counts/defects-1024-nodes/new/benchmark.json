@@ -1,0 +1,11 @@
+{
+  "group_id": "query",
+  "function_id": "counts",
+  "value_str": "defects-1024-nodes",
+  "throughput": {
+    "Elements": 1048
+  },
+  "full_id": "query/counts/defects-1024-nodes",
+  "directory_name": "query/counts/defects-1024-nodes",
+  "title": "query/counts/defects-1024-nodes"
+}

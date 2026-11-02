@@ -1,0 +1,14 @@
+name: embedding-fixture
+profile_version: "1.0.0"
+node_kinds:
+  claim:
+    id_pattern: '^C[0-9]+$'
+  reading:
+    id_pattern: '^R[0-9]+$'
+  assertion:
+    id_pattern: '^[AB][0-9]+$'
+edge_kinds:
+  about:
+    allowed: [[assertion, claim]]
+  uses:
+    allowed: [[assertion, reading]]

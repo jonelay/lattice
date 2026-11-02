@@ -73,20 +73,18 @@ provenance (file, line), so error messages reference source locations. A finding
 originates in the profile rather than the register — a configuration error — SHALL carry
 a synthetic provenance identifying the profile, since no source line produced it.
 
-#### Scenario: Orphan finding includes provenance
-- **WHEN** validation finds an orphan node "REQ-9999" with provenance ("REQUIREMENTS.md", 102)
+#### Scenario: UNREFERENCED finding includes provenance
+- **WHEN** validation finds an unreferenced node "REQ-9999" with provenance ("REQUIREMENTS.md", 102)
 - **THEN** the finding's provenance is ("REQUIREMENTS.md", 102)
 
 #### Scenario: Config finding is not attributed to a source line
-- **WHEN** validation emits a `CONFIG_ERROR` for a malformed `COVERAGE` config
+- **WHEN** validation emits a `CONFIG_ERROR` for a profile override that promotes a
+  hint-default code
 - **THEN** the finding's provenance names the profile rather than a register file and line
 
 ### Requirement: Reads return copies
 `node_data`, `iter_nodes`, and `iter_edges` SHALL return copies of node and edge data,
 with node attrs deep-copied. A caller mutating what it reads SHALL NOT change the graph.
-
-Validators and queries receive graph data directly; returning live references would let a
-read-only pass corrupt the register it is checking.
 
 #### Scenario: Mutating a read does not affect the graph
 - **WHEN** a caller reads a node via `node_data` and mutates the returned `attrs` map
@@ -95,9 +93,6 @@ read-only pass corrupt the register it is checking.
 ### Requirement: Parallel edges are distinct
 The graph SHALL be a directed multigraph: two `add_edge` calls with the same source,
 target, kind, and attrs SHALL produce two distinct edges, each retaining its own provenance.
-
-Two rows can legitimately assert the same relationship from different source lines, and
-collapsing them would discard one of the two provenances.
 
 #### Scenario: Repeated edge keeps both provenances
 - **WHEN** `add_edge("A", "B", "derives", {}, p1)` and `add_edge("A", "B", "derives", {}, p2)` are both called
@@ -112,15 +107,10 @@ The graph SHALL accept an ordering pathway: a name, an ordered sequence of posit
 and the current position. It SHALL expose them for read, and SHALL report no pathway when
 none was set.
 
-The graph carries these because they are *ingested* target data, on the same footing as
-nodes and edges — the register declares them and the adapter reads them. The graph SHALL
-NOT compute, default, or infer a pathway: a target that declares none has none.
+The graph SHALL NOT compute, default, or infer a pathway: a target that declares none has none.
 
 The graph SHALL reject a pathway whose positions are not unique, or whose current position
 is not among them, by raising. Callers convert that to a finding under their own contract.
-Repeated positions would make "before" and "after" depend on which occurrence was matched,
-so there is no correct resolution to fall back on.
-
 Verified by: `cargo test --test graph_model pathway` for setting and reading, and
 `cargo test --test contract pathway` for the rejections
 
@@ -142,9 +132,6 @@ Verified by: `cargo test --test graph_model pathway` for setting and reading, an
 
 ### Requirement: A pathway read cannot mutate the graph
 A caller reading a pathway SHALL NOT be able to change the graph through what it reads.
-
-The severity-resolution pass reads the pathway while inspecting findings, and a read-only
-pass must not be able to corrupt the register it is checking.
 
 Verified by inspection: `LatticeGraph::pathway` returns `Option<&Pathway>`, a shared borrow, so
 the mutation this forbids does not compile. The requirement was previously discharged by

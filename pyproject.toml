@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "lattice-adapters"
-version = "0.6.0"
+version = "0.8.0"
 license = "MIT OR Apache-2.0"
 requires-python = ">=3.12"
 dependencies = []
@@ -15,10 +15,10 @@ Issues = "https://github.com/jonelay/lattice/issues"
 Changelog = "https://github.com/jonelay/lattice/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-test = ["pytest>=8.0", "pyyaml>=6.0"]
+test = ["jsonschema>=4.23", "pytest>=8.0", "pyyaml>=6.0"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["adapters"]
 
 [tool.pytest.ini_options]
-norecursedirs = [".claude", "tests/fixtures/mini-repo", "tests/fixtures/mini-toml", "tests/fixtures/mini-toml-directory", "tests/fixtures/mini-openspec", "tests/fixtures/mini-ent", "tests/fixtures/mini-md", "tests/fixtures/mini-md-multi", "tests/fixtures/mini-github", "tests/fixtures/mini-gitlab", "tests/fixtures/mini-fuse"]
+norecursedirs = [".claude", "target", "tests/fixtures/mini-toml", "tests/fixtures/mini-toml-directory", "tests/fixtures/mini-openspec", "tests/fixtures/mini-ent", "tests/fixtures/mini-md", "tests/fixtures/mini-md-multi", "tests/fixtures/mini-md-sources", "tests/fixtures/go-corpus", "tests/fixtures/mini-fuse", "tests/fixtures/mini-prose-xref", "tests/fixtures/mini-criterion", "tests/fixtures/ci-consumer"]

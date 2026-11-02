@@ -1,0 +1,32 @@
+== semver-checks: lattice-core all-features
+    Building lattice-core v0.8.0-rc.8 (current)
+     Checked [   0.026s] 196 checks: 194 pass, 2 fail, 0 warn, 57 skip
+
+--- failure enum_now_doc_hidden: pub enum is now #[doc(hidden)] ---
+
+Description:
+A pub enum is now #[doc(hidden)], which removes it from the crate's public API.
+        ref: https://doc.rust-lang.org/rustdoc/write-documentation/the-doc-attribute.html#hidden
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.49.0/src/lints/enum_now_doc_hidden.ron
+
+Failed in:
+  enum Direction in file /work/crates/lattice-core/src/query.rs:122
+  enum Direction in file /work/crates/lattice-core/src/query.rs:122
+
+--- failure trait_newly_sealed: pub trait became sealed ---
+
+Description:
+A publicly-visible trait became sealed, so downstream crates are no longer able to implement it
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.49.0/src/lints/trait_newly_sealed.ron
+
+Failed in:
+  trait lattice_core::algo::Neighbors in file /work/crates/lattice-core/src/algo.rs:47
+
+     Summary semver requires new major version: 2 major and 0 minor checks failed
+== semver-checks: adapter-core default-features
+     Checked [   0.005s] 196 checks: 195 pass, 1 fail, 0 warn, 57 skip
+
+--- failure function_missing: pub fn removed or renamed ---
+
+Failed in:
+  function adapter_core::emit_document, previously in file /base/crates/adapter-core/src/lib.rs:40

@@ -1,0 +1,24 @@
+name: prose-xref
+profile_version: "1.1.0"
+
+adapter:
+  paths:
+    files: ["**/*.md"]
+    content_dirs: ["characters", "outline", "ref", "worldbuilding"]
+
+node_kinds:
+  document:
+    id_pattern: "^.+\\.md$"
+    orphan_ok: true
+  section:
+    id_pattern: "^[^#]+\\.md#.+$"
+    orphan_ok: true
+    attrs:
+      heading: { type: string, required: true }
+      level: { type: int }
+
+edge_kinds:
+  xref:
+    allowed:
+      - [section, section]
+      - [document, section]

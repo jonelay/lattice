@@ -1,0 +1,11 @@
+{
+  "group_id": "query",
+  "function_id": "reach",
+  "value_str": "defects-1024-nodes",
+  "throughput": {
+    "Elements": 1048
+  },
+  "full_id": "query/reach/defects-1024-nodes",
+  "directory_name": "query/reach/defects-1024-nodes",
+  "title": "query/reach/defects-1024-nodes"
+}

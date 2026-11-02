@@ -1,11 +1,7 @@
-# This pipeline runs the Verifying block in CLAUDE.md, minus the one check it
-# cannot run.
+# This pipeline runs the steps of the hermetic verification gate, tools/verify.sh, as jobs.
 #
-# HONEST LABEL: green here is NOT the real-data gate. The only real-data check is
-# `lattice validate` against phase-sweep-live, which lives in another repo that CI
-# cannot clone; it stays a by-hand step, and the Python suite skips its
-# phase-sweep tests when that repo is absent. A green pipeline says the core, the
-# adapters against their fixtures, and the specs are consistent — nothing about
+# HONEST LABEL: green here is NOT a real-data gate. It says the core, the adapters
+# against their fixtures, and the specs are consistent — nothing about any consumer's
 # live data.
 
 name: CI
@@ -23,20 +19,75 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: "1.95"
+          toolchain: "1.99.1"
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --check
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo build
-      - run: cargo test
+      - run: cargo check --workspace --all-targets --locked
+      - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - run: cargo build --workspace --locked
+      - run: cargo bench -p latt-core --bench core --locked -- --test
+      - run: cargo test --workspace --locked
+      # A host's dependencies may unify `serde_json/preserve_order` into latt-core;
+      # JSON output must not move. Only this run can build an unsorted attr map, so
+      # it is the gate, not a check of one. `--locked` holds because toml_edit
+      # already brings `indexmap` into Cargo.lock.
+      - run: cargo test -p latt-core -p latt --features serde_json/preserve_order --locked
+      - run: cargo test --workspace --doc --locked
+      - run: cargo test -p latt-core --no-default-features --locked
+      - run: cargo clippy -p latt-core --all-targets --no-default-features --locked -- -D warnings
+      - run: cargo test -p latt --no-default-features --locked
+      # Every other configuration builds `tui` beside `native-adapters`.
+      - run: cargo clippy -p latt --all-targets --no-default-features --features tui --locked -- -D warnings
+      # Again, last: the feature-restricted test runs rebuilt target/debug/latt
+      # without its defaults, and that file is the artifact python-check runs.
+      - run: cargo build --workspace --locked
+      # latt's crossterm dependency selects `use-dev-tty` in ratatui's copy
+      # through feature unification, which holds only while the tree has exactly one
+      # crossterm (tools/verify.sh carries the full reason).
+      - run: |
+          crossterms=$(cargo tree -p latt --prefix none --no-dedupe --locked \
+              | grep '^crossterm v' | sort -u | wc -l)
+          [ "$crossterms" -eq 1 ] || { echo "error: $crossterms crossterm versions in the tui tree" >&2; exit 1; }
+      - run: cargo doc --workspace --all-features --no-deps --locked
+        env:
+          RUSTDOCFLAGS: -D warnings
+      - run: cargo doc -p latt-core --no-default-features --no-deps --locked
+        env:
+          RUSTDOCFLAGS: -D warnings
+      - run: cargo doc --workspace --all-features --no-deps --document-private-items --locked
+        env:
+          RUSTDOCFLAGS: -D warnings
       - uses: actions/upload-artifact@v4
         with:
           name: lattice-binary
           path: |
-            target/debug/lattice
-            target/debug/adapter-*
-            !target/debug/adapter-*.d
+            target/debug/latt
+            target/debug/latt-adapter-*
+            !target/debug/latt-adapter-*.d
+
+  rust-tooling:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.99.1"
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cargo-llvm-cov --version 0.9.1 --locked
+      - run: cargo install cargo-audit --version 0.22.2 --locked
+      # Not hermetic, by design: the script fetches the RustSec advisory database, so
+      # this job can go red on a new advisory with no change here, and exits 2 when the
+      # fetch fails rather than passing on a cached copy.
+      # This history is release snapshots only and cannot hold the API baseline
+      # commit, so the compatibility comparison is skipped here, by name; it gates
+      # the development repository's CI before every cut.
+      - run: ./tools/verify-rust-tooling.sh --no-api-compat
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rust-coverage-lcov
+          path: target/coverage/lcov.info
 
   python-check:
     needs: rust-check
@@ -48,15 +99,14 @@ jobs:
           name: lattice-binary
           path: target/debug
       # upload-artifact does not preserve the executable bit
-      - run: chmod +x target/debug/lattice target/debug/adapter-* && test -x target/debug/lattice
+      - run: chmod +x target/debug/latt target/debug/latt-adapter-* && test -x target/debug/latt
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: python -m venv .venv
       - run: .venv/bin/pip install --quiet -e ".[test]"
-      # Expect ~18 skips: the phase-sweep tests skip when that repo is absent,
-      # and it always is here. A green run is a weaker result than a green local one.
       - run: .venv/bin/python -m pytest -q
+      - run: target/debug/latt validate --profile profiles/openspec.yaml --adapter ./adapters/openspec --target .
 
   spec-check:
     runs-on: ubuntu-latest

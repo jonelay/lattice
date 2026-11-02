@@ -13,7 +13,7 @@ class TestGrouped:
         pass
 
 
-# Requirement: Beta holds state
+# Requirement: beta/Beta holds state
 def test_beta_state():
     pass
 
@@ -23,6 +23,6 @@ def test_dangling():
     pass
 
 
-# Requirement: Alpha parses input / Alpha reports errors
+# Requirement: alpha/Alpha parses input / alpha/Alpha reports errors
 def test_compound():
     pass

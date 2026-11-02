@@ -7,41 +7,55 @@ context: |
   are loaded into a graph, validated, and queried. Derived state — coverage,
   status rollups, orphans — is computed on demand, never stored.
 
-  Full architecture, profiles, sequencing and the three scope tests: PROPOSAL.md.
-  Evidence and rationale: docs/design-basis.md.
+  What it does and how to use it: README.md and docs/. The three scope tests
+  are below.
 
-  Stack: a Rust core (edition 2024, cargo) and Python adapters run from the
+  Stack: a Rust core (edition 2024, cargo), native Rust md/TOML adapters,
+  standalone Rust adapters, and Python adapters run from the
   project venv (`.venv/bin/python` — never bare python), pytest. Commit format:
   `<component>: <imperative summary>` plus a bullet body.
 
   Three layers with hard boundaries:
-    1. Core — text to graph, validation framework, queries, output. Domain-free,
+    1. Core — interface-document ingestion, validation framework, queries, output. Domain-free,
        no vocabulary hardcoded. The trace payload is the contract every interface
        reads; an interface adds to it rather than computing locally.
     2. Profiles — node kinds, edge kinds, applicable validations, and an
        ordering pathway. Data, not code, so a core upgrade cannot reinterpret a
-       register.
+       register. Proposed database source queries and mappings belong only in
+       adapter configuration; core graph semantics are not profile scripts.
     3. Adapters — per-repo ingest. The host repo's existing format stays
-       authoritative; the adapter maps it in. An adapter is a program emitting a
-       serialized graph, not a callable in the core's language.
+       authoritative; the adapter maps it in. External adapters emit a serialized
+       interface document; native Rust
+       adapters return its JSON value directly. Both use the same core ingestion
+       contract, including schema/version checks and duplicate detection. The
+       boundary is that contract, not a crate: the built-in adapters live in
+       `latt_core::adapters`, build a `latt_adapter::Document`, and only the
+       native dispatch calls them (`tests/adapters_boundary.rs`).
 
   Hard constraints. A proposal that violates one of these is wrong:
     - Lens, never evidence. Registers in the host repo are the law. Lattice
       output is never cited as verification; the verification command wins.
-    - Stateless. No database, no cache, no index, no store of its own. This
-      becomes a confidentiality requirement the moment a client repo uses it.
+    - No Lattice-owned persistent store or result cache. Source databases may be
+      read by adapters; temporary indexes are scoped to one immutable input. No
+      cross-repository/actor-scope index sharing. Hosts own freshness and access.
+      The borrowed service is specified in graph-service; proposed database capabilities still require normative deltas.
     - Non-gating. Blocking CI gates in strict repos stay hermetic stdlib
       checkers. Lattice, with its dependencies, lives on the non-gating side.
     - Clean break from the origin tool. Lattice began as a bespoke character
-      graph in ~/cc/art/crossover/story/lattice/. That code is prior art to be
-      read, never copied. No story vocabulary enters core.
+      graph in a story project. That code is prior art to be read, never
+      copied. No story vocabulary enters core.
     - Reads verdicts, never computes them. CI decides whether a test passed, the
       ledger decides whether an obligation is discharged. Lattice joins what the
       authority recorded to the graph.
-    - Git is the source of truth and the review surface. Every write is a file
-      edit landing in a reviewed diff, whichever interface initiated it.
+    - In repository workflows, Git is the source of truth and review surface;
+      register writes are file edits landing in reviewed diffs. Proposed embedded
+      hosts retain their own authority (e.g. settled events), never Lattice output.
+      docs/embedding.md documents the implemented borrowed service.
+    - Database support is proposed separately: SQL/KV families, shared mapping,
+      engine-specific readers. No release is assigned. Source addressing,
+      provenance, and failure/status changes need explicit compatibility deltas.
 
-  Scope is decided by three tests (PROPOSAL.md): does it store a computed
+  Scope is decided by three tests: does it store a computed
   answer; can the capability be stated without naming a requirement, a test or a
   phase; does it make lattice the authority rather than the reader. Below a few
   dozen requirements a spreadsheet is the honest answer and lattice is not

@@ -1,0 +1,11 @@
+{
+  "group_id": "document",
+  "function_id": "parse-and-ingest",
+  "value_str": "located-16384-nodes",
+  "throughput": {
+    "Elements": 16384
+  },
+  "full_id": "document/parse-and-ingest/located-16384-nodes",
+  "directory_name": "document/parse-and-ingest/located-16384-nodes",
+  "title": "document/parse-and-ingest/located-16384-nodes"
+}

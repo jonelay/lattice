@@ -1,0 +1,22 @@
+#!/bin/sh
+# Contract entry point for the prose-xref adapter: the program `--adapter ./adapters/prose-xref`
+# names. The adapter is built into `latt`, so this runs `latt adapter prose-xref`. One
+# template, copied per native adapter; edit the three copies together.
+#
+# `latt` is looked for where each kind of setup puts it: on PATH (a release
+# install), then under `$CARGO_TARGET_DIR`, then in this checkout's
+# `target/debug`. The first found runs.
+adapter=prose-xref
+name=latt
+if command -v "$name" >/dev/null 2>&1; then
+    exec "$name" adapter "$adapter" "$@"
+fi
+if [ -n "$CARGO_TARGET_DIR" ] && [ -x "$CARGO_TARGET_DIR/debug/$name" ]; then
+    exec "$CARGO_TARGET_DIR/debug/$name" adapter "$adapter" "$@"
+fi
+here=$(dirname "$0")
+if [ -x "$here/../target/debug/$name" ]; then
+    exec "$here/../target/debug/$name" adapter "$adapter" "$@"
+fi
+echo "$0: $name not found on PATH, under \$CARGO_TARGET_DIR/debug, or at $here/../target/debug; install the release binaries or run cargo build" >&2
+exit 127

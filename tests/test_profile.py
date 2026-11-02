@@ -40,7 +40,7 @@ def _minimal(**overrides) -> dict:
 
 
 class TestResolvedReader:
-    # Requirement: Resolved profile document
+    # Requirement: adapter-contract/Resolved profile document
     def test_resolved_document_loads(self, resolved_path):
         profile = load_profile(resolved_path)
         assert profile.name == "test-rm"
@@ -96,7 +96,7 @@ class TestResolvedReader:
         with pytest.raises(ProfileError, match="failed to read"):
             load_profile(_write_doc(tmp_path, "node_kinds: {not json"))
 
-    # Requirement: Core invokes the adapter with profile and target paths
+    # Requirement: adapter-contract/Core invokes the adapter with profile and target paths
     def test_resolved_document_is_yaml_readable(self, resolved_path):
         # The staged migration rests on JSON being a YAML subset: an adapter
         # still reading the profile path with a YAML library must see the same

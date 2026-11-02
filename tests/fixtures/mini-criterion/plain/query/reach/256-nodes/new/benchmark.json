@@ -1,0 +1,11 @@
+{
+  "group_id": "query",
+  "function_id": "reach",
+  "value_str": "256-nodes",
+  "throughput": {
+    "Elements": 256
+  },
+  "full_id": "query/reach/256-nodes",
+  "directory_name": "query/reach/256-nodes",
+  "title": "query/reach/256-nodes"
+}

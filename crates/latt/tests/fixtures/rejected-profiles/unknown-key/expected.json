@@ -1,0 +1,5 @@
+{
+  "exit": 2,
+  "stderr": "Error: Profile error: validation config for 'COVERAGE': unknown keys [\"target_kinds\"] (valid: [\"edge_kind\", \"message\", \"pathway\", \"position_attr\", \"severity\", \"source_where\", \"target_kind\", \"where\"])\n",
+  "stdout": ""
+}

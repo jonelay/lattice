@@ -1,0 +1,11 @@
+{
+  "group_id": "adapter",
+  "function_id": "toml",
+  "value_str": "toml-16384-rows",
+  "throughput": {
+    "Elements": 16384
+  },
+  "full_id": "adapter/toml/toml-16384-rows",
+  "directory_name": "adapter/toml/toml-16384-rows",
+  "title": "adapter/toml/toml-16384-rows"
+}

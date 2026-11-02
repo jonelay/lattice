@@ -1,0 +1,76 @@
+# Performance movements are informational in 0.8. A failure means collection broke;
+# it does not mean a percentage crossed a release threshold.
+name: Development benchmarks
+
+on:
+  schedule:
+    - cron: "17 7 * * 1"
+  workflow_dispatch:
+    inputs:
+      baseline_ref:
+        description: Previous release or comparison baseline
+        required: true
+        default: v0.7.1
+      main_ref:
+        description: Main for routine runs; exact development-baseline commit for release qualification
+        required: true
+        default: main
+      release_candidate_ref:
+        description: Optional immutable 0.8.0 release-candidate tag
+        required: false
+        default: ""
+
+jobs:
+  criterion:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.99.1"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: false
+      # actions/cache never overwrites a key, so each run saves a fresh entry and
+      # the prefix restore picks up the most recent one.
+      - uses: actions/cache@v4
+        with:
+          path: target/criterion
+          key: criterion-main-${{ github.run_id }}
+          restore-keys: |
+            criterion-main-
+      - name: Save the main Criterion baseline
+        if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        run: ./tools/benchmark.sh --save-baseline main
+        env:
+          LATTICE_CRITERION_DIR: ${{ github.workspace }}/target/criterion
+      - name: Compare against the main Criterion baseline
+        if: github.ref != format('refs/heads/{0}', github.event.repository.default_branch)
+        run: ./tools/benchmark.sh --baseline main
+        env:
+          LATTICE_CRITERION_DIR: ${{ github.workspace }}/target/criterion
+      - name: Compare release, main, and optional release candidate
+        run: |
+          if [ -n "$RELEASE_CANDIDATE_REF" ]; then
+            python3 tools/benchmark-revisions.py --release-qualification \
+              "$BASELINE_REF" "$MAIN_REF" "$RELEASE_CANDIDATE_REF"
+          else
+            python3 tools/benchmark-revisions.py "$BASELINE_REF" "$MAIN_REF"
+          fi
+        env:
+          BASELINE_REF: ${{ inputs.baseline_ref || 'v0.7.1' }}
+          MAIN_REF: ${{ inputs.main_ref || 'main' }}
+          RELEASE_CANDIDATE_REF: ${{ inputs.release_candidate_ref || '' }}
+          LATTICE_E2E_WORK_DIR: ${{ github.workspace }}/target/e2e-benchmark/${{ github.run_id }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lattice-development-benchmarks
+          path: |
+            target/criterion/
+            target/benchmarks/lattice-benchmark-v2.json
+            target/benchmarks/lattice-e2e-v1.json
+          if-no-files-found: warn
+          retention-days: 30

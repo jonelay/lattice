@@ -1,0 +1,67 @@
+# Verification tables whose rows name tests and files in the target: the
+# source-existence check (`id_names`) reports the rows naming nothing.
+name: md-sources
+profile_version: "1.0.0"
+
+adapter:
+  native: md
+  paths:
+    files: ["REGISTER.md"]
+  tables:
+    - heading: '^Requirements$'
+      kind: requirement
+      id_column: "ID"
+      column_map: { "Summary": summary }
+      edge_columns: {}
+    - heading: '^Rust tests$'
+      kind: rust_test
+      id_column: "Test"
+      column_map: {}
+      edge_columns: { "Verifies": verifies }
+    - heading: '^Python tests$'
+      kind: python_test
+      id_column: "Test"
+      column_map: {}
+      edge_columns: { "Verifies": verifies }
+    - heading: '^Go tests$'
+      kind: go_test
+      id_column: "Test"
+      column_map: {}
+      edge_columns: { "Verifies": verifies }
+    - heading: '^Documents$'
+      kind: document
+      id_column: "Path"
+      column_map: { "Summary": summary }
+      edge_columns: {}
+
+node_kinds:
+  requirement:
+    id_pattern: "^REQ-[0-9]+$"
+    orphan_ok: true
+    attrs:
+      summary: { type: string }
+  rust_test:
+    id_pattern: "^[^:]+\\.rs(::[A-Za-z_][A-Za-z0-9_]*)+$"
+    id_names: cargo
+    orphan_ok: true
+  python_test:
+    id_pattern: "^[^:]+\\.py(::[A-Za-z_][A-Za-z0-9_]*){1,3}(\\[.*\\])?$"
+    id_names: pytest
+    orphan_ok: true
+  go_test:
+    id_pattern: "^[^:]+_test\\.go::[A-Za-z_][A-Za-z0-9_]*$"
+    id_names: gotest
+    orphan_ok: true
+  document:
+    id_pattern: "^docs/.+\\.md$"
+    id_names: file
+    orphan_ok: true
+    attrs:
+      summary: { type: string }
+
+edge_kinds:
+  verifies:
+    allowed:
+      - [rust_test, requirement]
+      - [python_test, requirement]
+      - [go_test, requirement]

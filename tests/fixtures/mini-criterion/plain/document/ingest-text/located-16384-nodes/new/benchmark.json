@@ -1,0 +1,11 @@
+{
+  "group_id": "document",
+  "function_id": "ingest-text",
+  "value_str": "located-16384-nodes",
+  "throughput": {
+    "Elements": 16384
+  },
+  "full_id": "document/ingest-text/located-16384-nodes",
+  "directory_name": "document/ingest-text/located-16384-nodes",
+  "title": "document/ingest-text/located-16384-nodes"
+}

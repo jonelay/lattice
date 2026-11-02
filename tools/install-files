@@ -1,0 +1,11 @@
+# Repository paths a release install holds beside bin/, one per line.
+# Read by tools/make-install.sh and by the eval's user sandbox (development repository).
+README.md
+AGENTS.md
+CHANGELOG.md
+LICENSE-APACHE
+LICENSE-MIT
+docs
+profiles
+adapters
+skills

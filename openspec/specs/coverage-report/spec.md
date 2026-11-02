@@ -9,7 +9,7 @@ represents. The report a consumer would otherwise build from trace JSON.
 ## Requirements
 
 ### Requirement: Coverage report computation
-`lattice coverage` SHALL compute, per node kind, the following statistics
+`latt coverage` SHALL compute, per node kind, the following statistics
 from the ingested graph:
 
 - `total`: count of explicitly added nodes of that kind
@@ -54,8 +54,9 @@ formats (plain, json, rich).
 The JSON output SHALL be an object with a `kinds` array, each entry carrying
 `kind`, `total`, `incoming`, `outgoing`, `incoming_pct`, and `outgoing_pct`.
 
-The plain output SHALL be a whitespace-separated table: one header row naming
-the six columns, then one row per kind.
+The plain output SHALL be one line per kind and no header row, every field
+labelled with its JSON key as `name:value`, in the order `kind`, `total`,
+`incoming`, `incoming_pct`, `outgoing`, `outgoing_pct`.
 
 The rich output SHALL align the columns, show each percentage beside its
 count, and end with a kind count.
@@ -63,31 +64,41 @@ count, and end with a kind count.
 Verified by: `cargo test --test coverage_report`
 
 #### Scenario: JSON output structure
-- **WHEN** `lattice coverage --format json` runs
+- **WHEN** `latt coverage --format json` runs
 - **THEN** stdout is valid JSON with a `kinds` array containing per-kind statistics
 
-#### Scenario: Plain output is tabular
-- **WHEN** `lattice coverage --format plain` runs
-- **THEN** the output is a header row `kind total incoming incoming_pct outgoing outgoing_pct` followed by one data row per kind
+#### Scenario: Plain output labels its fields
+- **WHEN** `latt coverage --format plain` runs and kind `req` has 4 nodes, 2 with an
+  incoming edge and 2 with an outgoing edge
+- **THEN** its line is `kind:req total:4 incoming:2 incoming_pct:50.0 outgoing:2
+  outgoing_pct:50.0`, and no line is a header row
 
 ### Requirement: Coverage report exit codes
-`lattice coverage` SHALL exit 0 on success and 2 on setup failure (bad
+`latt coverage` SHALL exit 0 on success and 2 on setup failure (bad
 profile, adapter crash, unparseable adapter output). It SHALL never exit 1 —
 coverage is a report, not a validation pass — and it takes no `--strict`.
 
 Adapter issues SHALL be reported on stderr after the report regardless of
-severity, on the same terms as `query`, and SHALL NOT affect the exit code.
+severity, on the same terms as `query`, and SHALL NOT otherwise affect the exit
+code. As for `query`, a register that could not be read at all — no node, and an
+unsuppressed error-severity adapter issue — is a question that cannot be posed:
+the command SHALL print no report and SHALL exit 2.
 
-Verified by: `cargo test --test coverage_report`
+Verified by: `cargo test --test coverage_report`, and
+`cargo test --test query -- unreadable_register empty_but_readable`
 
 #### Scenario: Successful report
 - **WHEN** the adapter runs and the graph is built
 - **THEN** the command exits 0
 
 #### Scenario: Error-severity adapter issues do not move the exit code
-- **WHEN** the adapter emitted an error-severity issue and the report is produced
+- **WHEN** the adapter emitted an error-severity issue beside at least one node
 - **THEN** the report prints to stdout, the issue prints to stderr, and the exit code is 0
 
 #### Scenario: Adapter failure
 - **WHEN** the adapter exits non-zero
 - **THEN** the command exits 2
+
+#### Scenario: Register could not be read
+- **WHEN** the adapter declared no node and emitted an error-severity issue
+- **THEN** the command prints no report, reports the issue on stderr, and exits 2

@@ -1,6 +1,10 @@
 .claude/settings.local.json
 .claude/worktrees/
 .venv/
+# Also as symlinks, which agent worktrees link to the main checkout.
+/.venv
+/target
 __pycache__/
 target/
+*.profraw
 .cargo/

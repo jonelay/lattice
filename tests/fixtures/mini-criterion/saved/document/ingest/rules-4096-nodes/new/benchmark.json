@@ -1,0 +1,11 @@
+{
+  "group_id": "document",
+  "function_id": "ingest",
+  "value_str": "rules-4096-nodes",
+  "throughput": {
+    "Elements": 4096
+  },
+  "full_id": "document/ingest/rules-4096-nodes",
+  "directory_name": "document/ingest/rules-4096-nodes",
+  "title": "document/ingest/rules-4096-nodes"
+}

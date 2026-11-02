@@ -1,0 +1,107 @@
+# Every check shape and condition operator the cross-check translates, over a
+# small vocabulary the generator can fill. No shipped profile declares the
+# CONSTRAINT, EDGE_WHERE and EDGE_COUNT shapes, so without this profile the
+# cross-check would never run them.
+name: shapes
+profile_version: "1.0.0"
+node_kinds:
+  req:
+    id_pattern: "^REQ-\\d+$"
+    attrs:
+      status: {type: enum, values: [draft, approved, done]}
+      priority: {type: int}
+      owner: {type: string}
+      due: {type: date}
+      critical: {type: bool}
+      tags: {type: list, items: string}
+  test:
+    id_pattern: "^TEST-\\d+$"
+    orphan_ok: true
+    attrs:
+      status: {type: string}
+      runs: {type: int}
+  spec-goal:
+    id_pattern: "^SPEC-GOAL-\\d+$"
+    attrs:
+      status: {type: string}
+edge_kinds:
+  verifies:
+    allowed: [[test, req]]
+  derives:
+    allowed: [[req, req]]
+  satisfies:
+    allowed: [[spec-goal, req]]
+validations:
+  - COVERAGE:
+      target_kind: req
+      edge_kind: verifies
+      where: {status: {ne: draft}}
+      source_where: {status: {eq: passing}}
+  - COVERAGE:
+      target_kind: req
+      edge_kind: satisfies
+  - COVERAGE_DEEP:
+      target_kind: req
+      via: derives
+      evidence: verifies
+      where: {critical: {eq: true}}
+  - COVERAGE_DEEP:
+      target_kind: req
+      via: derives
+      evidence: derives
+  - CONSTRAINT:
+      kind: req
+      when: {status: {eq: approved}}
+      expect:
+        owner: {present: true}
+        priority: {gte: 1}
+      reject:
+        owner: {eq: ""}
+  - CONSTRAINT:
+      kind: req
+      expect:
+        status: {in: [draft, approved, done]}
+        due: {lt: "2026-06-01"}
+        owner: {matches: "^[a-z]+$"}
+      reject:
+        priority: {gt: 4}
+        critical: {ne: true}
+  - CONSTRAINT:
+      kind: req
+      when: {critical: {present: false}}
+      expect:
+        tags: {present: true}
+  - CONSTRAINT:
+      kind: test
+      expect:
+        runs: {lte: 3}
+        status: {ne: skipped}
+  - EDGE_WHERE:
+      edge_kind: verifies
+      when:
+        target: {status: {eq: done}}
+      expect:
+        source: {status: {eq: passing}}
+      reject:
+        source: {runs: {lt: 1}}
+  - EDGE_WHERE:
+      edge_kind: derives
+      expect:
+        source: {priority: {gte: 2}}
+        target: {status: {present: true}}
+  - EDGE_COUNT:
+      edge_kind: verifies
+      node_kind: req
+      direction: in
+      min: 1
+      max: 2
+      where: {status: {eq: done}}
+  - EDGE_COUNT:
+      edge_kind: derives
+      node_kind: req
+      direction: out
+      max: 1
+  - EDGE_COUNT:
+      edge_kind: satisfies
+      node_kind: spec-goal
+      min: 1

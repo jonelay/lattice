@@ -1,0 +1,5 @@
+{
+  "exit": 2,
+  "stderr": "Error: Profile error: validation override for 'VACANCY': invalid severity 'warn' (valid: error, hint, info, warning); lattice spells the lint level `warn` as `warning`\n",
+  "stdout": ""
+}

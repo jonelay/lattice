@@ -1,0 +1,5 @@
+{
+  "exit": 2,
+  "stderr": "",
+  "stdout": "Fuse <unknown> : 0 nodes, 0 edges, 0 pathways\nERROR FUSE_ERROR [] <case>/manifest.yaml:0 fuse profile: validation entry 'DANGLING_REF': the code was retired in 0.6.0; write VACANCY instead\n"
+}

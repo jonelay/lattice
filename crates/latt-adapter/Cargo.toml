@@ -1,0 +1,21 @@
+[package]
+name = "latt-adapter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared interface-document types and builders for Lattice adapters"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+regex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+proptest.workspace = true

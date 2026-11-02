@@ -1,0 +1,11 @@
+{
+  "group_id": "document",
+  "function_id": "ingest-text",
+  "value_str": "256-nodes",
+  "throughput": {
+    "Elements": 256
+  },
+  "full_id": "document/ingest-text/256-nodes",
+  "directory_name": "document/ingest-text/256-nodes",
+  "title": "document/ingest-text/256-nodes"
+}

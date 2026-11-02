@@ -1,0 +1,11 @@
+{
+  "group_id": "document",
+  "function_id": "parse-and-ingest",
+  "value_str": "rules-4096-nodes",
+  "throughput": {
+    "Elements": 4096
+  },
+  "full_id": "document/parse-and-ingest/rules-4096-nodes",
+  "directory_name": "document/parse-and-ingest/rules-4096-nodes",
+  "title": "document/parse-and-ingest/rules-4096-nodes"
+}

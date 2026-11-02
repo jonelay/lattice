@@ -32,9 +32,9 @@ appear in exactly one of the two places — a finding that affects the exit code
 appears nowhere in the report would be silently dropped output.
 
 #### Scenario: Header fields present in JSON
-- **WHEN** `lattice trace --format=json` runs
-- **THEN** the JSON output includes `profile`, `profile_version`, and `lattice_version`
-  in its header
+- **WHEN** `latt trace --format=json` runs
+- **THEN** the JSON output includes `profile`, `profile_version`, `trace_version`, and
+  `lattice_version` in its header
 
 #### Scenario: Unattachable findings in report
 - **WHEN** validation produces an `UNKNOWN_KIND` issue for an edge, which carries
@@ -68,16 +68,12 @@ order in which the graph was built or on any graph library's iteration order.
 Edge-kind order is carried by the same mechanism as every other payload mapping: JSON
 object keys are emitted in sorted order, and a reimplementation SHALL do the same. Plain
 and rich render an edge count rather than the kinds, so the ordering is observable only in
-JSON. Sorted keys is a stronger cross-implementation contract than declaration order,
-which would require order-preserving serialization.
-
-A specified target order is what makes byte-identical output a contract a
-reimplementation can be held to, rather than a property of one library's internals.
+JSON.
 
 Verified by: `cargo test --test output order`
 
 #### Scenario: Stable ordering across runs
-- **WHEN** `lattice trace --format=json` runs twice on the same input
+- **WHEN** `latt trace --format=json` runs twice on the same input
 - **THEN** both outputs are byte-identical
 
 #### Scenario: Kind groups then ID within kind
@@ -99,7 +95,7 @@ Verified by: `cargo test --test output order`
 - **THEN** both produce byte-identical trace output
 
 ### Requirement: Exit codes for trace
-`lattice trace` SHALL use the same 0/1/2 exit-code contract as `validate`: 0 when the
+`latt trace` SHALL use the same 0/1/2 exit-code contract as `validate`: 0 when the
 register has no error-severity findings, 1 when error-severity findings exist, 2 when
 lattice could not run. `--strict` promotes warnings to errors before the exit-code
 decision.
@@ -118,18 +114,24 @@ decision.
 
 ### Requirement: Trace JSON stability
 The trace-JSON payload has two version axes in its header, each governing a
-distinct surface:
+distinct surface, and one provenance field:
 
 - `profile_version` governs the register schema: node kinds, edge kinds, ID
   patterns, and which attrs each kind carries. A consumer shim refusing a
   register it does not understand SHALL key on `profile_version`.
-- `lattice_version` governs the payload envelope: the set of top-level keys,
-  the shape of a trace entry, and the shape of a finding object. A downstream
-  tool that parses the JSON structure keys on `lattice_version`.
+- `trace_version` governs the payload envelope: the set of top-level keys,
+  the shape of a trace entry, and the shape of a finding object. It is an
+  integer string (current value: the versioning capability's wire
+  version axes). A downstream tool that parses the JSON structure
+  SHALL key on `trace_version`; an optional key added to an entry or finding does
+  not change it.
+- `lattice_version` is provenance only: the version of the core that wrote the
+  payload. No contract keys on it, and it differs between builds whose payloads
+  are otherwise identical.
 
 The following fields are public surfaces — changing their names or types is a
 versioned change carrying a changelog line:
-- Header: `profile`, `profile_version`, `lattice_version`.
+- Header: `profile`, `profile_version`, `trace_version`, `lattice_version`.
 - Entry: `id`, `kind`, `attrs`, `edges`, `provenance`, `findings`.
 - Pathway: `name`, `order`, `current`.
 - Top-level: `header`, `entries`, `unattachable_findings`, `pathways`.
@@ -144,17 +146,10 @@ Verified by: `cargo test --test output byte_stable` for byte-identity across run
 across build order. The enumerated public fields are a documentation contract read off
 this spec, verified by inspection.
 
-Byte-identity across implementations was verified by demonstration at the 0.3.0 port and
-is not re-runnable: two independent implementations of the core produced 19 byte-identical
-output files across two registers, three commands and three formats, differing only in the
-`lattice_version` header. The Python implementation was then deleted, so the evidence is
-the record of that run rather than a command. A third implementation would be held to the
-same demonstration.
-
 #### Scenario: Header documents both version axes
 - **WHEN** the trace-report spec is read
-- **THEN** it states that `profile_version` governs register schema and
-  `lattice_version` governs payload envelope
+- **THEN** it states that `profile_version` governs register schema,
+  `trace_version` governs payload envelope, and `lattice_version` is provenance
 
 #### Scenario: Public fields enumerated
 - **WHEN** the trace-report spec is read
@@ -166,3 +161,22 @@ same demonstration.
   same profile
 - **THEN** their trace output is byte-identical apart from the `lattice_version` header
   field
+
+### Requirement: Trace findings carry their note
+A finding in a trace entry or in `unattachable_findings` that carries a note SHALL
+expose it as the `note` object the output capability defines for findings JSON, and
+SHALL omit the key otherwise. `trace_version` SHALL NOT change: the key is optional,
+and a trace from a profile without notes is byte-identical to before it existed.
+
+Verified by: `cargo test -p latt-core --locked --test output trace_note`, and
+`cargo test -p latt-core --locked --test trace_baseline` with the stored baseline
+unchanged.
+
+#### Scenario: Noted finding in a trace entry
+- **WHEN** `trace --format json` runs and `UN-3`'s `VACANCY` finding carries a note
+- **THEN** that finding in `UN-3`'s entry carries the `note` object
+
+#### Scenario: Trace without notes unchanged
+- **WHEN** `trace --format json` runs over the synthetic fixture, whose profile declares
+  no `annotations`
+- **THEN** the output is byte-identical to the stored baseline

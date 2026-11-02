@@ -1,0 +1,12 @@
+name: t
+profile_version: "1.0.0"
+node_kinds:
+  req:
+    id_pattern: "^REQ-\\d+$"
+    attrs:
+      status: {type: string}
+edge_kinds:
+  derives:
+    allowed: [[req, req]]
+validations:
+  - COVERAGE: {target_kind: req, edge_kind: derives, message: "{id} ({attrs.owner}) uncovered"}

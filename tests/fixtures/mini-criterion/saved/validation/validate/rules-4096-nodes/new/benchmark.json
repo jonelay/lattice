@@ -1,0 +1,11 @@
+{
+  "group_id": "validation",
+  "function_id": "validate",
+  "value_str": "rules-4096-nodes",
+  "throughput": {
+    "Elements": 4096
+  },
+  "full_id": "validation/validate/rules-4096-nodes",
+  "directory_name": "validation/validate/rules-4096-nodes",
+  "title": "validation/validate/rules-4096-nodes"
+}

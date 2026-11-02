@@ -1,4 +1,4 @@
-"""Guard the documentation rules stated in CLAUDE.md.
+"""Guard the repository's documentation rules for docstrings.
 
 Comment density here has historically tracked edit recency rather than what
 is public, so the checkable half of the convention is enforced rather than

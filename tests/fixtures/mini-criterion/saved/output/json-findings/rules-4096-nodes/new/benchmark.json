@@ -1,0 +1,11 @@
+{
+  "group_id": "output",
+  "function_id": "json-findings",
+  "value_str": "rules-4096-nodes",
+  "throughput": {
+    "Elements": 4096
+  },
+  "full_id": "output/json-findings/rules-4096-nodes",
+  "directory_name": "output/json-findings/rules-4096-nodes",
+  "title": "output/json-findings/rules-4096-nodes"
+}

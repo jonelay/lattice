@@ -1,0 +1,78 @@
+{
+  "document/parse": [
+    {
+      "body": "1",
+      "sha256": "c7d571426e3943d8329604d2ec3f9689804ec52a6ddc0580be49e057056e1e2b"
+    }
+  ],
+  "document/ingest": [
+    {
+      "body": "1",
+      "sha256": "3ca2dc340c5857edb01b7209a2e3b197d4566e2748950ad321102167bfbc0cb2"
+    }
+  ],
+  "document/ingest-text": [
+    {
+      "body": "1",
+      "sha256": "60ffdcdedbb2ab41c26ae44612008a87104ecc1cfbc5750fa5dbff8de5635217"
+    }
+  ],
+  "document/parse-and-ingest": [
+    {
+      "body": "1",
+      "sha256": "f9cdd657ac85227ec8270b3abe4a59fb31df2bb3349f7e96f8389a5664ff6c05"
+    }
+  ],
+  "validation/validate": [
+    {
+      "body": "1",
+      "sha256": "e750ac4f06cdb678133ac3da5f9fb7c36d479c45a28bcba13148d0bbde826098"
+    }
+  ],
+  "query/counts": [
+    {
+      "body": "1",
+      "sha256": "7d76d4743d2945e2071b1183714d35ab874226fc8ae5915aedd3a1a569caee4b"
+    }
+  ],
+  "query/reach": [
+    {
+      "body": "1",
+      "sha256": "94ae22d9bee82e9451906dd34df184b2dd60e16d132e4c6aa400a8115cd50e4d"
+    }
+  ],
+  "service/counts": [
+    {
+      "body": "1",
+      "sha256": "ff5f25ae97bee43f5abed39eeca09f4bbc126389e08c697fc571a2224f3839fe"
+    },
+    {
+      "body": "2",
+      "sha256": "9b2fb6ce0751234a6d444d629b78a07a6113da5b7c4476f78d1e1618d8166579"
+    }
+  ],
+  "output/json-findings": [
+    {
+      "body": "1",
+      "sha256": "e292792f1590e9a386c1ad2b2b47d4870bf5d70d72a1ed6d23eefb902786dac3"
+    }
+  ],
+  "adapter/toml": [
+    {
+      "body": "1",
+      "sha256": "5ca1f3e441898277a1ae6f2facd1be813f26609e195aec003f9fa75f400bda02"
+    }
+  ],
+  "adapter/md": [
+    {
+      "body": "1",
+      "sha256": "5ca1f3e441898277a1ae6f2facd1be813f26609e195aec003f9fa75f400bda02"
+    }
+  ],
+  "adapter/prose-xref": [
+    {
+      "body": "1",
+      "sha256": "5ca1f3e441898277a1ae6f2facd1be813f26609e195aec003f9fa75f400bda02"
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "exit": 2,
+  "stderr": "Error: Profile error: validation config for 'SUPPRESS_UNUSED', message: placeholder '{id}' names a node, but findings of 'SUPPRESS_UNUSED' carry none (valid: {message}, {code}, {severity})\n",
+  "stdout": ""
+}

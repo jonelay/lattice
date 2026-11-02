@@ -27,20 +27,35 @@ def resolve_profile(yaml_path: str | Path, out_dir: str | Path) -> Path:
     return out
 
 
+def uncomment_actions(yaml_path: str | Path, out_dir: str | Path) -> Path:
+    """Write a copy of a shipped profile with its commented `actions` block on.
+
+    The shipped profiles carry owner actions commented out; an adapter must
+    still read the profile a user gets by uncommenting them.
+    """
+    lines: list[str] = []
+    in_block = False
+    for line in Path(yaml_path).read_text().splitlines():
+        stripped = line.lstrip()
+        indent = line[: len(line) - len(stripped)]
+        if stripped == "# actions:":
+            in_block = True
+            lines.append(f"{indent}actions:")
+        elif in_block and stripped.startswith("#   "):
+            lines.append(f"{indent}  {stripped[4:]}")
+        else:
+            in_block = False
+            lines.append(line)
+    out = Path(out_dir) / Path(yaml_path).name
+    out.write_text("\n".join(lines) + "\n")
+    assert out.read_text() != Path(yaml_path).read_text(), "no actions block found"
+    return out
+
+
 def load_yaml_profile(yaml_path: str | Path) -> Profile:
     """Load a YAML profile as an adapter would see it: resolved first."""
     with tempfile.TemporaryDirectory() as scratch:
         return _load_resolved(resolve_profile(yaml_path, scratch))
-
-
-@pytest.fixture
-def fixture_dir():
-    return FIXTURES_DIR
-
-
-@pytest.fixture
-def test_profile_path(fixture_dir):
-    return fixture_dir / "test-profile.yaml"
 
 
 def git(repo: Path, *args: str) -> None:

@@ -12,15 +12,12 @@ An edge whose source node was never added does not count as coverage: it is a da
 reference, already reported as `VACANCY`, and treating it as a test would let a
 typo in a marker silently satisfy a requirement.
 
-Coverage — flat and deep alike — measures **declared evidence**: the presence of
-profile-configured evidence edges from explicit source nodes. It SHALL NOT be read as
-asserting execution, pass/fail, assertion relevance, or evidence scope; an adapter that
-expands one broad marker onto many tests yields many edges recording one attribution.
-Verification of the evidence itself is the register owner's, outside this tool.
+Coverage measures **declared evidence**: the presence of profile-configured evidence
+edges from explicit source nodes.
 
 The report SHALL distinguish three states per `req` node, so a reader is never pushed
-toward writing tests that may already exist (design-basis §6: "untested" and "untagged"
-were reported identically):
+toward writing tests that may already exist (on the pilot registers, "untested" and
+"untagged" were reported identically):
 
 - *verified* — an incoming `verifies` edge from an existing test node; no finding.
 - *unknown* — no incoming `verifies` edge, and test nodes with no outgoing `verifies`
@@ -59,12 +56,12 @@ Verified by: `cargo test --test validation coverage_state`
 - **THEN** REQ-0401's coverage finding carries `state: "unverified"`
 
 ### Requirement: Summary subcommand
-`lattice summary` SHALL output a computed summary of the register. When the profile
+`latt summary` SHALL output a computed summary of the register. When the profile
 declares a `SUMMARY` validation config, the summary is the configured status-attr
 rollup: for each group, count nodes by status value. The grouping node kind, status
 attr, and group-by attr come from the profile's config.
 
-When the profile declares no `SUMMARY` config, `lattice summary` SHALL produce a
+When the profile declares no `SUMMARY` config, `latt summary` SHALL produce a
 default structural report instead of exiting 2. The structural report SHALL include:
 
 - Node counts by kind (every kind declared in the profile, plus any undeclared kinds
@@ -78,7 +75,7 @@ edge kind declarations. Its finding tallies are informational: an error-severity
 finding in the tally does not affect the exit code.
 
 When the profile declares a `SUMMARY` config that is unusable — a missing required
-key, a mistyped value, or more than one `SUMMARY` entry — `lattice summary` SHALL
+key, a mistyped value, or more than one `SUMMARY` entry — `latt summary` SHALL
 exit 2 rather than fall back, since a config the profile declared must not be
 silently discarded.
 
@@ -88,28 +85,28 @@ Verified by: `cargo test --test summary`, and the summary scenarios in
 `cargo test --test cli` and `cargo test --test output`
 
 #### Scenario: Configured summary matches the register's counts
-- **WHEN** `lattice summary` runs against a profile with a `SUMMARY` config
+- **WHEN** `latt summary` runs against a profile with a `SUMMARY` config
 - **THEN** the output contains per-group counts matching the configured status-attr
   pivot
 
 #### Scenario: Summary JSON format (configured)
-- **WHEN** `lattice summary --format=json` runs with a configured `SUMMARY`
+- **WHEN** `latt summary --format=json` runs with a configured `SUMMARY`
 - **THEN** the output is a JSON object with a `groups` array — one entry per group,
   keyed by the group-by attr and each status value plus `total` — and a `totals`
   object holding the column sums
 
 #### Scenario: Zero-config structural report
-- **WHEN** `lattice summary` runs with a profile that declares no `SUMMARY` config
+- **WHEN** `latt summary` runs with a profile that declares no `SUMMARY` config
 - **THEN** lattice exits 0 and the output contains node counts by kind, edge counts by
   kind, and finding tallies by code and severity
 
 #### Scenario: Zero-config JSON format
-- **WHEN** `lattice summary --format=json` runs with no `SUMMARY` config
+- **WHEN** `latt summary --format=json` runs with no `SUMMARY` config
 - **THEN** the output is a JSON object with `node_counts` and `edge_counts` maps and a
   `finding_counts` array of `{code, severity, count}` entries
 
 #### Scenario: Multiple SUMMARY configs
-- **WHEN** `lattice summary` runs with a profile declaring two `SUMMARY` configs
+- **WHEN** `latt summary` runs with a profile declaring two `SUMMARY` configs
 - **THEN** lattice exits 2 with an error
 
 Adapter issues SHALL be reported on stderr after the summary regardless of severity, so
@@ -126,7 +123,8 @@ issues affect the exit code.
 
 ### Requirement: Orphan detection
 The existing validators SHALL flag IDs that appear in edges but not as nodes
-(via VACANCY) and nodes with no connections (via UNREFERENCED/UNTRACED). No new validator
+(via VACANCY) and nodes with no connections in a direction their kind's allowed pairs
+permit (via UNREFERENCED/UNTRACED). No new validator
 needed — the built-in validators cover this when the adapter builds the graph correctly.
 
 #### Scenario: Cited REQ absent from REQUIREMENTS.md
@@ -172,15 +170,13 @@ by the same global rule: `unknown` when the register holds nodes of a kind the
 `unverified` otherwise. Each `COVERAGE_DEEP` config SHALL report that
 unattributed population once as a `COVERAGE_UNKNOWN` hint, exactly as a
 `COVERAGE` config does.
+`source_where` narrows the evidence sources as it does for `COVERAGE`
+(validation spec, "Coverage evidence state"): an excluded source's `evidence`
+edge seeds nothing and the source is not counted.
 
 `COVERAGE_DEEP` SHALL default to `warning` severity, like `COVERAGE`; a
 profile MAY demote it (to `hint` where advice is wanted). It SHALL NOT default
-to `hint`: hint is never promotable, and a hint default would foreclose
-gating on deep coverage for every profile permanently.
-
-This validation is a universal rollup, deliberately distinct from existential
-reachability ("does any evidence path reach this node"), which belongs to the
-`reaches` query and answers a different question over the same edges.
+to `hint`.
 
 **Verified by:** `cargo test --test coverage_deep`
 
@@ -241,8 +237,10 @@ reachability ("does any evidence path reach this node"), which belongs to the
 - **THEN** SYS-1's `COVERAGE_DEEP` finding carries `state: "unknown"` and the
   config emits one `COVERAGE_UNKNOWN` hint
 
-#### Scenario: A faulty entry does not suppress a valid one
-- **WHEN** a profile declares two `COVERAGE_DEEP` entries and one names a `via`
+#### Scenario: A faulty entry is refused at load
+- **WHEN** a standard profile declares a `COVERAGE_DEEP` entry whose `via` names an
   edge kind the profile does not declare
-- **THEN** the faulty entry emits `CONFIG_ERROR` and performs no check, and the
-  valid entry's findings are unaffected
+- **THEN** the profile does not load, and the error names `COVERAGE_DEEP`, `via` and
+  the kind (profile-schema spec, coverage entries name declared kinds); on the
+  profile `fuse` composes the entry instead emits `CONFIG_ERROR` and performs no
+  check, and a valid entry beside it still runs

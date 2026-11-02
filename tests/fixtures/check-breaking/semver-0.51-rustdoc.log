@@ -1,0 +1,107 @@
+== semver-checks: probe default-features
+    Checking <unknown> v0.1.0 -> v0.1.0 (assume minor change)
+     Checked [   0.004s] 202 checks: 192 pass, 10 fail, 0 warn, 58 skip
+
+--- failure enum_missing: pub enum removed or renamed ---
+
+Description:
+A publicly-visible enum cannot be imported by its prior path. A `pub use` may have been removed, or the enum itself may have been renamed or removed entirely.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.51.0/src/lints/enum_missing.ron
+
+Failed in:
+  enum probe::Hid, previously in file src/lib.rs:8
+
+--- failure enum_variant_missing: pub enum variant removed or renamed ---
+
+Description:
+A publicly-visible enum has at least one variant that is no longer available under its prior name. It may have been renamed or removed entirely.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.51.0/src/lints/enum_variant_missing.ron
+
+Failed in:
+  variant Dir::Down, previously in file src/lib.rs:4
+
+--- failure function_missing: pub fn removed or renamed ---
+
+Description:
+A publicly-visible function cannot be imported by its prior path. A `pub use` may have been removed, or the function itself may have been renamed or removed entirely.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.51.0/src/lints/function_missing.ron
+
+Failed in:
+  function probe::query::deep, previously in file src/lib.rs:6
+  function probe::reach, previously in file src/lib.rs:1
+
+--- failure inherent_associated_pub_const_missing: inherent impl's associated pub const removed ---
+
+Description:
+An inherent impl's associated public constant is removed or renamed
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.51.0/src/lints/inherent_associated_pub_const_missing.ron
+
+Failed in:
+  Node::K, previously at src/lib.rs:3
+
+--- failure inherent_method_missing: pub method removed or renamed ---
+
+Description:
+A publicly-visible method or associated fn is no longer available under its prior name. It may have been renamed or removed entirely.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.51.0/src/lints/inherent_method_missing.ron
+
+Failed in:
+  Node::walk, previously in file src/lib.rs:3
+
+--- failure pub_module_level_const_missing: pub module-level const is missing ---
+
+Description:
+A public const is missing or renamed
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.51.0/src/lints/pub_module_level_const_missing.ron
+
+Failed in:
+  C in file src/lib.rs:7
+
+--- failure struct_pub_field_missing: pub struct's pub field removed or renamed ---
+
+Description:
+A publicly-visible struct has at least one public field that is no longer available under its prior name. It may have been renamed or removed entirely.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.51.0/src/lints/struct_pub_field_missing.ron
+
+Failed in:
+  field kinds of struct Node, previously in file src/lib.rs:2
+
+--- failure trait_added_supertrait: non-sealed trait added new supertraits ---
+
+Description:
+A non-sealed trait added one or more supertraits, which breaks downstream implementations of the trait
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#generic-bounds-tighten
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.51.0/src/lints/trait_added_supertrait.ron
+
+Failed in:
+  trait probe::Seal gained Sealed in file src/lib.rs:8
+
+--- failure trait_method_missing: pub trait method removed or renamed ---
+
+Description:
+A trait method is no longer callable, and may have been renamed or removed entirely.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#trait-item-signature
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.51.0/src/lints/trait_method_missing.ron
+
+Failed in:
+  method m of trait Tr, previously in file src/lib.rs:5
+
+--- failure trait_newly_sealed: pub trait became sealed ---
+
+Description:
+A publicly-visible trait became sealed, so downstream crates are no longer able to implement it
+        ref: https://rust-lang.github.io/api-guidelines/future-proofing.html#sealed-traits-protect-against-downstream-implementations-c-sealed
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.51.0/src/lints/trait_newly_sealed.ron
+
+Failed in:
+  trait probe::Seal in file src/lib.rs:8
+
+     Summary semver requires new major version: 10 major and 0 minor checks failed
+    Finished [   0.013s] <unknown>

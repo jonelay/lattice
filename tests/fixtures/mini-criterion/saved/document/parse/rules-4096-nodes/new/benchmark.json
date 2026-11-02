@@ -1,0 +1,11 @@
+{
+  "group_id": "document",
+  "function_id": "parse",
+  "value_str": "rules-4096-nodes",
+  "throughput": {
+    "Elements": 4096
+  },
+  "full_id": "document/parse/rules-4096-nodes",
+  "directory_name": "document/parse/rules-4096-nodes",
+  "title": "document/parse/rules-4096-nodes"
+}

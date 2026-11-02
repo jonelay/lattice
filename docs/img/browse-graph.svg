@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1032" height="568" viewBox="0 0 1032 568" role="img" aria-label="latt browse: the graph view centred on a requirement">
+<title>latt browse: the graph view centred on a requirement</title>
+<rect width="100%" height="100%" rx="4" fill="#1e1e2e"/>
+<g font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="14" xml:space="preserve" transform="translate(12,12)">
+<rect x="0.0" y="0.0" width="394.8" height="17.0" fill="#d4d7de"/>
+<text x="0.0" y="13.0" fill="#1e1e2e" textLength="394.8" lengthAdjust="spacingAndGlyphs"> 1 Nodes   2 Tree   3 Findings   4 Provenance  </text>
+<text x="394.8" y="13.0" fill="#d4d7de" textLength="75.6" lengthAdjust="spacingAndGlyphs" font-weight="bold" text-decoration="underline"> 5 Graph </text>
+<text x="0.0" y="30.0" fill="#d4d7de" textLength="1008.0" lengthAdjust="spacingAndGlyphs" font-weight="bold">┌ Graph: graph-model/Dangling edge targets → ──────────────────────────────────────────────────────────────────────────┐</text>
+<text x="0.0" y="47.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="8.4" y="47.0" fill="#d4d7de" textLength="991.2" lengthAdjust="spacingAndGlyphs"> …:an_edge_endpoint_is_not_a_node  …::edge_added_before_target_node    graph-model                                    </text>
+<text x="999.6" y="47.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="64.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="8.4" y="64.0" fill="#d4d7de" textLength="604.8" lengthAdjust="spacingAndGlyphs" opacity="0.6"> ╲                                 ┼                                   ╱</text>
+<text x="999.6" y="64.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="81.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<rect x="302.4" y="68.0" width="285.6" height="17.0" fill="#d4d7de"/>
+<text x="302.4" y="81.0" fill="#1e1e2e" textLength="285.6" lengthAdjust="spacingAndGlyphs">●graph-model/Dangling edge targets</text>
+<text x="999.6" y="81.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="98.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="98.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="115.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="115.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="132.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="132.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="149.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="149.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="166.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="166.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="183.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="183.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="200.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="200.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="217.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="217.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="234.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="234.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="251.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="251.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="268.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="268.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="285.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="285.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="302.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="302.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="319.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="319.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="336.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="336.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="353.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="353.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="370.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="370.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="387.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="387.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="404.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="404.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="421.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="421.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="438.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="438.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="455.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="455.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="472.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="472.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="489.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="489.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="506.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="999.6" y="506.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="0.0" y="523.0" fill="#d4d7de" textLength="1008.0" lengthAdjust="spacingAndGlyphs" font-weight="bold">└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘</text>
+<rect x="0.0" y="527.0" width="898.8" height="17.0" fill="#d4d7de"/>
+<text x="0.0" y="540.0" fill="#1e1e2e" textLength="898.8" lengthAdjust="spacingAndGlyphs"> Graph: graph-model/Dangling edge targets r=2 fwd | 3 incoming, 0 outgoing | Enter: re-center | Tab: detail</text>
+</g></svg>

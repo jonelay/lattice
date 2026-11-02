@@ -1,27 +1,69 @@
 [workspace]
 members = [
-    "crates/adapter-core",
-    "crates/adapter-entomologist",
-    "crates/adapter-github",
-    "crates/adapter-gitlab",
-    "crates/adapter-md",
-    "crates/adapter-toml",
-    "crates/lattice-core",
+    "crates/latt",
+    "crates/latt-adapter",
+    "crates/latt-core",
+    "crates/latt-trustfall",
 ]
+# The agent-docs eval is a workspace of its own, so the release snapshot can withhold it.
+exclude = ["crates/latt-eval"]
 resolver = "3"
 
 [workspace.package]
-version = "0.7.1"
+version = "0.8.0"
 edition = "2024"
-rust-version = "1.95"
+rust-version = "1.99"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/jonelay/lattice"
 
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+# Style-group, so warn by default: allowed here, denied in `latt-core::output`.
+disallowed_types = "allow"
+doc_markdown = "warn"
+todo = "deny"
+too_long_first_doc_paragraph = "warn"
+undocumented_unsafe_blocks = "deny"
+
+[workspace.lints.rustdoc]
+broken_intra_doc_links = "deny"
+bare_urls = "warn"
+# Allow-by-default, so `-D warnings` in verify.sh would not see them otherwise.
+missing_crate_level_docs = "warn"
+private_doc_tests = "warn"
+unescaped_backticks = "warn"
+
+[profile.release]
+strip = true
+
 [workspace.dependencies]
-adapter-core = { path = "crates/adapter-core" }
+latt-adapter = { path = "crates/latt-adapter" }
 clap = { version = "4", features = ["derive"] }
+criterion = { version = "=0.8.2", default-features = false, features = ["cargo_bench_support"] }
+# Dev-only: property tests. `std` alone keeps the seed-persistence files; the default
+# `fork` and `timeout` features would add rusty-fork, tempfile and wait-timeout for nothing used.
+proptest = { version = "1", default-features = false, features = ["std"] }
 regex = "1"
+# latt-core dev-only: the supported-signatures guard decodes rustdoc JSON. Pinned to the
+# format version of the toolchain `rust-toolchain.toml` names; a toolchain bump moves both.
+rustdoc-types = "=0.61.0"
 serde = { version = "1", features = ["derive"] }
+# A host may unify `preserve_order` in; JSON output sorts attrs itself (`output/sorted.rs`)
+# and `verify.sh` tests the core with the feature on.
 serde_json = "1"
 serde_norway = "0.9"
-toml = "0.8"
+# latt-trustfall only: the independent query engine the validators are cross-checked
+# against. Development-only; never a dependency of latt-core.
+trustfall_core = "0.8"
+thiserror = "2"
+# Defaults minus `all-widgets` (calendar, which pulls `time`) and `macros`: neither is used.
+ratatui = { version = "0.30", default-features = false, features = ["crossterm", "layout-cache", "underline-color"] }
+tui-markdown = { version = "0.3", default-features = false }
+# latt-core's toml adapter only: the parser the `toml` crate is built on, used directly
+# because it keeps each value's span, so a node or finding names its line and the entry as
+# written. `parse` alone, no serde support.
+toml_edit = { version = "0.22", default-features = false, features = ["parse"] }

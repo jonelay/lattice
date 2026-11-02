@@ -1,0 +1,96 @@
+{
+  "interface_version": "1.2",
+  "nodes": [
+    {
+      "id": "C1",
+      "kind": "claim",
+      "attrs": {
+        "status": "settled",
+        "group": "fixture"
+      },
+      "provenance": {
+        "file": "crates/latt-core/tests/fixtures/embedding/actor-a.json",
+        "line": 5
+      }
+    },
+    {
+      "id": "R1",
+      "kind": "reading",
+      "attrs": {
+        "status": "settled",
+        "group": "fixture"
+      },
+      "provenance": {
+        "file": "crates/latt-core/tests/fixtures/embedding/actor-a.json",
+        "line": 17
+      }
+    },
+    {
+      "id": "A1",
+      "kind": "assertion",
+      "attrs": {
+        "status": "settled",
+        "group": "fixture"
+      },
+      "provenance": {
+        "file": "crates/latt-core/tests/fixtures/embedding/actor-a.json",
+        "line": 29
+      }
+    },
+    {
+      "id": "A2",
+      "kind": "assertion",
+      "attrs": {
+        "status": "settled",
+        "group": "fixture"
+      },
+      "provenance": {
+        "file": "crates/latt-core/tests/fixtures/embedding/actor-a.json",
+        "line": 41
+      }
+    }
+  ],
+  "edges": [
+    {
+      "src": "A1",
+      "tgt": "C1",
+      "kind": "about",
+      "attrs": {},
+      "provenance": {
+        "file": "crates/latt-core/tests/fixtures/embedding/actor-a.json",
+        "line": 55
+      }
+    },
+    {
+      "src": "A1",
+      "tgt": "R1",
+      "kind": "uses",
+      "attrs": {},
+      "provenance": {
+        "file": "crates/latt-core/tests/fixtures/embedding/actor-a.json",
+        "line": 65
+      }
+    },
+    {
+      "src": "A2",
+      "tgt": "C1",
+      "kind": "about",
+      "attrs": {},
+      "provenance": {
+        "file": "crates/latt-core/tests/fixtures/embedding/actor-a.json",
+        "line": 75
+      }
+    },
+    {
+      "src": "A2",
+      "tgt": "R1",
+      "kind": "uses",
+      "attrs": {},
+      "provenance": {
+        "file": "crates/latt-core/tests/fixtures/embedding/actor-a.json",
+        "line": 85
+      }
+    }
+  ],
+  "findings": []
+}

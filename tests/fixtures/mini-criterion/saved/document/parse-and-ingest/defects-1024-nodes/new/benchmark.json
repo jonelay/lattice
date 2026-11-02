@@ -1,0 +1,11 @@
+{
+  "group_id": "document",
+  "function_id": "parse-and-ingest",
+  "value_str": "defects-1024-nodes",
+  "throughput": {
+    "Elements": 1048
+  },
+  "full_id": "document/parse-and-ingest/defects-1024-nodes",
+  "directory_name": "document/parse-and-ingest/defects-1024-nodes",
+  "title": "document/parse-and-ingest/defects-1024-nodes"
+}

@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1032" height="568" viewBox="0 0 1032 568" role="img" aria-label="latt browse: cli/Exit codes and the tests that verify it">
+<title>latt browse: cli/Exit codes and the tests that verify it</title>
+<rect width="100%" height="100%" rx="4" fill="#1e1e2e"/>
+<g font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="14" xml:space="preserve" transform="translate(12,12)">
+<text x="0.0" y="13.0" fill="#d4d7de" textLength="75.6" lengthAdjust="spacingAndGlyphs" font-weight="bold" text-decoration="underline"> 1 Nodes </text>
+<rect x="75.6" y="0.0" width="386.4" height="17.0" fill="#d4d7de"/>
+<text x="75.6" y="13.0" fill="#1e1e2e" textLength="386.4" lengthAdjust="spacingAndGlyphs">  2 Tree   3 Findings   4 Provenance   5 Graph</text>
+<text x="0.0" y="30.0" fill="#d4d7de" textLength="1008.0" lengthAdjust="spacingAndGlyphs" font-weight="bold">┌ Nodes ───────────────────────────────────────────────────────────────────────────────────────────────────────────────┐</text>
+<text x="0.0" y="47.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="8.4" y="47.0" fill="#56b6c2" textLength="117.6" lengthAdjust="spacingAndGlyphs">[requirement] </text>
+<text x="126.0" y="47.0" fill="#d4d7de" textLength="873.6" lengthAdjust="spacingAndGlyphs">cli/A missing profile names the profiles beside it                                                      </text>
+<text x="999.6" y="47.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">▲</text>
+<text x="0.0" y="64.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="8.4" y="64.0" fill="#56b6c2" textLength="117.6" lengthAdjust="spacingAndGlyphs">[requirement] </text>
+<text x="126.0" y="64.0" fill="#d4d7de" textLength="873.6" lengthAdjust="spacingAndGlyphs">cli/Adapter command                                                                                     </text>
+<text x="999.6" y="64.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">║</text>
+<text x="0.0" y="81.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="8.4" y="81.0" fill="#56b6c2" textLength="117.6" lengthAdjust="spacingAndGlyphs">[requirement] </text>
+<text x="126.0" y="81.0" fill="#d4d7de" textLength="873.6" lengthAdjust="spacingAndGlyphs">cli/Adapter loading                                                                                     </text>
+<text x="999.6" y="81.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">█</text>
+<text x="0.0" y="98.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="8.4" y="98.0" fill="#56b6c2" textLength="117.6" lengthAdjust="spacingAndGlyphs">[requirement] </text>
+<text x="126.0" y="98.0" fill="#d4d7de" textLength="873.6" lengthAdjust="spacingAndGlyphs">cli/An unranked run is visible                                                                          </text>
+<text x="999.6" y="98.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">║</text>
+<text x="0.0" y="115.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="8.4" y="115.0" fill="#56b6c2" textLength="117.6" lengthAdjust="spacingAndGlyphs">[requirement] </text>
+<text x="126.0" y="115.0" fill="#d4d7de" textLength="873.6" lengthAdjust="spacingAndGlyphs">cli/An unresolvable suggestion is reported, never dropped                                               </text>
+<text x="999.6" y="115.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">║</text>
+<text x="0.0" y="132.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="8.4" y="132.0" fill="#56b6c2" textLength="117.6" lengthAdjust="spacingAndGlyphs">[requirement] </text>
+<text x="126.0" y="132.0" fill="#d4d7de" textLength="873.6" lengthAdjust="spacingAndGlyphs">cli/CLI entry point                                                                                     </text>
+<text x="999.6" y="132.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">║</text>
+<text x="0.0" y="149.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<rect x="8.4" y="136.0" width="117.6" height="17.0" fill="#56b6c2"/>
+<text x="8.4" y="149.0" fill="#1e1e2e" textLength="117.6" lengthAdjust="spacingAndGlyphs">[requirement] </text>
+<rect x="126.0" y="136.0" width="873.6" height="17.0" fill="#d4d7de"/>
+<text x="126.0" y="149.0" fill="#1e1e2e" textLength="873.6" lengthAdjust="spacingAndGlyphs">cli/Exit codes                                                                                          </text>
+<text x="999.6" y="149.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">║</text>
+<text x="0.0" y="166.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="8.4" y="166.0" fill="#56b6c2" textLength="117.6" lengthAdjust="spacingAndGlyphs">[requirement] </text>
+<text x="126.0" y="166.0" fill="#d4d7de" textLength="873.6" lengthAdjust="spacingAndGlyphs">cli/Format flag                                                                                         </text>
+<text x="999.6" y="166.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">║</text>
+<text x="0.0" y="183.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="8.4" y="183.0" fill="#56b6c2" textLength="117.6" lengthAdjust="spacingAndGlyphs">[requirement] </text>
+<text x="126.0" y="183.0" fill="#d4d7de" textLength="873.6" lengthAdjust="spacingAndGlyphs">cli/Profile version pin                                                                                 </text>
+<text x="999.6" y="183.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">║</text>
+<text x="0.0" y="200.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="8.4" y="200.0" fill="#56b6c2" textLength="117.6" lengthAdjust="spacingAndGlyphs">[requirement] </text>
+<text x="126.0" y="200.0" fill="#d4d7de" textLength="873.6" lengthAdjust="spacingAndGlyphs">cli/Show command                                                                                        </text>
+<text x="999.6" y="200.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">║</text>
+<text x="0.0" y="217.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="8.4" y="217.0" fill="#56b6c2" textLength="117.6" lengthAdjust="spacingAndGlyphs">[requirement] </text>
+<text x="126.0" y="217.0" fill="#d4d7de" textLength="873.6" lengthAdjust="spacingAndGlyphs">cli/Suggestions flag                                                                                    </text>
+<text x="999.6" y="217.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">║</text>
+<text x="0.0" y="234.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="8.4" y="234.0" fill="#56b6c2" textLength="117.6" lengthAdjust="spacingAndGlyphs">[requirement] </text>
+<text x="126.0" y="234.0" fill="#d4d7de" textLength="873.6" lengthAdjust="spacingAndGlyphs">cli/Summary rejects a mistyped config                                                                   </text>
+<text x="999.6" y="234.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">║</text>
+<text x="0.0" y="251.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">│</text>
+<text x="8.4" y="251.0" fill="#56b6c2" textLength="117.6" lengthAdjust="spacingAndGlyphs">[requirement] </text>
+<text x="126.0" y="251.0" fill="#d4d7de" textLength="873.6" lengthAdjust="spacingAndGlyphs">cli/Summary rejects a status named total                                                                </text>
+<text x="999.6" y="251.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">▼</text>
+<text x="0.0" y="268.0" fill="#d4d7de" textLength="1008.0" lengthAdjust="spacingAndGlyphs" font-weight="bold">└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘</text>
+<text x="0.0" y="285.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">┌</text>
+<text x="8.4" y="285.0" fill="#d4d7de" textLength="134.4" lengthAdjust="spacingAndGlyphs"> cli/Exit codes </text>
+<text x="142.8" y="285.0" fill="#d4d7de" textLength="865.2" lengthAdjust="spacingAndGlyphs" opacity="0.6">──────────────────────────────────────────────────────────────────────────────────────────────────────┐</text>
+<text x="0.0" y="302.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">│</text>
+<text x="8.4" y="302.0" fill="#d4d7de" textLength="134.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">── Attributes ──</text>
+<text x="999.6" y="302.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">▲</text>
+<text x="0.0" y="319.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">│</text>
+<text x="8.4" y="319.0" fill="#56b6c2" textLength="67.2" lengthAdjust="spacingAndGlyphs">  kind: </text>
+<text x="75.6" y="319.0" fill="#d4d7de" textLength="924.0" lengthAdjust="spacingAndGlyphs">requirement                                                                                                   </text>
+<text x="999.6" y="319.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">█</text>
+<text x="0.0" y="336.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">│</text>
+<text x="8.4" y="336.0" fill="#56b6c2" textLength="67.2" lengthAdjust="spacingAndGlyphs">  body: </text>
+<text x="75.6" y="336.0" fill="#d4d7de" textLength="924.0" lengthAdjust="spacingAndGlyphs">Lattice SHALL use three exit codes: 0 when the command succeeded with no errors, 1 when the register produced </text>
+<text x="999.6" y="336.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">█</text>
+<text x="0.0" y="353.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">│</text>
+<text x="8.4" y="353.0" fill="#56b6c2" textLength="109.2" lengthAdjust="spacingAndGlyphs">  scenarios: </text>
+<text x="117.6" y="353.0" fill="#d4d7de" textLength="882.0" lengthAdjust="spacingAndGlyphs">11                                                                                                       </text>
+<text x="999.6" y="353.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">█</text>
+<text x="0.0" y="370.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">│</text>
+<text x="8.4" y="370.0" fill="#56b6c2" textLength="75.6" lengthAdjust="spacingAndGlyphs">  title: </text>
+<text x="84.0" y="370.0" fill="#d4d7de" textLength="915.6" lengthAdjust="spacingAndGlyphs">Exit codes                                                                                                   </text>
+<text x="999.6" y="370.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">█</text>
+<text x="0.0" y="387.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">│</text>
+<text x="8.4" y="387.0" fill="#56b6c2" textLength="117.6" lengthAdjust="spacingAndGlyphs">  provenance: </text>
+<text x="126.0" y="387.0" fill="#d4d7de" textLength="873.6" lengthAdjust="spacingAndGlyphs">openspec/specs/cli/spec.md:146                                                                          </text>
+<text x="999.6" y="387.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">█</text>
+<text x="0.0" y="404.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">│</text>
+<text x="8.4" y="404.0" fill="#d4d7de" textLength="168.0" lengthAdjust="spacingAndGlyphs" font-weight="bold">── Incoming edges ──</text>
+<text x="999.6" y="404.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">█</text>
+<text x="0.0" y="421.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">│</text>
+<text x="8.4" y="421.0" fill="#98c379" textLength="126.0" lengthAdjust="spacingAndGlyphs">  ←[contains]— </text>
+<text x="134.4" y="421.0" fill="#d4d7de" textLength="865.2" lengthAdjust="spacingAndGlyphs">cli                                                                                                    </text>
+<text x="999.6" y="421.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">█</text>
+<text x="0.0" y="438.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">│</text>
+<text x="8.4" y="438.0" fill="#c678dd" textLength="126.0" lengthAdjust="spacingAndGlyphs">  ←[verifies]— </text>
+<text x="134.4" y="438.0" fill="#d4d7de" textLength="865.2" lengthAdjust="spacingAndGlyphs">crates/latt/tests/cli.rs::a_clean_register_exits_zero                                                  </text>
+<text x="999.6" y="438.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">█</text>
+<text x="0.0" y="455.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">│</text>
+<text x="8.4" y="455.0" fill="#c678dd" textLength="126.0" lengthAdjust="spacingAndGlyphs">  ←[verifies]— </text>
+<text x="134.4" y="455.0" fill="#d4d7de" textLength="865.2" lengthAdjust="spacingAndGlyphs">crates/latt/tests/cli.rs::a_profile_suppressing_config_error_exits_two                                 </text>
+<text x="999.6" y="455.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">║</text>
+<text x="0.0" y="472.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">│</text>
+<text x="8.4" y="472.0" fill="#c678dd" textLength="126.0" lengthAdjust="spacingAndGlyphs">  ←[verifies]— </text>
+<text x="134.4" y="472.0" fill="#d4d7de" textLength="865.2" lengthAdjust="spacingAndGlyphs">crates/latt/tests/cli.rs::a_query_omits_an_adapter_issue_the_profile_suppressed_from_plain_stderr      </text>
+<text x="999.6" y="472.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">║</text>
+<text x="0.0" y="489.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">│</text>
+<text x="8.4" y="489.0" fill="#c678dd" textLength="126.0" lengthAdjust="spacingAndGlyphs">  ←[verifies]— </text>
+<text x="134.4" y="489.0" fill="#d4d7de" textLength="865.2" lengthAdjust="spacingAndGlyphs">crates/latt/tests/cli.rs::a_stale_suppress_entry_is_reported_at_info_and_exits_zero                    </text>
+<text x="999.6" y="489.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">║</text>
+<text x="0.0" y="506.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">│</text>
+<text x="8.4" y="506.0" fill="#c678dd" textLength="126.0" lengthAdjust="spacingAndGlyphs">  ←[verifies]— </text>
+<text x="134.4" y="506.0" fill="#d4d7de" textLength="865.2" lengthAdjust="spacingAndGlyphs">crates/latt/tests/cli.rs::an_unwritable_stdout_exits_two                                               </text>
+<text x="999.6" y="506.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">▼</text>
+<text x="0.0" y="523.0" fill="#d4d7de" textLength="1008.0" lengthAdjust="spacingAndGlyphs" opacity="0.6">└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘</text>
+<rect x="0.0" y="527.0" width="688.8" height="17.0" fill="#d4d7de"/>
+<text x="0.0" y="540.0" fill="#1e1e2e" textLength="688.8" lengthAdjust="spacingAndGlyphs"> Nodes /cli/Exit codes/ | 1656 nodes, 1553 edges | 0 errors, 0 warnings, 159 hints</text>
+</g></svg>

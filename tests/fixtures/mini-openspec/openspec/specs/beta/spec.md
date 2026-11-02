@@ -26,3 +26,14 @@ No test cites this requirement, so it is the uncovered one COVERAGE reports.
 - **WHEN** beta restarts
 - **THEN** state is intact
 
+
+### Requirement: Shared title
+Beta's requirement of this title.
+
+#### Scenario: Beta's first
+- **WHEN** beta shares a title
+- **THEN** its node is its own
+
+#### Scenario: Beta's second
+- **WHEN** both are read
+- **THEN** neither absorbs the other

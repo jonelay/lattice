@@ -1,8 +1,8 @@
 name: openspec
-profile_version: "1.3.0"
+profile_version: "1.5.0"
 
 # An OpenSpec register: openspec/specs/<capability>/spec.md, cited from test
-# files by `Requirement: <title>` comment lines. Lattice's own register is the
+# files by `Requirement: <capability>/<title>` comment lines. Lattice's own register is the
 # first consumer — see openspec/specs/adapter-openspec.
 
 adapter:
@@ -12,7 +12,9 @@ adapter:
     # adapter reads them in. Paths are profile data: nothing in the adapter
     # hardcodes them.
     tests:
-      - glob: "crates/lattice-core/tests/*.rs"
+      - glob: "crates/latt-core/tests/*.rs"
+        dialect: rust
+      - glob: "crates/latt/tests/*.rs"
         dialect: rust
       - glob: "tests/*.py"
         dialect: python
@@ -23,22 +25,20 @@ node_kinds:
     id_pattern: "^[a-z0-9-]+$"
 
   requirement:
-    # The ID is the requirement title exactly as the register writes it, so the
-    # pattern only rejects surrounding whitespace, not vocabulary.
-    id_pattern: "^\\S(.*\\S)?$"
+    # The ID is the capability, `/`, then the requirement title exactly as the
+    # register writes it. The capability half has the capability kind's shape, so
+    # a title containing `/` stays unambiguous; the title half only rejects
+    # surrounding whitespace, not vocabulary.
+    id_pattern: "^[a-z0-9-]+/\\S(.*\\S)?$"
     # The title doubles as the node ID, but the suggestion sidecar reads text
     # only through declared text attrs — an ID is identity, not ranked content.
     summary_attr: title
-    # Title and body both: ranking the title alone put the true requirement
-    # first for a quarter of unmarked tests and never surfaced 29% of them.
-    # See notes/bodytext-s39/RESULTS.md.
+    # The sidecar ranks on the title and the body together: a title alone is
+    # too short to match most tests against.
     text_attrs: [title, body]
-    # One vector per requirement averages a long requirement's distinctive prose
-    # away, and being long was the strongest predictor of never being surfaced.
-    # Ranking each scenario block separately and keeping the best match takes
-    # hit@1 0.507 -> 0.635 and never-surfaced 18 -> 4 labels. The marker is the
-    # register's, so the profile names it rather than the sidecar.
-    # See notes/chunking-s40/RESULTS.md.
+    # Each scenario is ranked on its own and the best match kept, so a long
+    # requirement's distinctive scenarios are not averaged away. The marker is
+    # the register's, so the profile names it rather than the sidecar.
     text_chunk_line_prefix: "#### Scenario:"
     attrs:
       title:     { type: string, required: true }
@@ -46,15 +46,16 @@ node_kinds:
       body:      { type: string }
 
   test:
-    # Path, then an optional enclosing class, then the function.
-    id_pattern: "^[^:]+(::[A-Za-z_][A-Za-z0-9_]*){1,2}$"
+    # Path, then `::` and the test's name: a Rust function, a Python function
+    # with its optional class, or a TypeScript test's `describe` path and
+    # free-text name. The name only rejects surrounding whitespace.
+    id_pattern: "^[^:]+::\\S(.*\\S)?$"
     # An uncited test is not a finding on its own; coverage answers the
     # question from the requirement's side.
     orphan_ok: true
     summary_attr: function
-    # The function body pays nothing on its own -- it ranks below the name
-    # alone -- but adds 12 points of hit@1 once the requirement side carries
-    # prose for its code to match against.
+    # The function name and its body: the body gives the requirement's prose
+    # code to match against.
     text_attrs: [function, body]
     attrs:
       file:     { type: string, required: true }

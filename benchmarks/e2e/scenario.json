@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.2",
+  "id": "toml-validate-chain-v1",
+  "description": "Release CLI validation through its version-matched TOML adapter and JSON findings output",
+  "node_count": 16384,
+  "edge_count": 16383,
+  "generator": "deterministic-forward-chain-v1",
+  "warmup_runs": 2,
+  "measurement_runs": 10,
+  "expected_exit_status": 0,
+  "command": "lattice validate --profile <profile> --adapter <revision-adapter-toml> --target <fixture> --format json",
+  "expected": {
+    "node_counts": { "item": 16384 },
+    "edge_counts": { "references": 16383 },
+    "finding_counts": [
+      { "code": "UNREFERENCED", "severity": "info", "count": 1 },
+      { "code": "UNTRACED", "severity": "info", "count": 1 }
+    ]
+  }
+}

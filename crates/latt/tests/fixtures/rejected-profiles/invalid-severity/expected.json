@@ -1,0 +1,5 @@
+{
+  "exit": 2,
+  "stderr": "Error: Profile error: validation override for 'VACANCY': invalid severity 'loud' (valid: error, hint, info, warning)\n",
+  "stdout": ""
+}

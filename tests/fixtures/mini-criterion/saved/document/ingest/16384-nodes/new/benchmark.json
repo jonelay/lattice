@@ -1,0 +1,11 @@
+{
+  "group_id": "document",
+  "function_id": "ingest",
+  "value_str": "16384-nodes",
+  "throughput": {
+    "Elements": 16384
+  },
+  "full_id": "document/ingest/16384-nodes",
+  "directory_name": "document/ingest/16384-nodes",
+  "title": "document/ingest/16384-nodes"
+}

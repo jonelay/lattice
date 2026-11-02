@@ -1,0 +1,11 @@
+{
+  "group_id": "service",
+  "function_id": "counts",
+  "value_str": "rules-4096-nodes",
+  "throughput": {
+    "Elements": 4096
+  },
+  "full_id": "service/counts/rules-4096-nodes",
+  "directory_name": "service/counts/rules-4096-nodes",
+  "title": "service/counts/rules-4096-nodes"
+}

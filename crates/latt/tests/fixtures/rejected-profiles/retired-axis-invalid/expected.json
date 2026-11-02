@@ -1,0 +1,5 @@
+{
+  "exit": 2,
+  "stderr": "Error: Profile error: validation entry 'AXIS_INVALID': the code was retired in 0.7.0; write PATHWAY_INVALID instead\n",
+  "stdout": ""
+}

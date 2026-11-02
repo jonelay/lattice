@@ -1,0 +1,47 @@
+[package]
+name = "latt"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The latt command, which validates, traces and browses typed node/edge registers, and the entomologist adapter"
+publish = false
+autolib = false
+# Every binary is listed: make-install.sh, the eval and CI read these names to know
+# what an install ships, so none may be discovered implicitly.
+autobins = false
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "latt"
+path = "src/main.rs"
+
+[[bin]]
+name = "latt-adapter-entomologist"
+path = "src/bin/latt-adapter-entomologist/main.rs"
+
+[features]
+default = ["native-adapters", "tui"]
+native-adapters = ["latt-core/native-adapters"]
+tui = ["dep:ratatui", "dep:tui-markdown", "dep:signal-hook", "dep:crossterm"]
+
+[dependencies]
+latt-adapter.workspace = true
+latt-core = { path = "../latt-core", default-features = false }
+clap.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+ratatui = { workspace = true, optional = true }
+tui-markdown = { workspace = true, optional = true }
+serde_norway.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+signal-hook = { version = "0.3", optional = true }
+# Not used directly: selects crossterm's poll(2) input backend for ratatui. The
+# default mio backend busy-loops inside one `event::poll` call once the tty hangs
+# up, so browse never reaches its signal check.
+crossterm = { version = "0.29", default-features = false, features = ["use-dev-tty"], optional = true }

@@ -2,6 +2,7 @@ name: md
 profile_version: "1.0.0"
 
 adapter:
+  native: md
   paths:
     files: ["*.md"]
   table:

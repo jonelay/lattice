@@ -1,0 +1,123 @@
+argument	latt adapter	NAME	required
+argument	latt query at	PATH	required
+argument	latt query diff	REV_A	required
+argument	latt query diff	REV_B	required
+argument	latt query path	SRC	required
+argument	latt query path	TGT	required
+argument	latt query reached-by	ID	required
+argument	latt query reaches	ID	required
+command	latt
+command	latt adapter
+command	latt coverage
+command	latt describe
+command	latt fuse
+command	latt query
+command	latt query at
+command	latt query counts
+command	latt query diff
+command	latt query orphans
+command	latt query path
+command	latt query reached-by
+command	latt query reaches
+command	latt show
+command	latt summary
+command	latt trace
+command	latt validate
+option	latt	--version	-	optional	-	-
+option	latt adapter	--profile	PROFILE	required	-	-
+option	latt adapter	--target	TARGET	required	-	-
+option	latt adapter	--version	-	optional	-	-
+option	latt coverage	--adapter	ADAPTER	optional	-	-
+option	latt coverage	--format	FORMAT	optional	-	plain, json, rich
+option	latt coverage	--profile	PROFILE	required	-	-
+option	latt coverage	--profile-version	VERSION	optional	-	-
+option	latt coverage	--target	TARGET	required	-	-
+option	latt coverage	--version	-	optional	-	-
+option	latt describe	--adapter	ADAPTER	optional	-	-
+option	latt describe	--format	FORMAT	optional	-	plain, json, rich
+option	latt describe	--profile	PROFILE	required	-	-
+option	latt describe	--profile-version	VERSION	optional	-	-
+option	latt describe	--target	TARGET	required	-	-
+option	latt describe	--version	-	optional	-	-
+option	latt fuse	--format	FORMAT	optional	-	plain, json, rich
+option	latt fuse	--manifest	MANIFEST	required	-	-
+option	latt fuse	--strict	-	optional	-	-
+option	latt fuse	--version	-	optional	-	-
+option	latt query	--version	-	optional	-	-
+option	latt query at	--adapter	ADAPTER	optional	-	-
+option	latt query at	--filter	FILTERS	optional	-	-
+option	latt query at	--format	FORMAT	optional	-	plain, json, rich
+option	latt query at	--profile	PROFILE	required	-	-
+option	latt query at	--profile-version	VERSION	optional	-	-
+option	latt query at	--target	TARGET	required	-	-
+option	latt query at	--version	-	optional	-	-
+option	latt query counts	--adapter	ADAPTER	optional	-	-
+option	latt query counts	--filter	FILTERS	optional	-	-
+option	latt query counts	--format	FORMAT	optional	-	plain, json, rich
+option	latt query counts	--profile	PROFILE	required	-	-
+option	latt query counts	--profile-version	VERSION	optional	-	-
+option	latt query counts	--target	TARGET	required	-	-
+option	latt query counts	--version	-	optional	-	-
+option	latt query diff	--adapter	ADAPTER	optional	-	-
+option	latt query diff	--format	FORMAT	optional	-	plain, json, rich
+option	latt query diff	--profile	PROFILE	required	-	-
+option	latt query diff	--profile-version	VERSION	optional	-	-
+option	latt query diff	--target	TARGET	required	-	-
+option	latt query diff	--version	-	optional	-	-
+option	latt query orphans	--adapter	ADAPTER	optional	-	-
+option	latt query orphans	--filter	FILTERS	optional	-	-
+option	latt query orphans	--format	FORMAT	optional	-	plain, json, rich
+option	latt query orphans	--kind	KIND	optional	-	-
+option	latt query orphans	--profile	PROFILE	required	-	-
+option	latt query orphans	--profile-version	VERSION	optional	-	-
+option	latt query orphans	--target	TARGET	required	-	-
+option	latt query orphans	--version	-	optional	-	-
+option	latt query path	--adapter	ADAPTER	optional	-	-
+option	latt query path	--edge-kind	EDGE_KINDS	optional	-	-
+option	latt query path	--format	FORMAT	optional	-	plain, json, rich
+option	latt query path	--profile	PROFILE	required	-	-
+option	latt query path	--profile-version	VERSION	optional	-	-
+option	latt query path	--target	TARGET	required	-	-
+option	latt query path	--version	-	optional	-	-
+option	latt query reached-by	--adapter	ADAPTER	optional	-	-
+option	latt query reached-by	--check-resolved	-	optional	-	-
+option	latt query reached-by	--edge-kind	EDGE_KINDS	optional	-	-
+option	latt query reached-by	--filter	FILTERS	optional	-	-
+option	latt query reached-by	--format	FORMAT	optional	-	plain, json, rich
+option	latt query reached-by	--profile	PROFILE	required	-	-
+option	latt query reached-by	--profile-version	VERSION	optional	-	-
+option	latt query reached-by	--target	TARGET	required	-	-
+option	latt query reached-by	--version	-	optional	-	-
+option	latt query reaches	--adapter	ADAPTER	optional	-	-
+option	latt query reaches	--check-resolved	-	optional	-	-
+option	latt query reaches	--edge-kind	EDGE_KINDS	optional	-	-
+option	latt query reaches	--filter	FILTERS	optional	-	-
+option	latt query reaches	--format	FORMAT	optional	-	plain, json, rich
+option	latt query reaches	--profile	PROFILE	required	-	-
+option	latt query reaches	--profile-version	VERSION	optional	-	-
+option	latt query reaches	--target	TARGET	required	-	-
+option	latt query reaches	--version	-	optional	-	-
+option	latt show	--profile	PROFILE	required	-	-
+option	latt show	--profile-version	VERSION	optional	-	-
+option	latt show	--version	-	optional	-	-
+option	latt summary	--adapter	ADAPTER	optional	-	-
+option	latt summary	--format	FORMAT	optional	-	plain, json, rich
+option	latt summary	--profile	PROFILE	required	-	-
+option	latt summary	--profile-version	VERSION	optional	-	-
+option	latt summary	--target	TARGET	required	-	-
+option	latt summary	--version	-	optional	-	-
+option	latt trace	--adapter	ADAPTER	optional	-	-
+option	latt trace	--format	FORMAT	optional	-	plain, json, rich
+option	latt trace	--profile	PROFILE	required	-	-
+option	latt trace	--profile-version	VERSION	optional	-	-
+option	latt trace	--strict	-	optional	-	-
+option	latt trace	--target	TARGET	required	-	-
+option	latt trace	--version	-	optional	-	-
+option	latt validate	--adapter	ADAPTER	optional	-	-
+option	latt validate	--format	FORMAT	optional	-	plain, json, rich
+option	latt validate	--profile	PROFILE	required	-	-
+option	latt validate	--profile-version	VERSION	optional	-	-
+option	latt validate	--strict	-	optional	-	-
+option	latt validate	--suggestions	FILE	optional	-	-
+option	latt validate	--target	TARGET	required	-	-
+option	latt validate	--version	-	optional	-	-

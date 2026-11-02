@@ -1,0 +1,5 @@
+{
+  "exit": 2,
+  "stderr": "Error: Profile error: validation override for 'VACANCY': invalid severity 'loud' (valid: error, hint, info, warning)\nvalidation config for 'COVERAGE': unknown keys [\"target_kinds\"] (valid: [\"edge_kind\", \"message\", \"pathway\", \"position_attr\", \"severity\", \"source_where\", \"target_kind\", \"where\"])\nvalidation override for 'UNTRACED': invalid severity 'nope' (valid: error, hint, info, warning)\n",
+  "stdout": ""
+}

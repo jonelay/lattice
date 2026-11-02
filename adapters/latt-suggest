@@ -1,0 +1,18 @@
+#!/bin/sh
+# Contract entry point for the suggestion sidecar.
+# The two Python entry points share this body; edit both together.
+#
+# The interpreter is the checkout's `.venv` when there is one, else `python3`
+# on PATH (a release install has no venv; the module is stdlib-only). `-B`
+# writes no bytecode, since an install is read, never written. `-P`
+# keeps the caller's directory off sys.path, so a different checkout there
+# cannot shadow this install's `adapters` package.
+here=$(dirname "$0")
+venv=$here/../.venv/bin/python
+if [ -x "$venv" ]; then
+    python=$venv
+elif ! python=$(command -v python3); then
+    echo "$0: no interpreter at $venv and no python3 on PATH" >&2
+    exit 127
+fi
+PYTHONPATH="$here/.." exec "$python" -B -P -m adapters.latt_suggest "$@"
