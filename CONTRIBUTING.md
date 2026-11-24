@@ -1,7 +1,5 @@
 # Contributing to Lattice Auditing & Tracing Tool
 
-Thanks for your interest in contributing. This guide covers the basics.
-
 ## Reporting bugs and requesting features
 
 Open an issue on [GitHub Issues](https://github.com/jonelay/lattice/issues).
@@ -70,6 +68,11 @@ Run the complete repository gate before submitting a change:
 ./tools/verify.sh
 ```
 
+In a GitHub release snapshot, run `./tools/verify.sh --snapshot`. Snapshot history
+omits the API compatibility baseline, so this passes `--no-api-compat` to the Rust
+tooling gate. Coverage and RustSec checks still run, and the gate reports that API
+compatibility was skipped. Use the unflagged command in a development checkout.
+
 The script resolves the repository root from its own path, so it may also be invoked
 from a child directory, for example as `../../tools/verify.sh`.
 
@@ -82,13 +85,17 @@ failing test first, or add a row to `deliberate::RULES` with the reason.
 Property tests (`proptest`, dev-only) run inside the same `cargo test` as every other
 test, at the default 256 cases; `PROPTEST_CASES=4096 cargo test -p latt-core --locked properties`
 runs them deeper. They live in a `*properties` test module beside the example tests
-of `latt-core`'s `adapters/md/mod.rs` and `adapters/md/parse.rs`, `adapters/prose_xref/parse.rs`, `query/mod.rs`,
+of `latt-core`'s `adapters/md/mod.rs` and `adapters/md/parse.rs`, `adapters/prose_xref/parse.rs`, `query/mod.rs`, `query/traverse.rs`,
 `profile/raw.rs`, `algo.rs` and `document/wire.rs`; `cargo test -p latt-core properties` runs them alone.
 A failure prints the minimal shrunken input and writes its
 seed under the crate's `proptest-regressions/`; that file is replayed first on every later
 run. Commit it when it records a defect or a regression — with a failing `#[ignore]`d test
 naming the defect, fixed in a separate change — and delete it when the fault was the
 generator's (`openspec/specs/development-verification/spec.md`).
+
+Native-document and rejected-profile baselines regenerate only with
+`LATTICE_REGEN_BASELINES=1` outside CI. The rejected-profile suite refuses to
+record a case that no longer exits 2; review any regenerated diff before committing.
 
 For a fast Rust edit loop, use:
 
@@ -97,17 +104,12 @@ cargo check --workspace --all-targets --locked
 cargo test -p latt-core --locked
 ```
 
-The full command's steps, in order, are `tools/verify.sh` itself. They cover the Rust
-workspace (whose `latt` package builds `browse` by default), the core
-with `serde_json/preserve_order` (as a host's dependencies may unify it), doctests
-and rustdoc, the no-default `latt-core` and `latt` configurations, `latt` with `tui` alone, each development benchmark
-routine run once in Criterion's test mode (checking the fixtures' pinned results without
-measuring anything), pinned Rust coverage and API-compatibility tooling, pytest, strict
-OpenSpec validation, and Lattice's self-audit: this repository's own register, which must
-exit 0 (the warnings and the coverage hints it prints gate nothing):
+`tools/verify.sh` is the step list. It ends with Lattice's self-audit: this repository's
+own register, which must exit 0 (the warnings and the coverage hints it prints gate
+nothing):
 
 ```bash
-target/debug/latt validate --profile profiles/openspec.yaml \
+"${CARGO_TARGET_DIR:-target}/debug/latt" validate --profile profiles/openspec.yaml \
     --adapter ./adapters/openspec --target .
 ```
 
@@ -134,7 +136,7 @@ rustdoc JSON instead, one surface at a time (`--all-features`, none, or
 `--no-default-features`; `-p latt-adapter` likewise):
 
 ```bash
-git worktree add --detach /tmp/prev v0.8.0
+git worktree add --detach /tmp/prev v0.8.1
 for tree in /tmp/prev .; do
     (cd "$tree" && RUSTC_BOOTSTRAP=1 \
         RUSTDOCFLAGS='-Z unstable-options --output-format json --document-hidden-items' \
@@ -157,6 +159,15 @@ ships, on `github/main` as parent, and prints the commit without pushing. Every
 tracked file must be classified there, so a new path fails the build by name rather
 than shipping or dropping out unseen. Before pushing, run `.github/workflows/ci.yml`'s
 steps over `git archive <commit>` in a fresh repository.
+
+The release binaries come from `tools/release-binaries.sh <tag> <out-dir>`. It builds
+both architectures against glibc 2.28 with `cargo-zigbuild`; a plain `cargo build`
+links against the builder's glibc. It names the versions of `cargo-zigbuild` and zig it
+expects and how to install them, remaps source paths, writes `SHA256SUMS`, and ends
+with `tools/check-release-binaries.sh`, which refuses a binary needing a newer glibc,
+weak versions included, or one that names the builder's home. Then run the `x86_64`
+and `aarch64` binaries in a glibc 2.28 image, such as `debian:buster-slim`, and check
+that stderr stays empty. The benchmarks build with the host's glibc.
 
 ### The recipes in `docs/ci.md`
 
@@ -207,25 +218,27 @@ Run the deterministic in-process component benchmarks separately:
 ./tools/benchmark.sh
 ```
 
-The command is location-independent and writes raw Criterion data beneath
-`target/criterion/` plus the normalized
-`target/benchmarks/lattice-benchmark-v2.json` record. It measures parsing, ingestion,
-validation, representative queries, supported service execution, output formatting
-and native adapter documents at the scales declared in `crates/latt-core/benches/fixture.json`: a chain at two
-sizes, a register carrying one of each defect class, and a register whose profile
-carries `EDGE_WHERE`, `EDGE_COUNT` and `SUPPRESS` entries. The `adapter` group times
-each native adapter writing its document (`write_native_document`, profile load and
-serialization included, ingestion not) at the manifest's `adapter_scales` only: a
-register generated once into the bench's scratch directory, so the files are warm and
-this is not cold I/O. Each scale pins its expected
-results, and the benchmark refuses to run when they differ; a pin is edited by hand from
-the block the benchmark prints. Pass
-`--save-baseline main` to keep the run under that name, or `--baseline main` to
-compare against a saved one; the record then carries Criterion's change ratios per
-measurement. Each run first discards the previous run's raw results, keeping saved
-baselines, so the record holds only what this run measured. Without a saved baseline the compare form runs plain and says so. The
-record's shape is validated in the hermetic gate against
-`benchmarks/component/report.schema.json`.
+The command is location-independent.
+
+- **Output:** raw Criterion data beneath `target/criterion/` and the normalized
+  `target/benchmarks/lattice-benchmark-v2.json`, whose shape the hermetic gate validates
+  against `benchmarks/component/report.schema.json`.
+- **Measures:** parsing, ingestion, validation, representative queries, supported service
+  execution, output formatting and native adapter documents, at the scales declared in
+  `crates/latt-core/benches/fixture.json`: a chain at two sizes, a register carrying one
+  of each defect class, and a register whose profile carries `EDGE_WHERE`, `EDGE_COUNT`
+  and `SUPPRESS` entries.
+- **`adapter` group:** times each native adapter writing its document
+  (`write_native_document`: profile load and serialization, not ingestion) at the
+  manifest's `adapter_scales` only. The register is generated once into the bench's
+  scratch directory, so the files are warm and this is not cold I/O.
+- **Pins:** each scale pins its expected results, and the benchmark refuses to run when
+  they differ. A pin is edited by hand from the block the benchmark prints.
+- **Baselines:** `--save-baseline main` keeps the run under that name and `--baseline main`
+  compares against it; the record then carries Criterion's change ratios per measurement.
+  Each run first discards the previous run's raw results, keeping saved baselines, so the
+  record holds only what this run measured. Without a saved baseline the compare form runs
+  plain and says so.
 
 Each operation in `crates/latt-core/benches/operations/mod.rs` carries a `body`
 version and its timing policy, and the record repeats both on every measurement.
@@ -241,16 +254,17 @@ Criterion is pinned exactly to 0.8.2 as a development-only dependency with Rayon
 plotting disabled. Updating it requires reviewing the raw-output normalizer and its
 versioned record.
 Benchmark compilation is a correctness gate; successful scheduled/manual collection is
-required, but numeric performance changes are informational throughout 0.8. Compare
+required, but numeric performance changes are informational. Compare
 candidate and baseline revisions only on the same runner and fixture. The repeated warm
 component suite does not measure cold filesystem, process startup, external adapter, or complete
 CLI latency.
 
-Routine scheduled collection compares the previous release and current main through
-the complete Linux CLI scenario:
+Routine scheduled collection compares the previous release, the one
+`contracts/released/VERSION` names, and current main through the complete Linux CLI
+scenario. With no refs the collector runs exactly that:
 
 ```bash
-python3 tools/benchmark-revisions.py v0.7.1 main
+python3 tools/benchmark-revisions.py v0.8.1 main
 ```
 
 This builds locked release binaries outside the measured region, alternates every
@@ -264,41 +278,66 @@ node counts, edge counts or finding tallies differ from the manifest's `expected
 the measured outputs' finding tallies are held to the same block. Byte differences
 between revisions' outputs stay reported, not enforced.
 
+`--scenario <manifest>` measures another scenario in `benchmarks/e2e/`. Its `command`
+template is the measured argv (`validate` or `trace`), and its optional `profile` names
+the profile beside it. Two trace scenarios measure `trace --format json` over the same
+chain with 1 KiB of text per node, to show trace peak RSS:
+`trace-large-text-v1.json` (ASCII text) and `trace-sparse-non-ascii-v1.json` (each text
+starting with one `é`):
+
+```bash
+python3 tools/benchmark-revisions.py --scenario benchmarks/e2e/trace-large-text-v1.json v0.8.1 main
+```
+
+A trace output's tallies count the findings under its entries and its unattachable ones,
+and its entry and outgoing-edge counts must equal the manifest's node and edge counts.
+Each record goes to `target/benchmarks/lattice-e2e-<scenario id>.json`, so the routine
+record is left alone. Routine scheduled collection runs both trace scenarios after the
+default one, over the same two refs. Release qualification refuses any scenario but the default.
+
+A process the collector starts reports at least the collector's own peak RSS, so a
+sample whose peak RSS does not exceed the collector's own fails the collection: it
+measured the collector.
+
+Peak RSS of one binary can fall in two modes from run to run, because glibc's mmap
+threshold moves with timing. A median of five samples can land on either mode, so each
+comparison also reports the minimum's and the maximum's movement. When the median moves and both extremes hold,
+the samples changed mode and neither mode moved. The collector does not pin the
+threshold, since consumers do not run that way;
+`GLIBC_TUNABLES=glibc.malloc.mmap_threshold=131072` pins it to show the low mode.
+
 Release qualification keeps main as a distinct development baseline and adds the
 immutable candidate tag in the same invocation:
 
 ```bash
 python3 tools/benchmark-revisions.py --release-qualification \
-  v0.7.1 <40-character-main-commit> v0.8.0-rc.1
+  <released-tag> <40-character-main-commit> <candidate-tag>
 ```
 
 All three revisions must be rerun in that one job; results from another job or host were
 taken on a different runner and serve only as provenance. Record the exact main commit
 before cutting the candidate rather than passing the moving branch name. The result then
-reports `v0.7.1 → main`, `v0.7.1 → RC`, and `main → RC` movement. Release-qualification
-mode rejects a moving main name, a non-tag candidate, a candidate outside the
-`v0.8.0-rc.N` series, or any ref count other than three. Set the matching GitHub
-`main_ref`/`release_candidate_ref` inputs or GitLab
-`LATTICE_MAIN_REF`/`LATTICE_RELEASE_CANDIDATE_REF` variables when dispatching the job.
+reports previous release → main, previous release → RC, and `main → RC` movement.
+Release-qualification mode rejects a baseline other than the previous release, a moving
+main name, a non-tag candidate, a candidate that is not a `vX.Y.Z-rc.N` tag on the same
+or a later numeric release line, or any ref count other than three. A reopened release
+line may qualify against its existing frozen release: for example, `v0.8.1-rc.6`
+against `v0.8.1`. This compares the `X.Y.Z` numbers, not SemVer prerelease precedence;
+`contracts/released/` stays frozen until a release cut. Set the matching GitHub
+`main_ref`/`release_candidate_ref` inputs when dispatching the job.
 
 Routine scheduled records remain 30-day CI artifacts. Reviewed milestone and
-release-candidate records are committed under `notes/perf-0.8/` in the development
-repository (the GitHub release withholds `notes/`), with filenames that
-identify the refs, date, runner class, and CI job or run ID. The first clean-source
-local and GitLab milestone records are retained there as provenance.
+release-candidate records are kept in the development repository, which the GitHub
+release does not include.
 
 New records use schema 1.2, defined by
 `benchmarks/e2e/report.schema.json`, carry the manifest's expectations and each
 revision's observed preflight, and embed their CI provider, pipeline/run, job, and
-runner identity when the host exposes it. Retained schema-1.1 records predate the
-preflight and still validate. The retained schema-1.0 records predate
-per-revision compiler and expected-exit enforcement; they remain historical provenance
-but are not sufficient as 0.8 release-candidate evidence.
+runner identity when the host exposes it. Records before schema 1.2 still validate, but
+are not sufficient as release-candidate evidence.
 
-Criterion measures only the checked-out development revision; it is not the
-cross-version `v0.7.1` comparison because that release did not contain this Criterion
-suite. Numeric movements remain informational throughout 0.8, while successful
-collection and stable output semantics are required.
+Criterion measures only the checked-out development revision; the cross-version
+comparison is the end-to-end collector's.
 
 All workspace crates remain private (`publish = false`). None carries docs.rs or
 packaging metadata; a crate README such as `latt-trustfall`'s holds development notes.

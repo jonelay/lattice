@@ -4,13 +4,14 @@ members = [
     "crates/latt-adapter",
     "crates/latt-core",
     "crates/latt-trustfall",
+    "examples/adapters/rust",
 ]
 # The agent-docs eval is a workspace of its own, so the release snapshot can withhold it.
 exclude = ["crates/latt-eval"]
 resolver = "3"
 
 [workspace.package]
-version = "0.8.0"
+version = "0.8.1"
 edition = "2024"
 rust-version = "1.99"
 license = "MIT OR Apache-2.0"
@@ -21,10 +22,14 @@ unsafe_code = "forbid"
 unused_must_use = "deny"
 
 [workspace.lints.clippy]
+# An `allow` that stops firing goes unnoticed; `#[expect(.., reason = ..)]` flags it.
+allow_attributes = "warn"
 dbg_macro = "deny"
 # Style-group, so warn by default: allowed here, denied in `latt-core::output`.
 disallowed_types = "allow"
 doc_markdown = "warn"
+# `write!` into the String; `format!` allocates a temporary that `push_str` copies.
+format_push_string = "warn"
 todo = "deny"
 too_long_first_doc_paragraph = "warn"
 undocumented_unsafe_blocks = "deny"
@@ -37,6 +42,11 @@ missing_crate_level_docs = "warn"
 private_doc_tests = "warn"
 unescaped_backticks = "warn"
 
+# Line tables keep backtrace file:line; full variable debug info made a `latt` dev build
+# 1018 MB against 691 MB and its binary 129 MB against 56 MB.
+[profile.dev]
+debug = "line-tables-only"
+
 [profile.release]
 strip = true
 
@@ -48,6 +58,12 @@ criterion = { version = "=0.8.2", default-features = false, features = ["cargo_b
 # `fork` and `timeout` features would add rusty-fork, tempfile and wait-timeout for nothing used.
 proptest = { version = "1", default-features = false, features = ["std"] }
 regex = "1"
+# latt-adapter only, unix: `poll(2)` on a pipe, so a reader thread can be told to stop
+# without `unsafe` (forbidden here). Already in the tree through crossterm.
+rustix = { version = "1", default-features = false, features = ["event", "std"] }
+# Python source addresses use Unicode XID and NFKC, matching Python's AST names.
+unicode-ident = "1"
+unicode-normalization = "0.1"
 # latt-core dev-only: the supported-signatures guard decodes rustdoc JSON. Pinned to the
 # format version of the toolchain `rust-toolchain.toml` names; a toolchain bump moves both.
 rustdoc-types = "=0.61.0"

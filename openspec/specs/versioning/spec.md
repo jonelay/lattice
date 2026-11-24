@@ -66,7 +66,7 @@ not an axis. The notes file has no axis: it follows the profile major.
 
 Verified by: `cargo test -p latt --test fuse manifest_order_paths_and_invalid_inputs`,
 `cargo test -p latt-core --test contract resolved` and
-`cargo test -p latt-core --lib adapters::prose_xref only_a_resolved_profile_document_loads`; the
+`cargo test -p latt-core --lib only_a_resolved_profile_document_loads`; the
 inventory itself is read off this spec.
 
 #### Scenario: A new wire document names its axis
@@ -75,8 +75,13 @@ inventory itself is read off this spec.
 
 ### Requirement: Pre-1.0 semver policy
 While the package version is below 1.0.0, minor bumps (0.x.0) MAY include breaking
-changes to any public surface. Patch bumps (0.x.y) SHALL NOT change public surfaces.
-This policy SHALL be stated in `CHANGELOG.md` so consumers can read it without
+changes to any public surface. Patch bumps (0.x.y) MAY add to a public surface — a
+command, option, finding code, Rust item, JSON key or enum variant on a `non_exhaustive`
+enum — and SHALL NOT break one: a run, an invocation or a supported caller that worked on
+the previous release of the same minor works unchanged. An added finding code in a patch
+SHALL default to a severity that fails no run the previous release passed, `--strict`
+included. This follows Cargo's reading of 0.x versions, where the patch number marks
+every compatible change. This policy SHALL be stated in `CHANGELOG.md` so consumers can read it without
 consulting project internals.
 
 The public surfaces are the following.
@@ -105,6 +110,18 @@ Verification: inspection of `CHANGELOG.md` header text, and
 #### Scenario: Policy text present
 - **WHEN** `CHANGELOG.md` is read
 - **THEN** it contains a statement that minor bumps may break public surfaces before 1.0
+  and that patch bumps may add to them but not break them
+
+#### Scenario: An addition on a patch line
+- **WHEN** the last release is `0.8.0`, the workspace is `0.8.1`, and the change adds a
+  command option and an `info` finding code without removing or altering anything
+  `contracts/released/` lists
+- **THEN** the contracts test and `tools/check-breaking.sh` pass
+
+#### Scenario: A failing code added on a patch line
+- **WHEN** the workspace is a patch after `contracts/released/VERSION` and `codes.tsv`
+  gains a code whose default severity is `warning` or `error`
+- **THEN** `cargo test -p latt --test contracts patch_line_code_additions` fails naming the code
 
 #### Scenario: A contract break is unlisted
 - **WHEN** a flag is renamed or a code is removed relative to `contracts/released/`, and no Breaking bullet names it
@@ -123,14 +140,15 @@ Verification: inspection of `CHANGELOG.md` header text, and
 ### Requirement: Release-candidate identity agrees across release metadata
 Ordinary development toward minor release `X.Y.0` SHALL remain on the last shipped
 workspace version until a release candidate is cut; it SHALL NOT create a patch merely
-to represent that development. Before tagging a candidate, maintainers SHALL set the
-Cargo workspace and lockfile version to the exact SemVer prerelease `X.Y.0-rc.N`, set
-`pyproject.toml` to its PEP 440 spelling `X.Y.0rcN`, and promote the candidate's
-changelog entries into a matching dated `## [X.Y.0-rc.N]` heading. The immutable Git tag
-SHALL use the same `vX.Y.0-rc.N` identity. When `X.Y.0` itself is cut, its candidate
-sections SHALL be folded into the one `## [X.Y.0]` section, stated as the net change
-since the previous release, so the changelog a release ships carries no candidate
-headings; the candidates' entries remain readable at their tags.
+to represent that development. A candidate may precede any release `X.Y.Z`, a patch
+included. Before tagging a candidate, maintainers SHALL set the Cargo workspace and
+lockfile version to the exact SemVer prerelease `X.Y.Z-rc.N`, set `pyproject.toml` to its
+PEP 440 spelling `X.Y.ZrcN`, and promote the candidate's changelog entries into a
+matching dated `## [X.Y.Z-rc.N]` heading. The immutable Git tag SHALL use the same
+`vX.Y.Z-rc.N` identity. When `X.Y.Z` itself is cut, its candidate sections SHALL be
+folded into the one `## [X.Y.Z]` section, stated as the net change since the previous
+release, so the changelog a release ships carries no candidate headings; the candidates'
+entries remain readable at their tags.
 
 #### Scenario: Ordinary minor-release development continues
 - **WHEN** public-surface work toward the next minor exists but no release candidate is
@@ -140,10 +158,10 @@ headings; the candidates' entries remain readable at their tags.
 
 #### Scenario: A release candidate is tagged
 - **WHEN** maintainers create candidate number N
-- **THEN** Cargo metadata, the lockfile, `pyproject.toml` (as `X.Y.0rcN`), changelog heading, and immutable Git tag agree on `X.Y.0-rc.N`
+- **THEN** Cargo metadata, the lockfile, `pyproject.toml` (as `X.Y.ZrcN`), changelog heading, and immutable Git tag agree on `X.Y.Z-rc.N`
 
 #### Scenario: The release folds its candidates
-- **WHEN** the workspace version is `X.Y.0` and `CHANGELOG.md` still holds a `## [X.Y.0-rc.N]` heading
+- **WHEN** the workspace version is `X.Y.Z` and `CHANGELOG.md` still holds a `## [X.Y.Z-rc.N]` heading
 - **THEN** `cargo test -p latt-core --locked --test version` fails naming the heading
 
 ### Requirement: Development benchmark dependencies are exact

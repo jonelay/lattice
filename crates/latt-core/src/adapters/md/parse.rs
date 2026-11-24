@@ -373,6 +373,8 @@ mod tests {
 
 #[cfg(test)]
 mod properties {
+    use std::fmt::Write as _;
+
     use proptest::prelude::*;
 
     use super::{scan, scan_unread, split_cells};
@@ -465,7 +467,7 @@ mod properties {
         ) {
             let mut text = format!("|{}\n|{}\n", " h |".repeat(headers), " - |".repeat(headers));
             for width in &widths {
-                text.push_str(&format!("|{}\n", " x |".repeat(*width)));
+                let _ = writeln!(text, "|{}", " x |".repeat(*width));
             }
             let result = scan(&text);
             prop_assert_eq!(result.tables.len(), 1);

@@ -47,7 +47,9 @@ mod sorted_map;
 mod sources;
 
 #[doc(hidden)]
-pub use files::{FileMatcher, absolute_path, glob_regex, is_file_or_dangling, selected_files};
+pub use files::{
+    FileMatcher, absolute_path, glob_regex, is_file_or_dangling, selected_files, unfollowed_link,
+};
 #[doc(hidden)]
 pub use profile::{DEFAULT_COMMAND_TIMEOUT, load_resolved_profile, resolved_profile_from_slice};
 /// The compact map behind a node's attrs and attr locations; the core reads into it too.
@@ -56,6 +58,7 @@ pub use sorted_map::SortedMap;
 pub use sources::{check_sources, validate_id_names};
 
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 use std::num::NonZeroU32;
 
 use serde::Serialize;
@@ -133,7 +136,7 @@ pub fn decode_lines(bytes: &[u8]) -> (String, Vec<InvalidLine>) {
                 column.get_or_insert(as_written.chars().count() as u32 + 1);
             }
             for byte in chunk.invalid() {
-                as_written.push_str(&format!("\\x{byte:02X}"));
+                let _ = write!(as_written, "\\x{byte:02X}");
             }
         }
         invalid.push(InvalidLine {
@@ -345,6 +348,22 @@ impl Edge {
     /// Name the node entry, by its index in [`Document::nodes`], whose row
     /// declared this edge. Take the index as `document.nodes.len()` before
     /// pushing that node.
+    ///
+    /// ```
+    /// use latt_adapter::{Document, Edge, Node, Provenance};
+    ///
+    /// let mut document = Document::new();
+    /// document.nodes.push(Node::new("R-1", "req", Provenance::new("a.toml", 1)));
+    /// // A second file repeats R-1; its row declares an edge of its own.
+    /// let repeat = document.nodes.len();
+    /// document.nodes.push(Node::new("R-1", "req", Provenance::new("b.toml", 1)));
+    /// document.edges.push(
+    ///     Edge::new("R-1", "S-1", "satisfies", Provenance::new("b.toml", 2)).declared_by(repeat),
+    /// );
+    ///
+    /// // Taken before the push, the index names the repeat, not the first R-1.
+    /// assert_eq!(document.edges[0].declared_by, Some(1));
+    /// ```
     #[must_use]
     pub fn declared_by(mut self, index: usize) -> Self {
         self.declared_by = Some(index);
@@ -408,6 +427,10 @@ pub struct Issue {
     pub provenance: Provenance,
     /// Related node identifier, when the issue belongs to a node.
     pub node_id: Option<String>,
+    /// The register's own state for the issue, such as `open` or `deferred`,
+    /// when it records one. Left out of the document when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
 }
 
 impl Issue {
@@ -425,7 +448,15 @@ impl Issue {
             message: message.into(),
             provenance,
             node_id: None,
+            state: None,
         }
+    }
+
+    /// Record the register's state for the issue.
+    #[must_use]
+    pub fn with_state(mut self, state: impl Into<String>) -> Self {
+        self.state = Some(state.into());
+        self
     }
 
     /// Attribute the issue to one node.
@@ -556,6 +587,20 @@ mod tests {
         .map(|severity| serde_json::to_value(severity).unwrap())
         .collect();
         assert_eq!(spelled, ["error", "warning", "info", "hint"]);
+    }
+}
+
+#[cfg(test)]
+mod issue_tests {
+    use super::{Issue, Provenance, Severity};
+
+    #[test]
+    fn a_state_is_written_when_set_and_left_out_when_absent() {
+        let issue = Issue::new(Severity::Info, "X", "m", Provenance::new("r.md", 1));
+        let bare = serde_json::to_value(&issue).unwrap();
+        assert!(bare.get("state").is_none(), "{bare}");
+        let stated = serde_json::to_value(issue.with_state("deferred")).unwrap();
+        assert_eq!(stated["state"], "deferred");
     }
 }
 

@@ -650,6 +650,34 @@ fn path_unknown_endpoint_exits_two() {
     assert!(stderr(&output).contains("N-99"), "{}", stderr(&output));
 }
 
+#[test]
+fn failed_reach_and_path_queries_keep_adapter_diagnostics() {
+    let document = r#"{"interface_version": "1.0",
+      "nodes": [{"id": "REQ-1", "kind": "req", "attrs": {},
+                 "provenance": {"file": "r.md", "line": 1}}],
+      "issues": [{"severity": "error", "code": "PARSE_ERROR", "message": "bad row",
+                  "provenance": {"file": "r.md", "line": 9}, "node_id": null}]}"#;
+    let case = Case::with_profile(QUERY_PROFILE, &format!("cat <<'DOC'\n{document}\nDOC"));
+    for args in [
+        &["query", "reaches", "MISSING", "--format", "plain"][..],
+        &["query", "path", "REQ-1", "MISSING", "--format", "plain"],
+    ] {
+        let output = case.run(args);
+        assert_eq!(code(&output), 2);
+        assert_eq!(stdout(&output), "");
+        assert!(
+            stderr(&output).contains("PARSE_ERROR r.md:9"),
+            "{}",
+            stderr(&output)
+        );
+        assert!(
+            stderr(&output).contains("unknown node"),
+            "{}",
+            stderr(&output)
+        );
+    }
+}
+
 // Requirement: query/Query exit codes are two-valued
 
 #[test]
@@ -868,6 +896,31 @@ fn diff_unreadable_controls_an_empty_or_demoted_revision_is_answered() {
     );
 }
 
+// Requirement: cli/CLI entry point
+
+/// A diff names the revision whose input went partly unread, even when the
+/// profile suppresses the parse finding.
+#[test]
+fn diff_names_the_revision_a_suppressed_parse_error_left_partial() {
+    let partial = r#"{"interface_version": "1.2",
+  "nodes": [
+    {"id": "REQ-1", "kind": "req", "attrs": {}, "provenance": {"file": "r.md", "line": 2}}],
+  "findings": [{"severity": "error", "code": "PARSE_ERROR", "message": "m",
+                "provenance": {"file": "r.md", "line": 5}, "node_id": null}]}"#;
+    let suppressing = format!("{QUERY_PROFILE}validations:\n  - SUPPRESS: {{code: PARSE_ERROR}}\n");
+    let (case, rev_a, rev_b) = diff_case_to(&suppressing, partial);
+    let output = case.run(&["query", "diff", &rev_a, &rev_b, "--format", "plain"]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert_eq!(
+        stderr(&output),
+        format!(
+            "{rev_b}: Partial input: the profile suppresses 1 PARSE_ERROR; --format json lists it\n"
+        )
+    );
+}
+
+// Requirement: query/Live two-revision diff
+
 #[test]
 fn a_revision_diffed_against_itself_is_empty() {
     let (case, rev_a, _) = diff_case();
@@ -942,6 +995,242 @@ DOC"#,
         "{}",
         stdout(&output)
     );
+}
+
+/// Run `query diff REV_A REV_B` with the revisions after `--`, so a value that
+/// starts with `-` reaches the program as a revision.
+fn diff_after_dashes(case: &Case, rev_a: &str, rev_b: &str) -> std::process::Output {
+    let mut command = common::lattice();
+    command
+        .args(["query", "diff", "--profile"])
+        .arg(&case.profile)
+        .arg("--adapter")
+        .arg(&case.adapter)
+        .arg("--target")
+        .arg(&case.dir)
+        .args(["--", rev_a, rev_b])
+        .output()
+        .expect("the lattice binary runs")
+}
+
+// Requirement: query/Diff materialization is bounded
+#[test]
+fn diff_refuses_a_revision_that_looks_like_an_option() {
+    let (case, rev_a, _) = diff_case();
+    let out = common::scratch();
+    let pwn = out.join("pwn.tar");
+    let ext = out.join("ext");
+    let output_option = format!("--output={}", pwn.display());
+    let remote_option = format!("--remote=ext::sh -c 'touch {}'", ext.display());
+
+    for (a, b) in [
+        (output_option.as_str(), "HEAD"),
+        ("HEAD", output_option.as_str()),
+        (remote_option.as_str(), "HEAD"),
+        ("HEAD", remote_option.as_str()),
+        (rev_a.as_str(), ""),
+    ] {
+        let output = diff_after_dashes(&case, a, b);
+        assert_eq!(code(&output), 2, "{a} {b}: {}", stderr(&output));
+        let err = stderr(&output);
+        assert!(err.contains("not a revision"), "{err}");
+        assert!(!err.contains("usage:"), "{err}");
+        assert!(!err.contains("Usage:"), "{err}");
+        assert!(!pwn.exists(), "git wrote {}", pwn.display());
+        assert!(!ext.exists(), "the ext remote helper ran");
+    }
+}
+
+/// An adapter that reports, for `note.md` at the materialized target, its first
+/// line and its byte count as the attrs of one node.
+const NOTE_ADAPTER: &str = r#"first=$(head -n 1 "$4/note.md")
+size=$(wc -c < "$4/note.md" | tr -d ' ')
+printf '{"interface_version":"1.0","nodes":[{"id":"N-1","kind":"need","attrs":{"first":"%s","bytes":"%s"},"provenance":{"file":"n.md","line":1}}]}' "$first" "$size""#;
+
+/// A repo whose two commits both carry a register `doc.json`; `attributes` is
+/// the `.gitattributes` text committed with revision A and with revision B.
+fn attribute_case(attrs_a: Option<&str>, attrs_b: Option<&str>) -> (Case, String, String) {
+    let case = Case::with_profile(QUERY_PROFILE, "cat \"$4/doc.json\"");
+    git(&case.dir, &["init", "-q"]);
+    let set_attributes = |text: Option<&str>| match text {
+        Some(text) => std::fs::write(case.dir.join(".gitattributes"), text).unwrap(),
+        None => {
+            let _ = std::fs::remove_file(case.dir.join(".gitattributes"));
+        }
+    };
+    set_attributes(attrs_a);
+    std::fs::write(case.dir.join("doc.json"), DIFF_DOCUMENT_A).unwrap();
+    git(&case.dir, &["add", "-A", "."]);
+    git(&case.dir, &["commit", "-q", "-m", "a"]);
+    let rev_a = git(&case.dir, &["rev-parse", "HEAD"]);
+    set_attributes(attrs_b);
+    std::fs::write(case.dir.join("doc.json"), DIFF_DOCUMENT_B).unwrap();
+    git(&case.dir, &["add", "-A", "."]);
+    git(&case.dir, &["commit", "-q", "-m", "b"]);
+    let rev_b = git(&case.dir, &["rev-parse", "HEAD"]);
+    (case, rev_a, rev_b)
+}
+
+// Requirement: query/Diff materialization is faithful
+#[test]
+fn diff_reads_a_register_file_marked_export_ignore() {
+    let (case, rev_a, rev_b) = attribute_case(None, Some("doc.json export-ignore\n"));
+    let output = case.run(&["query", "diff", &rev_a, &rev_b, "--format", "plain"]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    let text = stdout(&output);
+    assert!(text.contains("node added T-1 test"), "{text}");
+    assert!(!text.contains("node removed"), "{text}");
+}
+
+// Requirement: query/Diff materialization is faithful
+#[test]
+fn diff_reads_a_register_file_marked_export_ignore_on_the_older_revision() {
+    let (case, rev_a, rev_b) = attribute_case(Some("doc.json export-ignore\n"), None);
+    let output = case.run(&["query", "diff", &rev_a, &rev_b, "--format", "plain"]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    let text = stdout(&output);
+    assert!(text.contains("node added T-1 test"), "{text}");
+    assert!(!text.contains("node removed"), "{text}");
+}
+
+// Requirement: query/Diff materialization is faithful
+#[test]
+fn diff_ignores_export_subst_eol_and_filter_attributes() {
+    let case = Case::with_profile(QUERY_PROFILE, NOTE_ADAPTER);
+    let marker = case.dir.join("smudged");
+    git(&case.dir, &["init", "-q"]);
+    git(
+        &case.dir,
+        &[
+            "config",
+            "filter.x.smudge",
+            &format!("touch {} && cat", marker.display()),
+        ],
+    );
+    std::fs::write(
+        case.dir.join(".gitattributes"),
+        "note.md text eol=crlf export-subst\n*.dat filter=x\n",
+    )
+    .unwrap();
+    let content = "$Format:%H$\nsecond line\n";
+    std::fs::write(case.dir.join("note.md"), content).unwrap();
+    std::fs::write(case.dir.join("a.dat"), "data\n").unwrap();
+    git(
+        &case.dir,
+        &["add", "-A", ".gitattributes", "note.md", "a.dat"],
+    );
+    git(&case.dir, &["commit", "-q", "-m", "a"]);
+    let rev = git(&case.dir, &["rev-parse", "HEAD"]);
+    // `git add` may have run the filter's clean side only; start from no marker.
+    let _ = std::fs::remove_file(&marker);
+
+    let output = case.run(&["query", "diff", &rev, &rev, "--format", "json"]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert!(!marker.exists(), "the smudge filter ran");
+
+    // What the adapter saw at `rev`: a diff whose B side changes the note
+    // reports the A side's attrs.
+    std::fs::write(case.dir.join("note.md"), "changed\n").unwrap();
+    git(&case.dir, &["add", "note.md"]);
+    git(&case.dir, &["commit", "-q", "-m", "c"]);
+    let changed = git(&case.dir, &["rev-parse", "HEAD"]);
+    let output = case.run(&["query", "diff", &rev, &changed, "--format", "json"]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    let value = json(&output);
+    let attrs = &value["nodes_changed"][0]["attrs_a"];
+    assert_eq!(attrs["first"], "$Format:%H$", "{value}");
+    assert_eq!(attrs["bytes"], content.len().to_string(), "{value}");
+    assert!(!marker.exists(), "the smudge filter ran");
+}
+
+// Requirement: query/Diff materialization is faithful
+#[test]
+fn diff_of_a_large_tree() {
+    let case = Case::with_profile(
+        QUERY_PROFILE,
+        "n=$(find \"$4\" -type f | wc -l | tr -d ' ')\n\
+         printf '{\"interface_version\":\"1.0\",\"nodes\":[{\"id\":\"N-1\",\"kind\":\"need\",\"attrs\":{\"files\":\"%s\"},\"provenance\":{\"file\":\"n.md\",\"line\":1}}]}' \"$n\"",
+    );
+    git(&case.dir, &["init", "-q"]);
+    for dir in 0..50 {
+        let path = case.dir.join(format!("d{dir}"));
+        std::fs::create_dir(&path).unwrap();
+        for file in 0..100 {
+            std::fs::write(path.join(format!("f{file}.txt")), format!("{dir} {file}\n")).unwrap();
+        }
+    }
+    let dirs: Vec<String> = (0..50).map(|dir| format!("d{dir}")).collect();
+    let mut add = vec!["add", "--"];
+    add.extend(dirs.iter().map(String::as_str));
+    git(&case.dir, &add);
+    git(&case.dir, &["commit", "-q", "-m", "a"]);
+    let rev_a = git(&case.dir, &["rev-parse", "HEAD"]);
+    std::fs::write(case.dir.join("d0").join("extra.txt"), "x\n").unwrap();
+    git(&case.dir, &["add", "d0/extra.txt"]);
+    git(&case.dir, &["commit", "-q", "-m", "b"]);
+    let rev_b = git(&case.dir, &["rev-parse", "HEAD"]);
+
+    let count = |rev: &str| {
+        git(&case.dir, &["ls-tree", "-r", "--name-only", rev])
+            .lines()
+            .count()
+    };
+    assert_eq!(count(&rev_a), 5000);
+    let output = case.run(&["query", "diff", &rev_a, &rev_b, "--format", "json"]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    let value = json(&output);
+    let attrs = &value["nodes_changed"][0];
+    assert_eq!(
+        attrs["attrs_a"]["files"],
+        count(&rev_a).to_string(),
+        "{value}"
+    );
+    assert_eq!(
+        attrs["attrs_b"]["files"],
+        count(&rev_b).to_string(),
+        "{value}"
+    );
+}
+
+// Requirement: query/Diff materialization is faithful
+#[test]
+fn diff_from_a_target_subdirectory_scopes_like_archive() {
+    let case = Case::with_profile(
+        QUERY_PROFILE,
+        "n=$(find \"$4\" -type f | wc -l | tr -d ' ')\n\
+         printf '{\"interface_version\":\"1.0\",\"nodes\":[{\"id\":\"N-1\",\"kind\":\"need\",\"attrs\":{\"files\":\"%s\",\"inside\":\"%s\"},\"provenance\":{\"file\":\"n.md\",\"line\":1}}]}' \"$n\" \"$(ls \"$4\" | tr '\\n' ' ')\"",
+    );
+    git(&case.dir, &["init", "-q"]);
+    let sdir = case.dir.join("sdir");
+    std::fs::create_dir_all(sdir.join("deep")).unwrap();
+    std::fs::create_dir(case.dir.join("other")).unwrap();
+    std::fs::write(sdir.join("one.txt"), "1\n").unwrap();
+    std::fs::write(sdir.join("deep").join("two.txt"), "2\n").unwrap();
+    std::fs::write(case.dir.join("other").join("out.txt"), "3\n").unwrap();
+    git(&case.dir, &["add", "sdir", "other"]);
+    git(&case.dir, &["commit", "-q", "-m", "a"]);
+    let rev_a = git(&case.dir, &["rev-parse", "HEAD"]);
+    std::fs::write(sdir.join("three.txt"), "3\n").unwrap();
+    git(&case.dir, &["add", "sdir"]);
+    git(&case.dir, &["commit", "-q", "-m", "b"]);
+    let rev_b = git(&case.dir, &["rev-parse", "HEAD"]);
+
+    let output = common::lattice()
+        .args(["query", "diff", "--format", "json", "--profile"])
+        .arg(&case.profile)
+        .arg("--adapter")
+        .arg(&case.adapter)
+        .arg("--target")
+        .arg(&sdir)
+        .args([&rev_a, &rev_b])
+        .output()
+        .unwrap();
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    let value = json(&output);
+    let changed = &value["nodes_changed"][0];
+    assert_eq!(changed["attrs_a"]["files"], "2", "{value}");
+    assert_eq!(changed["attrs_b"]["files"], "3", "{value}");
+    assert_eq!(changed["attrs_a"]["inside"], "deep one.txt ", "{value}");
 }
 
 #[test]
@@ -1286,7 +1575,7 @@ fn diff_materialization_exceeding_its_bound_exits_two() {
     git(&case.dir, &["commit", "-q", "-m", "a"]);
     let rev = git(&case.dir, &["rev-parse", "HEAD"]);
 
-    // A `git` that answers everything but `archive`, which it never answers.
+    // A `git` that answers everything but `cat-file`, which it never answers.
     let shims = case.dir.join("shims");
     std::fs::create_dir(&shims).unwrap();
     let real_git = String::from_utf8(
@@ -1300,7 +1589,7 @@ fn diff_materialization_exceeding_its_bound_exits_two() {
     common::write_stub(
         &shims.join("git"),
         &format!(
-            "#!/bin/sh\nfor arg in \"$@\"; do [ \"$arg\" = archive ] && exec sleep 30; done\n\
+            "#!/bin/sh\nfor arg in \"$@\"; do [ \"$arg\" = cat-file ] && exec sleep 30; done\n\
              exec {} \"$@\"\n",
             real_git.trim()
         ),
@@ -1319,6 +1608,51 @@ fn diff_materialization_exceeding_its_bound_exits_two() {
     let message = stderr(&output);
     assert!(message.contains("exceeded 1 s"), "{message}");
     assert!(message.contains(&rev), "{message}");
+}
+
+// Requirement: query/Diff materialization is bounded
+#[test]
+fn diff_materialization_reports_a_failed_blob_read_with_gits_stderr() {
+    let case = Case::with_profile(QUERY_PROFILE, "cat \"$4/doc.json\"");
+    git(&case.dir, &["init", "-q"]);
+    std::fs::write(case.dir.join("doc.json"), DIFF_DOCUMENT_A).unwrap();
+    git(&case.dir, &["add", "doc.json"]);
+    git(&case.dir, &["commit", "-q", "-m", "a"]);
+    let rev = git(&case.dir, &["rev-parse", "HEAD"]);
+
+    // A `git` whose `cat-file` dies with a reason of its own before answering.
+    let shims = case.dir.join("shims");
+    std::fs::create_dir(&shims).unwrap();
+    let real_git = String::from_utf8(
+        std::process::Command::new("sh")
+            .args(["-c", "command -v git"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    common::write_stub(
+        &shims.join("git"),
+        &format!(
+            "#!/bin/sh\nfor arg in \"$@\"; do [ \"$arg\" = cat-file ] && \
+             {{ echo 'fatal: write error: No space left on device' >&2; exit 128; }}; done\n\
+             exec {} \"$@\"\n",
+            real_git.trim()
+        ),
+    );
+    let path = format!("{}:{}", shims.display(), std::env::var("PATH").unwrap());
+    let output = case
+        .command(&["query", "diff", &rev, &rev, "--format", "plain"])
+        .env("PATH", path)
+        .output()
+        .unwrap();
+
+    assert_eq!(code(&output), 2, "{}", stderr(&output));
+    let message = stderr(&output);
+    assert!(message.contains("No space left on device"), "{message}");
+    assert!(message.contains("git cat-file"), "{message}");
+    assert!(message.contains(&rev), "{message}");
+    assert!(!message.contains("archive"), "{message}");
 }
 
 /// A profile for the library-level characterization tests below: one node kind
@@ -1485,4 +1819,212 @@ fn components_outlives_its_admitted_set() {
         [vec!["A".to_owned(), "B".to_owned()], vec!["C".to_owned()]]
     );
     assert_eq!(condensation.inter_edges.len(), 1);
+}
+
+/// A register `doc.json` holding one node, committed twice with `first`
+/// then `second`: a repository whose diff is unrelated to `diff_case`'s.
+fn other_repository(first: &str, second: &str) -> std::path::PathBuf {
+    let dir = common::scratch();
+    git(&dir, &["init", "-q"]);
+    for (text, message) in [(first, "one"), (second, "two")] {
+        std::fs::write(dir.join("doc.json"), text).unwrap();
+        git(&dir, &["add", "doc.json"]);
+        git(&dir, &["commit", "-q", "-m", message]);
+    }
+    dir
+}
+
+fn one_node_document(id: &str) -> String {
+    format!(
+        r#"{{"interface_version": "1.0", "nodes": [
+  {{"id": "{id}", "kind": "need", "attrs": {{}}, "provenance": {{"file": "n.md", "line": 1}}}}]}}"#
+    )
+}
+
+// Requirement: query/Diff materialization is faithful
+#[test]
+fn diff_reads_the_target_repository_not_an_inherited_git_dir() {
+    let (case, _, _) = diff_case();
+    let other = other_repository(
+        &one_node_document("OTHER-OLD"),
+        &one_node_document("OTHER-NEW"),
+    );
+    let other_git_dir = other.join(".git");
+
+    let output = case
+        .command(&["query", "diff", "HEAD~", "HEAD", "--format", "json"])
+        .env("GIT_DIR", &other_git_dir)
+        .output()
+        .expect("the lattice binary runs");
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    let out = stdout(&output);
+    // The target's own commits: N-1 changed and T-1 arrived.
+    assert!(out.contains("T-1"), "{out}");
+    assert!(out.contains("N-1"), "{out}");
+    assert!(!out.contains("OTHER-"), "{out}");
+}
+
+// Requirement: query/Diff materialization is faithful
+#[test]
+fn diff_reads_stored_blobs_not_replacement_objects() {
+    let (case, rev_a, rev_b) = diff_case();
+    let args = ["query", "diff", &rev_a, &rev_b, "--format", "json"];
+    let baseline = case.run(&args);
+    assert_eq!(code(&baseline), 0, "{}", stderr(&baseline));
+    assert!(stdout(&baseline).contains("T-1"), "{}", stdout(&baseline));
+
+    // Make git read revision B's register as revision A's.
+    let blob_a = git(&case.dir, &["rev-parse", &format!("{rev_a}:doc.json")]);
+    let blob_b = git(&case.dir, &["rev-parse", &format!("{rev_b}:doc.json")]);
+    git(&case.dir, &["replace", &blob_b, &blob_a]);
+
+    let replaced = case.run(&args);
+    assert_eq!(code(&replaced), 0, "{}", stderr(&replaced));
+    assert_eq!(stdout(&replaced), stdout(&baseline));
+}
+
+/// A case whose directory is a repository with one committed `doc.json`, and
+/// the commit id.
+fn committed_case(profile_yaml: &str) -> (Case, String) {
+    let case = Case::with_profile(profile_yaml, "cat \"$4/doc.json\"");
+    git(&case.dir, &["init", "-q"]);
+    std::fs::write(case.dir.join("doc.json"), DIFF_DOCUMENT_A).unwrap();
+    git(&case.dir, &["add", "doc.json"]);
+    git(&case.dir, &["commit", "-q", "-m", "a"]);
+    let rev = git(&case.dir, &["rev-parse", "HEAD"]);
+    (case, rev)
+}
+
+/// A `PATH` whose first entry holds a `git` that runs `before` and then the
+/// real git.
+fn path_with_git_shim(case: &Case, before: &str) -> String {
+    let shims = case.dir.join("shims");
+    std::fs::create_dir(&shims).unwrap();
+    common::write_stub(
+        &shims.join("git"),
+        &format!("#!/bin/sh\n{before}\nexec /usr/bin/git \"$@\"\n"),
+    );
+    format!("{}:{}", shims.display(), std::env::var("PATH").unwrap())
+}
+
+/// Run `command`, killing it and failing when it outlives `limit`.
+fn output_within(
+    mut command: std::process::Command,
+    limit: std::time::Duration,
+) -> std::process::Output {
+    let mut child = command
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let started = std::time::Instant::now();
+    while child.try_wait().unwrap().is_none() {
+        if started.elapsed() > limit {
+            child.kill().unwrap();
+            let _ = child.wait();
+            panic!("latt outlived {limit:?}");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    child.wait_with_output().unwrap()
+}
+
+// Requirement: query/Diff materialization is bounded
+#[test]
+fn diff_refuses_an_option_revision_without_running_git() {
+    let (case, rev) = committed_case(QUERY_PROFILE);
+    let log = case.dir.join("git-calls.log");
+    let path = path_with_git_shim(&case, &format!("echo \"$@\" >> '{}'", log.display()));
+
+    let output = output_within(
+        {
+            let mut command = common::lattice();
+            command
+                .args(["query", "diff", "--profile"])
+                .arg(&case.profile)
+                .arg("--adapter")
+                .arg(&case.adapter)
+                .arg("--target")
+                .arg(&case.dir)
+                .args(["--", "-x", &rev]);
+            command.env("PATH", path);
+            command
+        },
+        std::time::Duration::from_secs(20),
+    );
+
+    assert_eq!(code(&output), 2, "{}", stderr(&output));
+    assert!(
+        stderr(&output).contains("cannot start with '-'"),
+        "{}",
+        stderr(&output)
+    );
+    let calls = std::fs::read_to_string(&log).unwrap_or_default();
+    assert!(calls.is_empty(), "git ran: {calls}");
+}
+
+// Requirement: query/Diff materialization is bounded
+#[test]
+fn diff_bounds_a_git_version_probe_that_stalls() {
+    let profile = format!("{QUERY_PROFILE}adapter:\n  timeout_seconds: 1\n");
+    let (case, rev) = committed_case(&profile);
+    let path = path_with_git_shim(&case, "[ \"$1\" = --version ] && exec sleep 30");
+
+    let started = std::time::Instant::now();
+    let output = output_within(
+        {
+            let mut command = case.command(&["query", "diff", &rev, &rev, "--format", "plain"]);
+            command.env("PATH", path);
+            command
+        },
+        std::time::Duration::from_secs(10),
+    );
+
+    assert!(started.elapsed() < std::time::Duration::from_secs(10));
+    assert_eq!(code(&output), 2, "{}", stderr(&output));
+    assert!(
+        stderr(&output).contains("exceeded 1 s"),
+        "{}",
+        stderr(&output)
+    );
+}
+
+// Requirement: query/Diff materialization is bounded
+#[test]
+fn diff_bound_holds_when_a_git_descendant_keeps_the_pipe_open() {
+    let profile = format!("{QUERY_PROFILE}adapter:\n  timeout_seconds: 1\n");
+    let (case, rev) = committed_case(&profile);
+    let pid_file = case.dir.join("sleeper.pid");
+    // For `cat-file`: a descendant that holds only stdout, then git itself
+    // stalls. The deadline kills git; the descendant keeps the pipe open.
+    let path = path_with_git_shim(
+        &case,
+        &format!(
+            "for arg in \"$@\"; do if [ \"$arg\" = cat-file ]; then\n\
+             sleep 20 </dev/null 2>/dev/null &\n\
+             echo $! > '{}'\n\
+             exec sleep 20\nfi; done",
+            pid_file.display()
+        ),
+    );
+
+    let started = std::time::Instant::now();
+    let result = std::panic::catch_unwind(|| {
+        output_within(
+            {
+                let mut command = case.command(&["query", "diff", &rev, &rev, "--format", "plain"]);
+                command.env("PATH", path);
+                command
+            },
+            std::time::Duration::from_secs(8),
+        )
+    });
+    if let Ok(pid) = std::fs::read_to_string(&pid_file) {
+        let _ = std::process::Command::new("kill").arg(pid.trim()).status();
+    }
+    let output = result.expect("latt outlived the bound while a descendant held the pipe");
+
+    assert!(started.elapsed() < std::time::Duration::from_secs(8));
+    assert_eq!(code(&output), 2, "{}", stderr(&output));
+    assert!(stderr(&output).contains("exceeded"), "{}", stderr(&output));
 }

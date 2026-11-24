@@ -44,12 +44,16 @@ Verified by: `cargo test -p latt --locked`
 The `tui::git` module SHALL provide a `parse_git_log` function that
 executes `git log -L<start>,<end>:<file>` via `std::process::Command`
 and returns a `Vec<GitCommit>`. Each `GitCommit` SHALL contain at
-minimum: commit hash, parent hashes, author, date, and subject line. The parser SHALL
-return an empty vec when the command fails or the target directory is
-not a git repository.
+minimum: commit hash, parent hashes, author, date, and subject line. When `git` cannot
+be started, or exits non-zero (the target directory is not a git repository, the file
+is untracked, the line range is out of bounds), the parser SHALL return a failure
+carrying one line: git's first non-empty stderr line, `git log exited <code>` when
+stderr is empty, or `could not run git: <error>` when it could not start. A failure
+SHALL never read as an empty history.
 
 Verified by: `cargo test -p latt --locked` (unit tests parsing
-sample `git log -L` output).
+sample `git log -L` output, `parse_git_log_real_repo`,
+`a_failed_git_log_carries_its_reason`).
 
 #### Scenario: Parse valid git log output
 - **WHEN** `parse_git_log` receives well-formed `git log -L` output
@@ -59,7 +63,12 @@ sample `git log -L` output).
 #### Scenario: Non-git directory
 - **WHEN** `parse_git_log` is called with a target directory that is not
   a git repo
-- **THEN** it returns an empty vec
+- **THEN** it returns a failure whose reason is git's `fatal: not a git repository`
+  line
+
+#### Scenario: git is not installed
+- **WHEN** the `git` program cannot be started
+- **THEN** it returns a failure reading `could not run git: ` and the launch error
 
 ### Requirement: Git commit display in Provenance view
 When a node is selected in the Provenance view and a target directory is
@@ -81,11 +90,15 @@ waits on `git`. While a fetch is pending the panel shows a
 and shortens its tick while a fetch is pending. At most one fetch runs
 at a time. A result for a node the cursor has since left SHALL be
 discarded, and the fetch for the current node starts in its place.
+When the fetch fails, the panel SHALL show a `Git (failed)` title and the failure's
+reason as its one row, and no commits SHALL be cached for that node, so moving the
+cursor away and back fetches again.
 
 Verified by: `cargo test -p latt --locked`
 (unit tests `provenance_git_commits_empty_without_target`,
 `provenance_git_commits_populated_with_target`,
 `stale_git_fetch_never_lands_on_a_newer_node`,
+`provenance_git_fetch_failure_names_its_reason`,
 `parse_git_log_real_repo`, `lanes_linear_chain_stays_in_lane_zero`,
 `lanes_merge_opens_and_closes_side_lane`,
 `lanes_unrelated_roots_get_fresh_lanes`).
@@ -99,6 +112,11 @@ Verified by: `cargo test -p latt --locked`
 #### Scenario: No target directory
 - **WHEN** the Provenance view is active without a target directory
 - **THEN** the commit panel does not appear
+
+#### Scenario: git log fails
+- **WHEN** the Provenance view is active with a target directory set, the cursor is on
+  a node with a source line, and `git log` exits non-zero
+- **THEN** the panel shows `Git (failed)` with git's stderr line as its row
 
 #### Scenario: Cursor leaves the node before git answers
 - **WHEN** a fetch for node A is in flight and the cursor moves to node B

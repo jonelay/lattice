@@ -90,7 +90,17 @@
         "measurement_runs": { "type": "integer", "minimum": 1 },
         "expected_exit_status": { "type": "integer" },
         "command": { "type": "string", "minLength": 1 },
-        "expected": { "$ref": "#/$defs/expected" }
+        "expected": { "$ref": "#/$defs/expected" },
+        "profile": { "type": "string", "minLength": 1 },
+        "text": {
+          "type": "object",
+          "required": ["bytes"],
+          "properties": {
+            "bytes": { "type": "integer", "minimum": 1 },
+            "replace": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": false
     },
@@ -306,6 +316,8 @@
         "candidate_ref": { "type": "string", "minLength": 1 },
         "wall_time_median_percent_change": { "type": "number" },
         "peak_rss_median_percent_change": { "type": "number" },
+        "peak_rss_minimum_percent_change": { "type": "number" },
+        "peak_rss_maximum_percent_change": { "type": "number" },
         "output_identical": { "type": "boolean" },
         "threshold_enforced": { "const": false }
       },

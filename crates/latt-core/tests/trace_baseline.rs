@@ -13,7 +13,7 @@ mod regen;
 use latt_core::document::{ingest_document, parse_document};
 use latt_core::output::{Format, output_result, strip_ansi};
 use latt_core::profile::load_profile;
-use latt_core::trace::build_trace_report;
+use latt_core::trace::{build_trace_report, build_trace_report_owned};
 use latt_core::validate::validate;
 
 /// The version the baselines were captured at. Task 5.1 normalizes this header
@@ -79,4 +79,19 @@ fn trace_reproduces_the_synthetic_baselines_in_all_three_formats() {
             );
         }
     }
+}
+
+#[test]
+fn the_owning_build_reports_what_the_borrowing_build_does() -> Result<(), Box<dyn std::error::Error>>
+{
+    let profile = load_profile(&baselines().join("synthetic.profile.yaml"))?;
+    let text = std::fs::read_to_string(baselines().join("synthetic.document.json"))?;
+    let graph = ingest_document(parse_document(&text)?)?;
+
+    let issues = validate(&graph, &profile, false);
+    let borrowed = build_trace_report(&profile, &graph, issues.clone(), BASELINE_VERSION);
+    let owned = build_trace_report_owned(&profile, graph, issues, BASELINE_VERSION);
+
+    assert_eq!(owned, borrowed);
+    Ok(())
 }

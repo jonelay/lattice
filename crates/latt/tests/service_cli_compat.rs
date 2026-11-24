@@ -1,4 +1,5 @@
-//! Frozen output from the pre-service CLI at 29a9e87 (same runtime as a63fc23).
+//! Frozen output from the pre-service CLI at 29a9e87 (same runtime as a63fc23), re-frozen
+//! when suppressed `PARSE_ERROR` runs gained the partial-input stderr line.
 mod common;
 use common::{Case, code, stderr, stdout};
 use serde_json::{Value, json};

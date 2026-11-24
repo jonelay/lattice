@@ -8,7 +8,7 @@
 //! a changed default, a dropped possible value, a removed code, a changed
 //! default severity or a changed ID pattern is a break. It must be listed under
 //! Breaking in Unreleased or the workspace version's section, read by
-//! `tools/check-breaking.sh`, and the pending release must be a minor one. On a patch line every break fails. Additions
+//! `tools/check-breaking.sh`, and the pending release must be a minor one. On a patch line every break fails, and so does an added code defaulting to `warning` or `error`. Other additions
 //! pass.
 //!
 //! `cli.txt` is read off `--help` alone. Exit classes and stream routing are
@@ -16,6 +16,7 @@
 // Requirement: versioning/Pre-1.0 semver policy
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -201,7 +202,7 @@ fn id_patterns_contract(binary: &Path, profiles: &Path) -> String {
             document["node_kinds"].as_object().unwrap().iter().collect();
         for (kind, spec) in kinds {
             let pattern = spec["id_pattern"].as_str().unwrap_or("-");
-            rows.push_str(&format!("{name}\t{kind}\t{pattern}\n"));
+            let _ = writeln!(rows, "{name}\t{kind}\t{pattern}");
         }
     }
     rows
@@ -244,6 +245,24 @@ const NOT_CODES: &[&str] = &[
     "CARGO_MANIFEST_DIR",
     "CARGO_PKG_VERSION",
     "FORCE_COLOR",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_CONFIG",
+    "GIT_CONFIG_COUNT",
+    "GIT_CONFIG_PARAMETERS",
+    "GIT_DIR",
+    "GIT_GRAFT_FILE",
+    "GIT_IMPLICIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_NAMESPACE",
+    "GIT_NO_REPLACE_OBJECTS",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_PREFIX",
+    "GIT_REPLACE_REF_BASE",
+    "GIT_SHALLOW_FILE",
+    "GIT_WORK_TREE",
+    "LATT_ADAPTER_MAX_OUTPUT_BYTES",
+    "LATTICE_FUSE_CHILD",
     "LC_ALL",
     "LC_CTYPE",
     "NO_COLOR",
@@ -423,6 +442,59 @@ fn pending_release_is_minor(released: &str, current: &str) -> bool {
         || (r_pre.is_some() && (c_major, c_minor, c_patch) == (r_major, r_minor, r_patch))
 }
 
+/// Codes added since the release whose default severity can fail a run that
+/// passed on it: `error`, or `warning` under `--strict`. A patch may add a
+/// code only below that.
+fn failing_code_additions(released: &str, current: &str) -> Vec<String> {
+    let released = keyed(released, 1);
+    keyed(current, 1)
+        .into_iter()
+        .filter(|(code, row)| {
+            !released.contains_key(code)
+                && row.get(1).is_some_and(|s| s == "error" || s == "warning")
+        })
+        .map(|(code, _)| code)
+        .collect()
+}
+
+#[test]
+fn code_additions_are_classified() {
+    let released = "CONFIG_ERROR\tcore\terror\tno\n";
+    let case = |row: &str| {
+        let current = format!("{released}{row}");
+        (
+            breaks("codes.tsv", released, &current),
+            failing_code_additions(released, &current),
+        )
+    };
+    // An addition breaks nothing; only its severity decides whether a patch may carry it.
+    for quiet in [
+        "NEW\tcore\tinfo\tno\n",
+        "NEW\tcore\thint\tno\n",
+        "NEW\tadapter\t-\tno\n",
+    ] {
+        assert_eq!(case(quiet), (vec![], vec![]));
+    }
+    for loud in ["NEW\tcore\twarning\tyes\n", "NEW\tcore\terror\tyes\n"] {
+        assert_eq!(case(loud), (vec![], vec!["NEW".to_string()]));
+    }
+}
+
+/// On a patch line, no code added since the release can fail a run it passed.
+#[test]
+fn patch_line_code_additions_fail_no_passing_run() {
+    let dir = root().join("contracts/released");
+    let released_version = fs::read_to_string(dir.join("VERSION")).unwrap();
+    if pending_release_is_minor(&released_version, env!("CARGO_PKG_VERSION")) {
+        return;
+    }
+    let released = fs::read_to_string(dir.join("codes.tsv")).unwrap_or_default();
+    assert_eq!(
+        failing_code_additions(&released, &codes_contract()),
+        Vec::<String>::new()
+    );
+}
+
 /// The comparator over hand-written rows: what counts as a break, and what
 /// an addition is allowed to be.
 #[test]
@@ -507,11 +579,12 @@ fn contract_breaks_since_the_release_are_listed() {
         // An artifact the release predates has nothing to break from.
         let released = fs::read_to_string(dir.join(file)).unwrap_or_default();
         let found = breaks(file, &released, &current);
-        log.push_str(&format!("== semver-checks: contracts {file}\n"));
+        let _ = writeln!(log, "== semver-checks: contracts {file}");
         for (lint, item) in &found {
-            log.push_str(&format!(
+            let _ = write!(
+                log,
                 "--- failure {lint}: contract break ---\nFailed in:\n  {item}\n"
-            ));
+            );
         }
         all.extend(found);
     }

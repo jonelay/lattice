@@ -19,6 +19,7 @@
 + crates
 - crates/latt-eval
 + docs
++ examples
 + openspec/config.yaml
 + openspec/specs
 + profiles

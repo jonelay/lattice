@@ -19,17 +19,12 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).parent.parent
-CORE_BIN = REPO_ROOT / "target" / "debug" / "latt"
+from conftest import CORE_BIN, REPO_ROOT, needs_core
+
 PAGE = REPO_ROOT / "docs" / "json.md"
 FIXTURES = REPO_ROOT / "tests" / "fixtures"
 TOML = ["--profile", "profiles/toml.yaml", "--adapter", "toml",
         "--target", "tests/fixtures/mini-toml"]
-
-needs_core = pytest.mark.skipif(
-    not CORE_BIN.exists(), reason="core not built; run: cargo build"
-)
-
 
 def documented_sections() -> dict[str, list[str]]:
     """Heading → the key-path lines of the ``text`` fence under it."""
@@ -173,6 +168,7 @@ def test_every_section_on_the_page_is_exercised() -> None:
     sections = set(documented_sections())
     covered = set(STDOUT_SECTIONS) | {
         "summary with a SUMMARY block", "query diff", "Adapter findings on stderr",
+        "coverage --rule N",
     }
     assert sections == covered, (sections ^ covered)
 
@@ -244,11 +240,41 @@ def test_configured_summary_keys_match_the_page(tmp_path: Path) -> None:
 
 @needs_core
 # Requirement: development-verification/Verify documentation and supported feature configurations
-def test_stderr_envelope_keys_match_the_page() -> None:
+def test_stderr_envelope_keys_match_the_page(tmp_path: Path) -> None:
     result = run(["query", "counts", *TOML, "--format", "json"])
     assert result.returncode == 0, result.stderr
     assert result.stderr.strip(), "mini-toml carries adapter findings"
     check("Adapter findings on stderr", json.loads(result.stderr))
+    # `fuse` at exit 2 writes its failures on stderr in the same shape.
+    (tmp_path / "fuse.yaml").write_text(
+        "manifest_version: '1.0.0'\nname: sample\nversion: '2.0.0'\n"
+        "fuse_profile: profile.yaml\n"
+        "sources:\n  - {name: specs, profile: specs.yaml, adapter: z, target: .}\n"
+    )
+    (tmp_path / "profile.yaml").write_text("edge_kinds: {}\n")
+    result = run(["fuse", "--manifest", str(tmp_path / "fuse.yaml"), "--format", "json"])
+    assert result.returncode == 2, result.stderr
+    payload = json.loads(result.stderr)
+    assert [f["code"] for f in payload["findings"]] == ["SOURCE_FAILURE"], payload
+    check("Adapter findings on stderr", payload)
+
+
+@needs_core
+# Requirement: development-verification/Verify documentation and supported feature configurations
+def test_fuse_failure_keys_match_the_page(tmp_path: Path) -> None:
+    # The healthy fixture never fails, so it never writes `findings[].stage`;
+    # a failing source does, at exit 2, which `payload_of` refuses.
+    (tmp_path / "fuse.yaml").write_text(
+        "manifest_version: '1.0.0'\nname: sample\nversion: '2.0.0'\n"
+        "fuse_profile: profile.yaml\n"
+        "sources:\n  - {name: specs, profile: specs.yaml, adapter: z, target: .}\n"
+    )
+    (tmp_path / "profile.yaml").write_text("edge_kinds: {}\n")
+    result = run(["fuse", "--manifest", str(tmp_path / "fuse.yaml"), "--format", "json"])
+    assert result.returncode == 2, result.stderr
+    payload = json.loads(result.stdout)
+    assert [f.get("stage") for f in payload["findings"]] == ["source_run"], payload
+    check("fuse", payload)
 
 
 def git(repo: Path, *args: str) -> None:
@@ -283,3 +309,28 @@ def test_diff_keys_match_the_page(tmp_path: Path) -> None:
     payload = payload_of(result)
     assert payload["nodes_added"] and payload["nodes_changed"] and payload["edges_added"], payload
     check("query diff", payload)
+
+
+@needs_core
+# Requirement: coverage-query/Rule-specific coverage report
+# Requirement: development-verification/Verify documentation and supported feature configurations
+def test_rule_coverage_keys_match_the_page(tmp_path: Path) -> None:
+    profile = (REPO_ROOT / "profiles" / "md.yaml").read_text()
+    profile += (
+        "validations:\n"
+        "  - COVERAGE:\n"
+        "      target_kind: requirement\n"
+        "      edge_kind: traces_to\n"
+        "      where: {status: {ne: retired}}\n"
+        "      source_where: {status: {ne: retired}}\n"
+        "  - SUPPRESS: {code: PARSE_ERROR}\n"
+    )
+    path = tmp_path / "p.yaml"
+    path.write_text(profile)
+    result = run(["coverage", "--rule", "1", "--profile", str(path),
+                  "--target", "tests/fixtures/mini-md", "--format", "json"])
+    payload = payload_of(result)
+    assert payload["missing"] and payload["uncertainty"]["findings"]
+    assert payload["where"] and payload["source_where"]
+    assert result.stderr == ""
+    check("coverage --rule N", payload)

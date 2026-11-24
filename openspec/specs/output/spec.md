@@ -392,3 +392,86 @@ Verified by: `cargo test -p latt --locked --test cli validate_scope`, and
 - **WHEN** `latt validate --format plain` finds nothing over a register of 6 nodes in 2
   files
 - **THEN** stdout is empty, stderr is one `scope:` line, and the exit code is 0
+
+### Requirement: Untrusted text in human formats
+Text that comes from the register or the command line (a node ID, a code, a message, a
+file name, a note) SHALL reach a terminal through `plain` and `rich` with no control
+character it carried. The `plain` and `rich` output of every batch command (findings,
+entries, counts, paths, diffs, describe and fuse lines) SHALL write, in each such field, a C0 control other than tab, DEL, a C1 control, a bidi control (U+061C,
+U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069), U+2028 and U+2029 as a visible
+escape: `\n` for a newline, `\r` for a carriage return, `\u{..}` in lower-case hex for
+the rest. Tab and a literal backslash SHALL stay as they are. So each finding stays one
+line in `plain`, and the only escape sequences in `rich` are its own colours. A parser
+message that spans lines SHALL be written on one line the same way. A batch command's
+`--format json` SHALL carry the text unchanged: it is the lossless channel, and its bytes
+do not depend on this rule. That holds for a failing fuse source too: the source's stderr
+reaches its `json` finding message as the source wrote it. The JSON documents `latt show`
+and `latt adapter` print SHALL write DEL, a C1 control, a bidi control, U+2028 and
+U+2029 as a JSON escape (`\u009b`, lower-case hex), so the document parses to the same
+value and the terminal never receives the raw character; JSON already escapes the C0
+controls. A notice on stderr (an error naming a profile path or a revision) SHALL escape the same
+characters except newline, which stays so an adapter's multi-line diagnosis reads as it
+came; `plain` and `rich` written by the CLI pass the same check, keeping only `rich`'s
+own colour sequences (reset, red, yellow, magenta, cyan) and escaping any other SGR. A
+`trace --format json` run by `fuse` (`LATTICE_FUSE_CHILD` set) whose stderr is not a
+terminal SHALL write its stderr notices unescaped, so fuse quotes them as they came; with
+stderr on a terminal, or in `plain` and `rich`, the variable SHALL change nothing. A usage
+error SHALL escape the command-line text it quotes the same way, newline included, a
+value parser's message among it, and keep its layout, its colour decision and exit code
+2; an escape left in the rendering beyond clap's own colours SHALL be escaped and the
+error written uncoloured. `--help` and `--version` output SHALL NOT change.
+
+Verified by: `cargo test -p latt-core --locked --lib sanitize`,
+`cargo test -p latt --locked --test cli -- hostile_profile a_usage_error_escapes clap_output_keeps show_escapes_c1`,
+`cargo test -p latt --locked --test native adapter_document_escapes`,
+`cargo test -p latt --locked --bin latt escape_tests`,
+`cargo test -p latt-core --locked --lib rich_summary_cuts`,
+`cargo test -p latt-core --locked --test output -- forge_a_finding untrusted_text`, and
+`cargo test -p latt --locked --test native hostile_toml`,
+`cargo test -p latt --locked --test fuse a_failing_source_stderr`, and
+`cargo test -p latt --locked --test hostile_output`.
+
+#### Scenario: A newline in a node ID cannot forge a finding line
+- **WHEN** a finding's node ID and message carry `A\nERROR FORGED X.1 forged` with a real
+  newline, and the findings render as `plain`
+- **THEN** the output has one line per finding and shows the newline as `\n`
+
+#### Scenario: A terminal link in a register ID
+- **WHEN** a TOML item's ID carries an OSC 8 link (`ESC ] 8 ;; url BEL`) and `latt
+  validate` writes `rich` with colour forced
+- **THEN** every ESC in the output opens one of the format's own colour sequences, and
+  the ID shows `\u{1b}]8;;` and `\u{7}` as text
+
+#### Scenario: No command splits a hostile field
+- **WHEN** every ID, kind, attr, edge kind, pathway, file name, finding, note and fuse
+  source name carries `ESC ] 8 ;; x BEL`, a newline, a carriage return and U+202E, and
+  each batch command writes `plain` and `rich` with and without colour
+- **THEN** stdout and stderr hold no control character but newline and tab, no escape
+  but `rich`'s colours, and no line that begins inside a field
+
+#### Scenario: JSON is unchanged
+- **WHEN** the same register is validated with `--format json`
+- **THEN** the output bytes are the ones written before this rule, the control
+  characters escaped only as JSON escapes them
+
+#### Scenario: A C1 or bidi character in a printed document
+- **WHEN** a profile name carries U+009B, U+202E, U+2028 and DEL and `latt show` prints
+  it, or a TOML item ID carries U+009B, U+202E, U+2029 and DEL and `latt adapter toml`
+  prints the document
+- **THEN** stdout holds none of those characters raw, shows `\u009b`, `\u202e`,
+  `\u2028` (or `\u2029`) and `\u007f`, and parses to the same value
+
+#### Scenario: A usage error quoting a hostile argument
+- **WHEN** an argument carrying a carriage return, U+0085, U+202E, a newline and
+  `ESC ] 8 ;; x BEL` (or `ESC [ 8 m`) is rejected as a value, a `--filter` its parser
+  refuses, a subcommand or an unexpected argument
+- **THEN** stderr shows it as `X\r\u{85}\u{202e}\nERROR FORGED\u{1b}]8;;x\u{7}`, no
+  line begins with `ERROR FORGED`, the exit code is 2, and colour follows `NO_COLOR` and
+  `CLICOLOR_FORCE` as before
+
+#### Scenario: A failing fuse source's stderr in JSON
+- **WHEN** a fuse source's adapter exits 1 with `ESC ] 8 ;; x BEL` on stderr and `latt
+  fuse` writes `json`
+- **THEN** the `SOURCE_FAILURE` message carries those characters JSON-escaped
+  (`\u001b`, `\u0007`), as before this rule, while `plain` and `rich` show `\u{1b}` and
+  `\u{7}`

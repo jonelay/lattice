@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::ser::{Serialize, SerializeMap, SerializeSeq, Serializer};
 
-use super::{capitalize, ljust, render_json, rjust, truncate};
+use super::{capitalize, ljust, render_json, rjust, sanitize_text, truncate};
 use crate::types::{FindingTally, StatusRollup, StructuralSummary};
 
 fn count(counts: &BTreeMap<String, i64>, key: &str) -> i64 {
@@ -25,10 +25,11 @@ pub(super) fn format_summary_plain(report: &StatusRollup) -> String {
             let parts: Vec<String> = report
                 .status_keys
                 .iter()
-                .map(|k| format!("{k}={}", count(counts, k)))
+                .map(|k| format!("{}={}", sanitize_text(k), count(counts, k)))
                 .collect();
             format!(
-                "{group}: {} total={}",
+                "{}: {} total={}",
+                sanitize_text(group),
                 parts.join(" "),
                 count(counts, "total")
             )
@@ -103,13 +104,14 @@ pub(super) fn format_summary_rich(report: &StatusRollup) -> String {
     let mut labels: Vec<String> = report
         .status_keys
         .iter()
-        .map(|k| truncate(&capitalize(k), 5))
+        // Cut before escaping, so the cut never lands inside an escape.
+        .map(|k| sanitize_text(&truncate(&capitalize(k), 5)).into_owned())
         .collect();
     labels.push("Total".to_string());
 
     let header = format!(
         "{} {}",
-        ljust(&capitalize(&report.group_key), 30),
+        ljust(&sanitize_text(&capitalize(&report.group_key)), 30),
         labels
             .iter()
             .map(|l| rjust(l, 5))
@@ -122,7 +124,7 @@ pub(super) fn format_summary_rich(report: &StatusRollup) -> String {
     for (group, counts) in &report.groups {
         lines.push(format!(
             "{} {} {}",
-            ljust(group, 30),
+            ljust(&sanitize_text(group), 30),
             columns(&report.status_keys, counts),
             rjust(&count(counts, "total").to_string(), 5)
         ));
@@ -142,15 +144,15 @@ pub(super) fn format_summary_rich(report: &StatusRollup) -> String {
 pub(super) fn format_structural_plain(report: &StructuralSummary) -> String {
     let mut lines = Vec::new();
     for (kind, n) in &report.node_counts {
-        lines.push(format!("node {kind} {n}"));
+        lines.push(format!("node {} {n}", sanitize_text(kind)));
     }
     for (kind, n) in &report.edge_counts {
-        lines.push(format!("edge {kind} {n}"));
+        lines.push(format!("edge {} {n}", sanitize_text(kind)));
     }
     for tally in &report.finding_counts {
         lines.push(format!(
             "finding {} {} {}",
-            tally.code,
+            sanitize_text(&tally.code),
             tally.severity.as_str(),
             tally.count
         ));
@@ -187,7 +189,13 @@ pub(super) fn format_structural_json(report: &StructuralSummary) -> String {
 }
 
 pub(super) fn format_structural_rich(report: &StructuralSummary) -> String {
-    let row = |label: &str, n: i64| format!("  {} {}", ljust(label, 30), rjust(&n.to_string(), 5));
+    let row = |label: &str, n: i64| {
+        format!(
+            "  {} {}",
+            ljust(&sanitize_text(label), 30),
+            rjust(&n.to_string(), 5)
+        )
+    };
     let mut lines = vec!["Nodes".to_string()];
     lines.extend(report.node_counts.iter().map(|(kind, n)| row(kind, *n)));
     lines.push("Edges".to_string());
@@ -200,4 +208,28 @@ pub(super) fn format_structural_rich(report: &StructuralSummary) -> String {
         )
     }));
     lines.join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use super::format_summary_rich;
+    use crate::types::StatusRollup;
+
+    // Requirement: output/Untrusted text in human formats
+    // A status header is capitalised and cut to five characters before it is
+    // escaped, so the cut never leaves half an escape (`Sum\u`).
+    #[test]
+    fn rich_summary_cuts_a_status_header_before_escaping_it() {
+        let status = "sum\u{1b}[2Jmary".to_string();
+        let report = StatusRollup {
+            group_key: "stage".into(),
+            status_keys: vec![status.clone()],
+            groups: vec![("g".into(), BTreeMap::from([(status, 1)]))],
+        };
+        let rich = format_summary_rich(&report);
+        assert!(rich.contains("Sum\\u{1b}["), "{rich}");
+        assert!(!rich.contains("\u{1b}[2"), "{rich}");
+    }
 }

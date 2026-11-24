@@ -3,6 +3,7 @@
 #![deny(missing_docs, clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
 use std::collections::hash_map::RandomState;
+use std::fmt::Write as _;
 use std::fs::{File, OpenOptions};
 use std::hash::BuildHasher;
 use std::io::Write;
@@ -12,13 +13,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use latt_adapter::SortedMap;
-use latt_adapter::process::{BoundedError, run_bounded};
+use latt_adapter::process::{BoundedError, spawn_bounded};
 
 use serde_json::{Map, Value};
 
 use crate::graph::{EdgeSpec, LatticeGraph};
 use crate::profile::Profile;
-use crate::types::{Issue, Provenance, Severity};
+use crate::types::{Issue, Origin, Provenance, Severity};
+use crate::validate::{FindingCode, default_severity};
 
 mod wire;
 
@@ -43,18 +45,87 @@ pub const SUPPORTED_INTERFACE_VERSIONS: &[&str] = &["1.0", "1.1", "1.2", "1.3", 
 /// Distinct from an `Issue` on purpose. An issue is something wrong with the
 /// register; this is something wrong with the adapter, which means the core has no
 /// trustworthy view of the register at all. The CLI maps it to exit 2.
-#[derive(Debug, thiserror::Error)]
-#[error("{message}")]
+///
+/// [`kind`](Self::kind) says which way it failed, and [`source`](std::error::Error::source)
+/// carries the parser or I/O error underneath when there is one. The text is
+/// for people and may change editorially.
+#[derive(Debug)]
 #[non_exhaustive]
 pub struct ContractError {
+    kind: ContractErrorKind,
     message: String,
+    // Unwind-safe by assertion: the cause is only ever read, and a bare boxed
+    // `dyn Error` would drop `UnwindSafe` from a type that has always had it.
+    source: Option<std::panic::AssertUnwindSafe<Box<dyn std::error::Error + Send + Sync>>>,
+}
+
+impl std::fmt::Display for ContractError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for ContractError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.source
+            .as_ref()
+            .map(|cause| &*cause.0 as &(dyn std::error::Error + 'static))
+    }
+}
+
+/// How a [`ContractError`] failed, for a caller that branches on the cause.
+///
+/// A category can be added in a minor release; a `match` needs a wildcard arm.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ContractErrorKind {
+    /// The adapter wrote nothing.
+    EmptyOutput,
+    /// The output is not JSON.
+    NotJson,
+    /// The document declares an interface version this build does not read.
+    UnsupportedVersion,
+    /// The output is not UTF-8.
+    NotUtf8,
+    /// The document is JSON of the wrong shape: a missing key, a wrong type,
+    /// an unreadable entry.
+    Schema,
+    /// The adapter could not be started, or its inputs could not be prepared.
+    Launch,
+    /// The adapter ran and failed: a non-zero exit, a signal, or a native
+    /// adapter's refusal.
+    Failed,
+    /// The adapter outlived its bound and was killed.
+    TimedOut,
+    /// The profile names a native adapter this build does not carry.
+    Unavailable,
 }
 
 impl ContractError {
     pub(crate) fn new(message: impl Into<String>) -> Self {
+        Self::of(ContractErrorKind::Schema, message)
+    }
+
+    pub(crate) fn of(kind: ContractErrorKind, message: impl Into<String>) -> Self {
         Self {
+            kind,
             message: message.into(),
+            source: None,
         }
+    }
+
+    pub(crate) fn caused_by(
+        mut self,
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        self.source = Some(std::panic::AssertUnwindSafe(Box::new(source)));
+        self
+    }
+
+    /// Return how it failed. Branch on this, not on the text.
+    #[must_use]
+    pub fn kind(&self) -> ContractErrorKind {
+        self.kind
     }
 
     /// Return the explanation, the same text `Display` writes. It is for
@@ -345,8 +416,9 @@ fn check_version(document: &Value) -> Result<(), ContractError> {
     };
     if !SUPPORTED_INTERFACE_VERSIONS.contains(&version) {
         let supported = SUPPORTED_INTERFACE_VERSIONS.join(", ");
-        return err(format!(
-            "unsupported interface version '{version}'; this lattice supports {supported}"
+        return Err(ContractError::of(
+            ContractErrorKind::UnsupportedVersion,
+            format!("unsupported interface version '{version}'; this lattice supports {supported}"),
         ));
     }
     Ok(())
@@ -498,20 +570,28 @@ fn report_rejected(graph: &mut LatticeGraph, rejected: Vec<RejectedEntry>) {
         match unread_edges {
             0 => {}
             1 => message.push_str("; its 1 edge was not read"),
-            n => message.push_str(&format!("; its {n} edges were not read")),
+            n => {
+                let _ = write!(message, "; its {n} edges were not read");
+            }
         }
         match unattributed_edges {
             0 => {}
-            1 => message.push_str(&format!(
-                "; 1 edge from '{}' has no declared_by and was read, \
+            1 => {
+                let _ = write!(
+                    message,
+                    "; 1 edge from '{}' has no declared_by and was read, \
                  though this entry may have declared it",
-                duplicate.node_id
-            )),
-            n => message.push_str(&format!(
-                "; {n} edges from '{}' have no declared_by and were read, \
+                    duplicate.node_id
+                );
+            }
+            n => {
+                let _ = write!(
+                    message,
+                    "; {n} edges from '{}' have no declared_by and were read, \
                  though this entry may have declared them",
-                duplicate.node_id
-            )),
+                    duplicate.node_id
+                );
+            }
         }
         graph.add_issue(Issue::new(
             Severity::Error,
@@ -656,6 +736,37 @@ fn ingest_axes(graph: &mut LatticeGraph, document: &mut Value) -> Result<(), Con
     Ok(())
 }
 
+/// Report each pre-1.2 document key the adapter wrote, after its own findings.
+/// Info, so a register that ingests today keeps passing under `--strict`.
+pub(super) fn report_deprecated_keys(
+    graph: &mut LatticeGraph,
+    legacy_version: bool,
+    legacy_findings: bool,
+) {
+    let messages = [
+        (
+            legacy_version,
+            "'contract_version' is the old name of 'interface_version'; emit 'interface_version'",
+        ),
+        (
+            legacy_findings,
+            "'issues' is the pre-1.2 name of 'findings'; emit 'findings'",
+        ),
+    ];
+    for (present, message) in messages {
+        if present {
+            let code = FindingCode::DeprecatedKey;
+            graph.add_issue(Issue::new(
+                default_severity(code),
+                code.as_str(),
+                message,
+                Origin::Adapter,
+                None,
+            ));
+        }
+    }
+}
+
 /// Ingest the adapter's findings from whichever alias carries them.
 ///
 /// `issues` (before 1.2) and `findings` (1.2) name one channel. Both are read, so
@@ -705,10 +816,63 @@ fn ingest_issues(graph: &mut LatticeGraph, document: &mut Value) -> Result<(), C
 #[must_use = "the parsed document is the ingest input"]
 pub fn parse_document(text: &str) -> Result<Value, ContractError> {
     if text.trim().is_empty() {
-        return err("adapter emitted no output");
+        return Err(ContractError::of(
+            ContractErrorKind::EmptyOutput,
+            "adapter emitted no output",
+        ));
     }
-    serde_json::from_str(text)
-        .map_err(|e| ContractError::new(format!("could not parse adapter output as JSON: {e}")))
+    serde_json::from_str(text).map_err(|e| {
+        ContractError::of(
+            ContractErrorKind::NotJson,
+            format!("could not parse adapter output as JSON: {e}"),
+        )
+        .caused_by(e)
+    })
+}
+
+/// The default cap on what an external adapter or a fuse source run may write to
+/// stdout: about 70 times the largest measured interface document.
+pub(crate) const DEFAULT_ADAPTER_OUTPUT_BYTES: usize = 1 << 30;
+
+/// What is kept of an external adapter's stderr: its last megabyte.
+pub(crate) const ADAPTER_STDERR_TAIL_BYTES: usize = 1 << 20;
+
+const ADAPTER_OUTPUT_ENV: &str = "LATT_ADAPTER_MAX_OUTPUT_BYTES";
+
+/// The stdout cap in bytes: [`DEFAULT_ADAPTER_OUTPUT_BYTES`], or the positive
+/// whole number in `LATT_ADAPTER_MAX_OUTPUT_BYTES`.
+///
+/// # Errors
+///
+/// The message naming the variable when it is set to anything else, empty
+/// included: a typo must not silently restore or lift the cap.
+pub(crate) fn adapter_output_limit() -> Result<usize, String> {
+    let Some(value) = std::env::var_os(ADAPTER_OUTPUT_ENV) else {
+        return Ok(DEFAULT_ADAPTER_OUTPUT_BYTES);
+    };
+    value
+        .to_str()
+        .and_then(|text| text.parse::<usize>().ok())
+        .filter(|bytes| *bytes > 0)
+        .ok_or_else(|| {
+            format!(
+                "{ADAPTER_OUTPUT_ENV} must be a positive whole number of bytes, got '{}'",
+                value.to_string_lossy()
+            )
+        })
+}
+
+/// `bytes` as `N GiB` or `N MiB` when it is a whole number of them, else as `N bytes`.
+pub(crate) fn describe_byte_count(bytes: usize) -> String {
+    const MIB: usize = 1 << 20;
+    const GIB: usize = 1 << 30;
+    if bytes.is_multiple_of(GIB) {
+        format!("{} GiB", bytes / GIB)
+    } else if bytes.is_multiple_of(MIB) {
+        format!("{} MiB", bytes / MIB)
+    } else {
+        format!("{bytes} bytes")
+    }
 }
 
 /// The adapter's own diagnosis, trimmed. It usually explains why the run failed.
@@ -773,10 +937,14 @@ fn create_scratch_file_in(
 impl ScratchFile {
     fn write(self, mut file: File, contents: &str) -> Result<Self, ContractError> {
         file.write_all(contents.as_bytes()).map_err(|error| {
-            ContractError::new(format!(
-                "could not write resolved profile {}: {error}",
-                self.0.display()
-            ))
+            ContractError::of(
+                ContractErrorKind::Launch,
+                format!(
+                    "could not write resolved profile {}: {error}",
+                    self.0.display()
+                ),
+            )
+            .caused_by(error)
         })?;
         // The adapter opens the file itself; release the writer first.
         drop(file);
@@ -799,9 +967,11 @@ fn adapter_prefixed_name(program: &Path) -> Option<std::path::PathBuf> {
 fn resolved_profile_scratch(contents: &str) -> Result<ScratchFile, ContractError> {
     let (scratch, file) =
         create_scratch_file_in(&std::env::temp_dir(), scratch_nonce).map_err(|error| {
-            ContractError::new(format!(
-                "could not create resolved profile scratch file: {error}"
-            ))
+            ContractError::of(
+                ContractErrorKind::Launch,
+                format!("could not create resolved profile scratch file: {error}"),
+            )
+            .caused_by(error)
         })?;
     scratch.write(file, contents)
 }
@@ -831,7 +1001,14 @@ pub fn run_adapter(
     target_path: &Path,
     bound: Duration,
 ) -> Result<LatticeGraph, ContractError> {
-    run_external(program, resolved_profile, target_path, bound, None)
+    let limit = checked_output_limit()?;
+    run_external(program, resolved_profile, target_path, bound, None, limit)
+}
+
+/// [`adapter_output_limit`] as a launch error, checked before any adapter, native or
+/// external, runs.
+fn checked_output_limit() -> Result<usize, ContractError> {
+    adapter_output_limit().map_err(|message| ContractError::of(ContractErrorKind::Launch, message))
 }
 
 /// [`run_adapter`], naming `profile_path` where the adapter's stderr names the
@@ -842,6 +1019,7 @@ fn run_external(
     target_path: &Path,
     bound: Duration,
     profile_path: Option<&Path>,
+    limit: usize,
 ) -> Result<LatticeGraph, ContractError> {
     let scratch = resolved_profile_scratch(resolved_profile)?;
     let command = |program: &Path| {
@@ -853,7 +1031,13 @@ fn run_external(
             .arg(target_path);
         command
     };
-    let mut result = run_bounded(command(program), bound);
+    let run = |command: Command| {
+        spawn_bounded(command, bound)?
+            .output_limit(limit)
+            .stderr_tail(ADAPTER_STDERR_TAIL_BYTES)
+            .wait_output()
+    };
+    let mut result = run(command(program));
     // A release install has `latt-adapter-<name>` on PATH beside `latt`, and the
     // shims and docs spell the adapter `<name>`. Only a bare name is retried:
     // a path is the user's choice, and a fuse source resolves against its
@@ -865,28 +1049,46 @@ fn run_external(
         _ => None,
     };
     if let Some(fallback) = &fallback {
-        result = run_bounded(command(fallback), bound);
+        result = run(command(fallback));
     }
     let output = result.map_err(|e| match e {
-        BoundedError::TimedOut { bound, .. } => ContractError::new(format!(
-            "adapter '{}' exceeded {} s",
-            program.display(),
-            bound.as_secs()
-        )),
+        BoundedError::Io(e) if e.kind() == std::io::ErrorKind::FileTooLarge => ContractError::of(
+            ContractErrorKind::Failed,
+            format!(
+                "adapter '{}' wrote more than {} to stdout and was stopped; \
+                     its output is never truncated",
+                program.display(),
+                describe_byte_count(limit)
+            ),
+        )
+        .caused_by(e),
+        BoundedError::TimedOut { bound, .. } => ContractError::of(
+            ContractErrorKind::TimedOut,
+            format!(
+                "adapter '{}' exceeded {} s",
+                program.display(),
+                bound.as_secs()
+            ),
+        ),
         BoundedError::Io(e) => {
             let tried = fallback.as_deref().map_or_else(String::new, |fallback| {
                 format!(" (also tried '{}' on PATH)", fallback.display())
             });
-            ContractError::new(format!(
-                "could not run adapter '{}'{tried}: {e}; {}",
-                program.display(),
-                native_availability()
-            ))
+            ContractError::of(
+                ContractErrorKind::Launch,
+                format!(
+                    "could not run adapter '{}'{tried}: {e}; {}",
+                    program.display(),
+                    native_availability()
+                ),
+            )
+            .caused_by(e)
         }
-        e => ContractError::new(format!(
-            "could not run adapter '{}': {e}",
-            program.display()
-        )),
+        e => ContractError::of(
+            ContractErrorKind::Launch,
+            format!("could not run adapter '{}': {e}", program.display()),
+        )
+        .caused_by(e),
     })?;
 
     if !output.status.success() {
@@ -904,19 +1106,23 @@ fn run_external(
             &String::from_utf8_lossy(&output.stderr)
                 .replace(&scratch.0.display().to_string(), &shown),
         );
-        return Err(ContractError::new(if detail.is_empty() {
-            message
-        } else {
-            format!("{message}: {detail}")
-        }));
+        return Err(ContractError::of(
+            ContractErrorKind::Failed,
+            if detail.is_empty() {
+                message
+            } else {
+                format!("{message}: {detail}")
+            },
+        ));
     }
 
     // A lossy decode would ingest U+FFFD in place of what the adapter wrote.
     let stdout = std::str::from_utf8(&output.stdout).map_err(|e| {
-        ContractError::new(format!(
-            "adapter '{}' output is not UTF-8: {e}",
-            program.display()
-        ))
+        ContractError::of(
+            ContractErrorKind::NotUtf8,
+            format!("adapter '{}' output is not UTF-8: {e}", program.display()),
+        )
+        .caused_by(e)
     })?;
     ingest_text(stdout)
 }
@@ -992,13 +1198,15 @@ pub fn ingest_text(text: &str) -> Result<LatticeGraph, ContractError> {
 /// let error = ingest_document(json!({"interface_version": "1.2", "node": []})).unwrap_err();
 /// assert_eq!(error.message(), "document: unknown key 'node'");
 ///
-/// // An empty `findings` does not hide a populated `issues`.
+/// // An empty `findings` does not hide a populated `issues`, and the old key
+/// // is reported after the adapter's own findings.
 /// let finding = json!({"severity": "error", "code": "PARSE_ERROR", "message": "m",
 ///                      "provenance": {"file": "r.md", "line": 1}, "node_id": null});
 /// let graph = ingest_document(json!({
 ///     "interface_version": "1.2", "findings": [], "issues": [finding]
 /// }))?;
-/// assert_eq!(graph.adapter_issues().len(), 1);
+/// let codes: Vec<&str> = graph.adapter_issues().iter().map(|i| i.code.as_str()).collect();
+/// assert_eq!(codes, ["PARSE_ERROR", "DEPRECATED_KEY"]);
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub fn ingest_document(mut document: Value) -> Result<LatticeGraph, ContractError> {
@@ -1011,8 +1219,11 @@ pub fn ingest_document(mut document: Value) -> Result<LatticeGraph, ContractErro
     check_version(&document)?;
     reject_unknown_keys(&document, DOCUMENT_KEYS, "document")?;
 
+    let legacy_version = document.get("contract_version").is_some();
+    let legacy_findings = document.get("issues").is_some();
     let mut graph = LatticeGraph::new();
     ingest_issues(&mut graph, &mut document)?;
+    report_deprecated_keys(&mut graph, legacy_version, legacy_findings);
     ingest_axes(&mut graph, &mut document)?;
     let (node_count, mut rejected) = ingest_nodes(&mut graph, &mut document)?;
     ingest_edges(&mut graph, &mut document, node_count, &mut rejected)?;
@@ -1177,10 +1388,18 @@ fn run_native(
     // As text, not a JSON value: the typed reader then holds no tree of the
     // whole document beside the graph.
     let mut text = Vec::new();
-    write_native_document(name, &scratch.0, target_path, &mut text)
-        .map_err(|e| ContractError::new(native_failure(name, &scratch.0, profile_path, &e)))?;
+    write_native_document(name, &scratch.0, target_path, &mut text).map_err(|e| {
+        ContractError::of(
+            ContractErrorKind::Failed,
+            native_failure(name, &scratch.0, profile_path, &e),
+        )
+    })?;
     let text = std::str::from_utf8(&text).map_err(|e| {
-        ContractError::new(format!("native adapter '{name}' output is not UTF-8: {e}"))
+        ContractError::of(
+            ContractErrorKind::NotUtf8,
+            format!("native adapter '{name}' output is not UTF-8: {e}"),
+        )
+        .caused_by(e)
     })?;
     ingest_text(text)
 }
@@ -1309,10 +1528,16 @@ pub fn run_adapter_spec_for_profile(
     bound: Duration,
     profile_path: Option<&Path>,
 ) -> Result<LatticeGraph, ContractError> {
+    let limit = checked_output_limit()?;
     match spec {
-        AdapterSpec::External(program) => {
-            run_external(program, resolved_profile, target_path, bound, profile_path)
-        }
+        AdapterSpec::External(program) => run_external(
+            program,
+            resolved_profile,
+            target_path,
+            bound,
+            profile_path,
+            limit,
+        ),
         AdapterSpec::Native(native) => {
             #[cfg(feature = "native-adapters")]
             {
@@ -1321,9 +1546,9 @@ pub fn run_adapter_spec_for_profile(
             #[cfg(not(feature = "native-adapters"))]
             {
                 let _ = (native, resolved_profile, target_path, profile_path);
-                Err(ContractError::new(
-                    "native adapters are not compiled in (feature 'native-adapters' is disabled)"
-                        .to_owned(),
+                Err(ContractError::of(
+                    ContractErrorKind::Unavailable,
+                    "native adapters are not compiled in (feature 'native-adapters' is disabled)",
                 ))
             }
         }

@@ -7,7 +7,8 @@ exactly a tracked repository path outside the install, and on a relative link
 that leaves the install or names no file. A ``#fragment`` on a link to a
 Markdown page, or on a bare ``#fragment``, must name a heading of that page,
 slugged as GitHub and GitLab slug it. A link to this repository on GitHub
-must pin the tag of the workspace version and name a tracked path, so it
+must pin the tag of the workspace version (for a pre-release, of the release
+it is heading for) and name a tracked path, so it
 resolves to the text the install shipped with; a link to a release page
 must name that tag too.
 
@@ -34,7 +35,7 @@ SHIPPED = [
     if line and not line.startswith("#")
 ]
 PAGES = [REPO_ROOT / "README.md", REPO_ROOT / "AGENTS.md", *sorted((REPO_ROOT / "docs").rglob("*.md")),
-         *sorted((REPO_ROOT / "skills").rglob("*.md"))]
+         *sorted((REPO_ROOT / "skills").rglob("*.md")), *sorted((REPO_ROOT / "examples").rglob("*.md"))]
 GITHUB_BLOB = re.compile(r"https://github\.com/jonelay/lattice/blob/([^/]+)/([^)#\s]+)")
 GITHUB_RELEASE = re.compile(r"https://github\.com/jonelay/lattice/releases/tag/([^/)#\s]+)")
 # Links an installed reader is not expected to follow, each with why.
@@ -93,9 +94,15 @@ def prose(text: str) -> str:
     return "\n".join(out)
 
 
+def pinned_tag(version: str) -> str:
+    """Return the tag a link pins: the release itself, or for a pre-release the
+    release it is heading for, since GitHub carries release tags alone."""
+    return "v" + re.split(r"[-+]", version, maxsplit=1)[0]
+
+
 def problems(page: Path, text: str | None = None) -> list[str]:
     rel_page = page.relative_to(REPO_ROOT).as_posix()
-    version = tomllib.loads((REPO_ROOT / "Cargo.toml").read_text())["workspace"]["package"]["version"]
+    tag = pinned_tag(tomllib.loads((REPO_ROOT / "Cargo.toml").read_text())["workspace"]["package"]["version"])
     text = page.read_text() if text is None else text
     found = []
     for n, line in enumerate(prose(text).splitlines(), 1):
@@ -109,14 +116,14 @@ def problems(page: Path, text: str | None = None) -> list[str]:
         for target in re.findall(r"\]\(([^)\s]+)\)", bare):
             if m := GITHUB_BLOB.match(target):
                 ref, path = m.groups()
-                if ref != f"v{version}":
-                    found.append(f"{where}: {target} pins {ref}, not v{version}")
+                if ref != tag:
+                    found.append(f"{where}: {target} pins {ref}, not {tag}")
                 if path not in TRACKED:
                     found.append(f"{where}: {target} names no tracked path")
                 continue
             if m := GITHUB_RELEASE.match(target):
-                if m.group(1) != f"v{version}":
-                    found.append(f"{where}: {target} pins {m.group(1)}, not v{version}")
+                if m.group(1) != tag:
+                    found.append(f"{where}: {target} pins {m.group(1)}, not {tag}")
                 continue
             if "://" in target or target.startswith("mailto:"):
                 continue
@@ -155,6 +162,15 @@ def test_the_guard_catches_an_unshipped_path() -> None:
             "And [z](cli.md#no-such-heading), [w](#probe) and [v](#nowhere).\n")
     found = problems(REPO_ROOT / "docs" / "probe.md", text)
     assert len(found) == 6, found
+
+
+@pytest.mark.parametrize(("version", "tag"), [
+    ("0.8.1", "v0.8.1"),
+    ("0.8.1-rc.1", "v0.8.1"),
+    ("1.0.0-beta.2+build.5", "v1.0.0"),
+])
+def test_a_pre_release_pins_the_release_it_is_heading_for(version: str, tag: str) -> None:
+    assert pinned_tag(version) == tag
 
 
 def test_node_placeholder_codes_match_the_codes_contract() -> None:

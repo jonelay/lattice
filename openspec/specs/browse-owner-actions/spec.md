@@ -186,12 +186,16 @@ captures stdout and stderr, and browse draws `running <verb>…` while it waits.
 program exits, an output pane SHALL show stdout, then stderr under its own heading, and
 the exit code. The pane scrolls with the navigation keys and closes with `Esc` or `q`.
 Captured output beyond 1 MiB per stream SHALL be cut and the pane SHALL say it was cut.
+A stream whose read fails before it ends SHALL be marked in the pane, after what was
+read, as `[<stream> read failed after <N> bytes: <why>]` (`[<stream> read failed: the
+reader stopped]` when nothing could be recovered), and the pane's title SHALL add
+`output incomplete` to the exit code.
 `Esc` while the program runs SHALL terminate the program, and the pane SHALL say it was
 stopped. `Ctrl-C` and `Q` keep their meaning and quit browse: the program is terminated
 first, and is never left running. A capture action does not reload.
 
 Verified by: `cargo test -p latt --locked owner_action::capture`
-(the pane, its scrolling, the 1 MiB cut, the command's directory and arguments) and
+(the pane, its scrolling, the 1 MiB cut, a failed read, the command's directory and arguments) and
 `cargo test -p latt --locked --test cli` (`a_capture_shows_the_program_output`,
 `esc_stops_a_running_capture`, `ctrl_c_during_a_capture_quits_and_stops_the_program`; Linux).
 

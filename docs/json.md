@@ -1,7 +1,8 @@
 # JSON output
 
 `--format json` is the output for scripts and agents. Its shape is a public surface: a
-patch release never changes it; below 1.0 a minor release may, with the change listed
+patch release may add keys or values but never removes or changes one; below 1.0 a minor
+release may, with the change listed
 under Breaking in `CHANGELOG.md`. The tests fail when the binary and this page disagree.
 
 For example, `latt validate --profile profiles/toml.yaml --adapter toml --target tests/fixtures/mini-toml --format json`
@@ -78,9 +79,10 @@ A finding about a whole input sits at line 0 under a reserved `file` name:
 | `file` | The input |
 |--------|-----------|
 | `<profile>` | the profile's configuration |
-| `<fuse-profile>` | a fuse profile |
+| `<fuse-profile>` | a fuse profile's own entries: `SUPPRESS_UNUSED` and a fuse `CONFIG_ERROR`; `COVERAGE_UNKNOWN` and `EMPTY_KIND` use `<profile>` |
 | `<source>` | a fuse source that could not run |
 | `<suggestions>` | a suggestion document |
+| `<adapter>` | the adapter's interface document |
 
 Fuse reads these back from a source's trace; a Rust host sees them as `Origin` variants
 ([embedding.md](embedding.md)). Finding codes and default severities:
@@ -162,7 +164,7 @@ node_counts             per declared node kind, zero included
 node_counts.<kind>
 edge_counts             per declared edge kind
 edge_counts.<kind>
-finding_counts[]        per (code, severity) seen; empty when clean
+finding_counts[]        per unsuppressed (code, severity) seen, validation findings included; empty when clean
 finding_counts[].code
 finding_counts[].severity
 finding_counts[].count
@@ -198,7 +200,59 @@ kinds[].outgoing_pct
 ```
 
 Any edge counts, structural `contains`-style edges included. For one edge kind, use a
-`COVERAGE` validation.
+`COVERAGE` validation or `coverage --rule N`.
+
+## coverage --rule N
+
+```text
+rule                            one-based ordinal among resolved COVERAGE entries
+target_kind
+edge_kind
+direction                       incoming
+where                           resolved target conditions; {} when absent
+where.<*>?
+source_where                    resolved evidence-source conditions; {} when absent
+source_where.<*>?
+total                           explicit target-kind nodes matching where
+covered                         selected targets with admitted incoming evidence
+covered_pct                     one decimal; null when total is 0
+missing[]                       selected uncovered nodes, in ID order
+missing[].id
+missing[].file
+missing[].line                  0 when unspecified
+missing[].state                 unknown or unverified
+uncertainty.source_kinds[]      allowed source kinds for the target kind
+uncertainty.source_total        explicit allowed-source-kind nodes matching source_where
+uncertainty.unattributed        those with no outgoing selected edge
+uncertainty.input_status        partial with PARSE_ERROR or host partial input; otherwise unknown
+uncertainty.findings[]          resolved adapter findings, retained regardless of SUPPRESS
+uncertainty.findings[].severity
+uncertainty.findings[].code
+uncertainty.findings[].file
+uncertainty.findings[].line
+uncertainty.findings[].message
+uncertainty.findings[].node_id
+uncertainty.findings[].state?
+uncertainty.findings[].suppressed?
+uncertainty.findings[].note?
+uncertainty.findings[].note.text
+uncertainty.findings[].note.at?
+uncertainty.findings[].note.by?
+uncertainty.findings[].note.until?
+uncertainty.findings[].note.until.pathway?
+uncertainty.findings[].note.until.position?
+uncertainty.findings[].note.expired?
+```
+
+Coverage uses the direct validation rule's semantics: incoming edges from explicit
+sources matching `source_where`, one count per selected target. Other edge kinds
+contribute nothing. An outgoing edge to an absent target still attributes its source.
+Missing nodes have state `unknown` when the admitted source population includes
+unattributed nodes, otherwise `unverified`. This attribution state is separate
+from input completeness: both input-status values leave completeness unproven.
+
+On success the adapter findings appear here on stdout, with no duplicate stderr
+block. Exit codes and rule selection are defined in [cli.md](cli.md#rule-coverage).
 
 ## describe
 
@@ -391,9 +445,9 @@ filter `nodes[]` and `edges[]` here.
   `FUSE_ERROR` or `SOURCE_FAILURE` that stopped it is among the findings.
 
 ```text
-header.name             the manifest's name
-header.version          the manifest's version
-header.manifest_version manifest format version
+header.name?            the manifest's name; absent when the manifest did not load
+header.version?         the manifest's version; absent when the manifest did not load
+header.manifest_version? manifest format version; absent when the manifest did not load
 header.fuse_version     report envelope version
 nodes[]
 nodes[].id
@@ -429,6 +483,7 @@ findings[].message
 findings[].node_id
 findings[].source?      absent on fuse-profile-level and multi-location findings
 findings[].sources?     every source a multi-location finding names
+findings[].stage?       a SOURCE_FAILURE or FUSE_ERROR fuse raises: manifest, fuse_profile, source_run, timeout, source_output, source_profile or composition; absent on one a source carried
 findings[].locations?   one per location, e.g. CROSS_SOURCE_DUPLICATE_ID
 findings[].locations[].file
 findings[].locations[].line
@@ -449,8 +504,8 @@ Fuse-profile-level findings include `COVERAGE_UNKNOWN` and `SUPPRESS_UNUSED`.
 
 ## Adapter findings on stderr
 
-`query`, `summary` and `coverage` keep the adapter's own findings (`PARSE_ERROR` and the
-like) out of the answer. In `json` mode they go to stderr after the answer, as one object
+`query`, `summary` and `coverage` without `--rule` keep the adapter's own findings
+(`PARSE_ERROR` and the like) out of the answer. In `json` mode they go to stderr after the answer, as one object
 in the `validate` shape:
 
 ```text
@@ -475,9 +530,8 @@ findings[].note.expired?
 
 | Command | Exit code with adapter findings |
 |---------|-------------------------------|
-| `query`, `coverage` | 0 |
+| `query`, `coverage` | 0, except 2 when the adapter read no node and reported an error-severity finding, suppressed or not (`query at` still answers) |
 | `summary` | 1 when one is an unsuppressed error |
-| any | 2 when the adapter read nothing from the register |
 
 With no adapter findings, nothing goes to stderr. Stderr can also carry plain text, so
 read it as lines:
@@ -486,3 +540,15 @@ read it as lines:
   revision that has any, each after a line naming the revision (`HEAD:`).
 - A `--filter` on an attr no node carries prints a `Warning:` line; the answer is unchanged.
 - At exit 2 the reason is a plain-text `Error:` line.
+
+`fuse` at exit 2 writes its failures the same way: after the report, one object in the
+shape above, one finding per `SOURCE_FAILURE` or `FUSE_ERROR`, ordered as `validate`
+orders findings. The shape has no `source` or `stage` key, so a source's `message` begins
+`source '<name>' failed at <stage>: ` and a `FUSE_ERROR`'s begins `<stage> failed: `;
+each ends `. Next: ` and what to do (see [fuse.md](fuse.md#1-source-runs)). A failure a
+source carried has no stage, so its `message` begins `source '<name>' failed: ` and has
+no `Next:`. In the name and the message, each control character but tab, each bidi
+control and U+2028/U+2029 is written as a visible escape (`\n`, `\u{1b}`), the set
+[plain output](cli.md#output-formats) escapes. The report's
+own `message` is unchanged. Stdout keeps the full report, so a consumer that merges the two
+streams (`2>&1`) reads two JSON values at exit 2; a run that exits 0 or 1 writes no object.

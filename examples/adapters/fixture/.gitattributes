@@ -1,0 +1,2 @@
+# The fixture tests exact bytes: a BOM, CRLF line ends, a non-UTF-8 line.
+* -text

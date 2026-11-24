@@ -35,12 +35,17 @@ pub fn build_describe_report(
         .node_kinds()
         .iter()
         .map(|(kind, declared)| {
-            let (count, files) = tally.nodes.get(kind).cloned().unwrap_or_default();
+            let (count, files) = tally
+                .nodes
+                .get(kind)
+                .map_or((0, Vec::new()), |(count, files)| {
+                    (*count, files.iter().map(|&file| file.to_owned()).collect())
+                });
             DescribeNodeKind {
                 kind: kind.clone(),
                 id_pattern: declared.id_pattern_source.clone(),
                 count,
-                files: files.into_iter().collect(),
+                files,
             }
         })
         .collect();

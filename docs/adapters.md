@@ -77,17 +77,17 @@ the profile itself is fine.
 ### Timeouts
 
 A wall-clock bound kills, on expiry, an external adapter run, the entomologist adapter's
-`git` commands, the `git archive` behind `query diff`, and the `git log` behind a
-`browse` provenance preview. Unbounded: programs started from `browse` (owner actions,
-`$EDITOR`) and `fuse`'s per-source `latt trace` as a whole; an external adapter that
-`fuse` runs uses its source profile's key.
+`git` commands, the `git ls-tree` and `git cat-file` behind `query diff`, the `git log` behind a
+`browse` provenance preview, and `fuse`'s per-source `latt trace`, bounded by its source
+profile's `timeout_seconds` plus 30 s. Unbounded: programs started from `browse` (owner
+actions, `$EDITOR`).
 
 Both keys take a positive integer of seconds; any other value refuses the profile (exit
 2). Native adapters read neither.
 
 | Key | Default | Read by | Covers | On expiry |
 |---|---|---|---|---|
-| `timeout_seconds` | 300 | the core | the adapter's whole run; also each `git archive \| tar` pair of `query diff` | exit 2 naming the program (or revision) and the bound; nothing ingested |
+| `timeout_seconds` | 300 | the core | the adapter's whole run; also each revision `query diff` reads from its committed blobs (`git ls-tree` plus one `git cat-file --batch`, one bound for both; attributes and filters do not apply, a submodule is an empty directory) | exit 2 naming the program (or revision) and the bound; nothing ingested |
 | `command_timeout_seconds` | 60 | the entomologist adapter | one `git` subprocess; all blobs come from one `cat-file --batch`, so the whole read | `PARSE_ERROR` naming the command and the bound; the adapter continues, exit 0 |
 
 ```yaml
@@ -95,6 +95,24 @@ adapter:
   timeout_seconds: 600
   command_timeout_seconds: 120
 ```
+
+### Output size
+
+The core stops an external adapter, and `fuse`'s per-source `latt trace`, that writes more
+than 1 GiB to stdout. The run is killed and exits 2 (a source in `fuse` becomes a
+`SOURCE_FAILURE` at stage `source_output`) with `adapter '<program>' wrote more than 1 GiB
+to stdout and was stopped; its output is never truncated`. A document is never cut short
+and ingested. Of stderr only the last 1 MiB is kept, so a program that floods it still
+reports its exit code with the tail as the explanation.
+
+`LATT_ADAPTER_MAX_OUTPUT_BYTES` sets the stdout limit as a positive whole number of bytes.
+Any other value, empty included, is exit 2 naming the variable, for a native adapter as
+well as an external one. There is no profile key. Native adapters run in the process and
+are not covered by the limit itself.
+
+The limit bounds how much adapter output is buffered and says nothing about the memory
+ingest needs. Parsing an interface document takes many times its size in memory. An
+adapter that writes near the limit can exhaust memory before the limit applies.
 
 ## Shared rules
 
@@ -105,9 +123,13 @@ These hold for md, TOML and prose-xref unless a section says otherwise.
 - **Profile errors** (md, TOML) name your `--profile` path, the adapter, and serde's field
   and position: ``could not load profile profiles/x.yaml for adapter md: missing field `id_column` at line 1 column 166``.
 - **Unreadable paths:** a matching symlink to nothing, or a matching path whose name is
-  not UTF-8, is a `PARSE_ERROR` and is skipped. Symlinked directories are not followed.
+  not UTF-8, is a `PARSE_ERROR` and is skipped. Symlinked directories are not followed,
+  so a link cycle cannot recurse; each one is an `UNFOLLOWED_LINK` info finding at its
+  path, which a profile can raise with `validations: [{UNFOLLOWED_LINK: {severity: warning}}]`.
 - **No matching files:** a readable target where nothing matches `paths.files` gets a
   `NO_MATCHING_FILES` info finding naming the globs and the target.
+- **Recursive globs:** `**` spans directories and matches path components containing
+  newlines. `**/*.md` selects root and nested Markdown files.
 - **Non-UTF-8 lines:** each is a `PARSE_ERROR` at that line naming the column of the
   first bad byte and showing the line with each such byte as `\xNN`. Each section says
   what happens to the rest.
@@ -178,7 +200,7 @@ adapter:
 |---|---|---|---|
 | `heading` | in `tables` | | regex over the heading text |
 | `kind` | in `tables` | | node kind of the rows; must be in `node_kinds` |
-| `id_column` | yes | | header of the ID column |
+| `id_column` | yes | | header of the ID column, or its zero-based numeric index |
 | `column_map` | no | empty | header → string attr (`""` when empty) |
 | `edge_columns` | no | empty | header → edge kind |
 | `strip_emphasis` | no | `false` | strip wrapping emphasis from IDs and edge targets |
@@ -202,6 +224,8 @@ listed in `edge_columns` to read its link.
 - A row with fewer cells than its header is a `PARSE_ERROR` ("table row has fewer
   columns than its header") and no node, and so is one with more. Lattice does not pad
   short rows as GitHub does.
+- A table that lacks a header named in `column_map` or `edge_columns` is a `PARSE_ERROR`
+  ("configured column '…' was not found in table headers"), reported per table.
 - A table without the ID column, prose tables included, is a `PARSE_ERROR` ("configured
   ID column … was not found in table headers"); so is an unmatched table in multi-table
   form. Fence a prose table or narrow `paths.files` to keep it out.
@@ -219,6 +243,14 @@ When a glob's leading directories repeat the target's (`--target docs` with
 
 `profiles/md-sources.yaml` shows `id_names` with `cargo`, `pytest`, `gotest` and `file`
 tables.
+
+Python source names follow Unicode identifier rules and normalize to NFKC, as
+Python's AST does. A citation to a truncated name before a combining mark does
+not resolve to the longer definition. Python source scanning treats LF, CRLF and CR
+as line endings for definitions and error locations.
+
+Rust source checks follow inline modules without a depth limit. Malformed or unreadable
+source still reports a located `PARSE_ERROR`; citations to that file are left unchecked.
 
 ## TOML adapter
 
@@ -394,6 +426,7 @@ profile version `1.1.0`).
 | `WRAPPED_REF` (info) | a bare `§` finds no heading and the previous line ends with a path; join the lines |
 | `PARSE_ERROR` | `§` without backticks or with nothing after it; a path leaving the target with `..` ("target outside the register"); an unclosed fence (at its opening line); a missing `content_dirs` directory; an unreadable file |
 | `NO_MATCHING_FILES` | nothing under the directories matches; names globs and directories |
+| `UNFOLLOWED_LINK` (info) | a symlinked directory under a content directory; it is not walked |
 
 **Syntax:**
 
@@ -611,6 +644,10 @@ prints an interface document is an adapter:
 The core checks kinds and IDs against the profile. Your findings are kept as written,
 even with a code the profile does not list.
 
+[`examples/adapters/`](../examples/adapters/README.md) holds templates in Python, Go and
+Rust that meet this contract. Each reads the same small line format, prints the same
+document for its fixture, and comes with a test to keep when you copy it.
+
 ### The contract
 
 **Input.** The `--profile` file is the core's resolved profile as JSON: the whole profile
@@ -633,7 +670,9 @@ any level except inside `attrs`, is exit 2:
 - **`interface_version`:** `1.4`; `1.0` to `1.3` still ingest. The legacy
   `contract_version` is read only when `interface_version` is absent; a present one
   always governs, even if malformed or unsupported.
-- **`findings`** was `issues` before 1.2; either is read, both is refused.
+- **`findings`** was `issues` before 1.2; either is read, both populated is refused.
+- **Legacy keys:** `contract_version` and `issues` each give one `info` `DEPRECATED_KEY`
+  finding at `<adapter>:0`, empty `issues` included, so `--strict` still passes.
 - **`attrs`:** any JSON object, any depth. Encode values JSON has no type for.
 - **`attr_provenance`:** attr name → provenance of its value when it differs from the
   node's (`{"scope": {"file": "languages.toml", "line": 1173}}`). `ATTR_TYPE`,
@@ -659,3 +698,13 @@ is a finding, and the rest is still read. Exit non-zero only when you cannot pro
 document. The core exits 2 and ingests nothing when the program cannot start, exits
 non-zero, writes non-UTF-8 or an invalid document, or exceeds `timeout_seconds`
 ([Timeouts](#timeouts)).
+
+### Reporting a run that left input unread
+
+An adapter that reports a `PARSE_ERROR` and reads the rest leaves input unread. A
+`PARSE_ERROR` is an error unless the adapter emits it at a lower severity (the openspec
+adapter does for an unreadable scope) or the profile demotes or suppresses it, so such a run
+usually exits 1; exit 1 also follows any other unsuppressed error, and a suppressed
+`PARSE_ERROR` exits 0 with a `Partial input:` line on stderr. What to report to a user
+when a run leaves input unread, and in which words, is in the `latt-author` skill
+([SKILL.md](../skills/latt-author/SKILL.md)).

@@ -79,11 +79,11 @@ impl CoverageContext<'_> {
     /// While any admitted source carries no edge of the kind, "no incoming
     /// edge" cannot distinguish a gap from a missing attribution, so the
     /// per-node state is unknown rather than unverified.
-    pub(crate) fn state(&self) -> &'static str {
+    pub(crate) fn state(&self) -> crate::types::GapState {
         if self.unattributed == 0 {
-            "unverified"
+            crate::types::GapState::Unverified
         } else {
-            "unknown"
+            crate::types::GapState::Unknown
         }
     }
 

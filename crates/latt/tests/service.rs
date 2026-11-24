@@ -733,3 +733,29 @@ fn a_profile_prepares_from_text_as_from_its_value() {
             .contains("resolve 'extends' before")
     );
 }
+
+// Requirement: graph-service/Supported borrowed graph execution
+#[test]
+fn execute_trace_owned_answers_with_the_trace_report_execute_gives() {
+    let profile = prepare_profile(serde_norway::from_str(PROFILE).unwrap(), "fixture").unwrap();
+    let document: serde_json::Value = serde_json::from_str(DOCUMENT).unwrap();
+    let context = InputContext::default();
+    let borrowed = ingest_document(document.clone()).unwrap();
+    let Report::Trace(expected) = execute(
+        View {
+            graph: &borrowed,
+            profile: &profile,
+            context: &context,
+        },
+        Request::Trace { strict: false },
+    )
+    .unwrap()
+    .payload
+    else {
+        panic!("trace answers with a trace report");
+    };
+    let owned = ingest_document(document).unwrap();
+    let response = execute_trace_owned(owned, &profile, &context, false).unwrap();
+    let report: TraceReport = response.payload;
+    assert_eq!(report, expected);
+}

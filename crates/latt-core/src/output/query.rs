@@ -1,13 +1,14 @@
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 
 use serde::ser::{Serialize, SerializeSeq, Serializer};
 
-use super::sorted::SortedMap;
+use super::sorted::{SortedMap, SortedValue};
 use super::trace::{
     TraceEntriesJson, TraceFindingsJson, finding_line, key_value, plain_entry_line,
     rich_finding_line,
 };
-use super::{ljust, render_json, rjust, visible};
+use super::{ljust, render_json, rjust, sanitize_text, visible};
 use crate::types::{
     AtReport, CountsReport, CoverageReport, DiffReport, EdgeChangedRef, KindCoverage,
     NodeChangedRef, NodeRef, OrphansReport, PathReport, ReachReport,
@@ -79,7 +80,7 @@ impl Serialize for EdgeRefsJson<'_> {
 
 pub(super) fn format_at_plain(report: &AtReport) -> String {
     if report.entries.is_empty() && visible(&report.findings).next().is_none() {
-        return format!("No entries or findings at {}.", report.path);
+        return format!("No entries or findings at {}.", sanitize_text(&report.path));
     }
     let mut lines: Vec<String> = Vec::new();
     for entry in &report.entries {
@@ -113,7 +114,7 @@ pub(super) fn format_at_json(report: &AtReport) -> String {
 
 pub(super) fn format_at_rich(report: &AtReport) -> String {
     if report.entries.is_empty() && visible(&report.findings).next().is_none() {
-        return format!("No entries or findings at {}.", report.path);
+        return format!("No entries or findings at {}.", sanitize_text(&report.path));
     }
     let mut lines = Vec::new();
     if !report.entries.is_empty() {
@@ -130,8 +131,8 @@ pub(super) fn format_at_rich(report: &AtReport) -> String {
         for entry in &report.entries {
             lines.push(format!(
                 "{} {} {} {} {}",
-                ljust(&entry.id, 20),
-                ljust(&entry.kind, 10),
+                ljust(&sanitize_text(&entry.id), 20),
+                ljust(&sanitize_text(&entry.kind), 10),
                 ljust(&key_value(entry), 30),
                 rjust(&entry.edge_count().to_string(), 5),
                 rjust(&visible(&entry.findings).count().to_string(), 5)
@@ -156,7 +157,7 @@ pub(super) fn format_at_rich(report: &AtReport) -> String {
         "\n{} entries, {} finding(s) at {}",
         report.entries.len(),
         findings,
-        report.path
+        sanitize_text(&report.path)
     ));
     lines.join("\n")
 }
@@ -170,7 +171,14 @@ pub(super) fn format_reach_plain(report: &ReachReport) -> String {
     report
         .nodes
         .iter()
-        .map(|n| format!("{} {}{}", n.id, n.kind, tainted_marker(n)))
+        .map(|n| {
+            format!(
+                "{} {}{}",
+                sanitize_text(&n.id),
+                sanitize_text(&n.kind),
+                tainted_marker(n)
+            )
+        })
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -196,12 +204,12 @@ pub(super) fn format_reach_rich(report: &ReachReport) -> String {
     let restriction = if report.edge_kinds.is_empty() {
         "all edge kinds".to_string()
     } else {
-        report.edge_kinds.join(", ")
+        sanitize_text(&report.edge_kinds.join(", ")).into_owned()
     };
     let mut lines = vec![format!(
         "{} {} ({restriction})",
         report.direction.as_str(),
-        report.origin
+        sanitize_text(&report.origin)
     )];
     if report.nodes.is_empty() {
         lines.push("No nodes.".to_string());
@@ -209,8 +217,8 @@ pub(super) fn format_reach_rich(report: &ReachReport) -> String {
         for n in &report.nodes {
             lines.push(format!(
                 "{} {}{}",
-                ljust(&n.id, 20),
-                n.kind,
+                ljust(&sanitize_text(&n.id), 20),
+                sanitize_text(&n.kind),
                 tainted_marker(n)
             ));
         }
@@ -240,9 +248,9 @@ fn path_chain(nodes: &[String], edges: &[String]) -> String {
     let Some((first, remaining)) = nodes.split_first() else {
         return String::new();
     };
-    let mut out = first.clone();
+    let mut out = sanitize_text(first).into_owned();
     for (kind, node) in edges.iter().zip(remaining) {
-        out.push_str(&format!(" -[{kind}]-> {node}"));
+        let _ = write!(out, " -[{}]-> {}", sanitize_text(kind), sanitize_text(node));
     }
     out
 }
@@ -251,7 +259,11 @@ pub(super) fn format_path_plain(report: &PathReport) -> String {
     if let Some((nodes, edges)) = report.found_path() {
         path_chain(nodes, edges)
     } else {
-        format!("No path from {} to {}.", report.src(), report.tgt())
+        format!(
+            "No path from {} to {}.",
+            sanitize_text(report.src()),
+            sanitize_text(report.tgt())
+        )
     }
 }
 
@@ -282,7 +294,11 @@ pub(super) fn format_path_rich(report: &PathReport) -> String {
     if let Some((nodes, edges)) = report.found_path() {
         format!("{}\n\n{} edge(s)", path_chain(nodes, edges), edges.len())
     } else {
-        format!("No path from {} to {}.", report.src(), report.tgt())
+        format!(
+            "No path from {} to {}.",
+            sanitize_text(report.src()),
+            sanitize_text(report.tgt())
+        )
     }
 }
 
@@ -295,7 +311,14 @@ pub(super) fn format_orphans_plain(report: &OrphansReport) -> String {
     report
         .orphans
         .iter()
-        .map(|o| format!("{} {} {}", o.id, o.kind, o.provenance))
+        .map(|o| {
+            format!(
+                "{} {} {}",
+                sanitize_text(&o.id),
+                sanitize_text(&o.kind),
+                sanitize_text(&o.provenance.to_string())
+            )
+        })
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -351,9 +374,9 @@ pub(super) fn format_orphans_rich(report: &OrphansReport) -> String {
         .map(|o| {
             format!(
                 "{} {} {}",
-                ljust(&o.id, 20),
-                ljust(&o.kind, 10),
-                o.provenance
+                ljust(&sanitize_text(&o.id), 20),
+                ljust(&sanitize_text(&o.kind), 10),
+                sanitize_text(&o.provenance.to_string())
             )
         })
         .collect();
@@ -366,10 +389,10 @@ pub(super) fn format_orphans_rich(report: &OrphansReport) -> String {
 pub(super) fn format_counts_plain(report: &CountsReport) -> String {
     let mut lines = Vec::new();
     for (kind, n) in &report.nodes {
-        lines.push(format!("node {kind} {n}"));
+        lines.push(format!("node {} {n}", sanitize_text(kind)));
     }
     for (kind, n) in &report.edges {
-        lines.push(format!("edge {kind} {n}"));
+        lines.push(format!("edge {} {n}", sanitize_text(kind)));
     }
     lines.join("\n")
 }
@@ -392,7 +415,7 @@ pub(super) fn format_counts_rich(report: &CountsReport) -> String {
     for (kind, n) in &report.nodes {
         lines.push(format!(
             "  {} {}",
-            ljust(kind, 20),
+            ljust(&sanitize_text(kind), 20),
             rjust(&n.to_string(), 5)
         ));
     }
@@ -400,7 +423,7 @@ pub(super) fn format_counts_rich(report: &CountsReport) -> String {
     for (kind, n) in &report.edges {
         lines.push(format!(
             "  {} {}",
-            ljust(kind, 20),
+            ljust(&sanitize_text(kind), 20),
             rjust(&n.to_string(), 5)
         ));
     }
@@ -416,7 +439,12 @@ pub(super) fn format_coverage_plain(report: &CoverageReport) -> String {
         .map(|k| {
             format!(
                 "kind:{} total:{} incoming:{} incoming_pct:{:.1} outgoing:{} outgoing_pct:{:.1}",
-                k.kind, k.total, k.incoming, k.incoming_pct, k.outgoing, k.outgoing_pct
+                sanitize_text(&k.kind),
+                k.total,
+                k.incoming,
+                k.incoming_pct,
+                k.outgoing,
+                k.outgoing_pct
             )
         })
         .collect::<Vec<_>>()
@@ -478,7 +506,7 @@ pub(super) fn format_coverage_rich(report: &CoverageReport) -> String {
     for k in &report.kinds {
         lines.push(format!(
             "{} {} {} {}",
-            ljust(&k.kind, 20),
+            ljust(&sanitize_text(&k.kind), 20),
             rjust(&k.total.to_string(), 5),
             rjust(&format!("{} ({:.1}%)", k.incoming, k.incoming_pct), 14),
             rjust(&format!("{} ({:.1}%)", k.outgoing, k.outgoing_pct), 14)
@@ -491,27 +519,42 @@ pub(super) fn format_coverage_rich(report: &CoverageReport) -> String {
 // --- diff ---
 
 fn diff_lines(report: &DiffReport) -> Vec<String> {
+    let node = |change: &str, id: &str, kind: &str| {
+        format!(
+            "node {change} {} {}",
+            sanitize_text(id),
+            sanitize_text(kind)
+        )
+    };
+    let edge = |change: &str, src: &str, kind: &str, tgt: &str| {
+        format!(
+            "edge {change} {} {} {}",
+            sanitize_text(src),
+            sanitize_text(kind),
+            sanitize_text(tgt)
+        )
+    };
     let mut lines = Vec::new();
     for n in &report.nodes_added {
-        lines.push(format!("node added {} {}", n.id, n.kind));
+        lines.push(node("added", &n.id, &n.kind));
     }
     for n in &report.nodes_removed {
-        lines.push(format!("node removed {} {}", n.id, n.kind));
+        lines.push(node("removed", &n.id, &n.kind));
     }
     for n in &report.nodes_changed {
-        lines.push(format!("node changed {} {}", n.id, n.kind));
+        lines.push(node("changed", &n.id, &n.kind));
     }
     for e in &report.edges_added {
-        lines.push(format!("edge added {} {} {}", e.src, e.kind, e.tgt));
+        lines.push(edge("added", &e.src, &e.kind, &e.tgt));
     }
     for e in &report.edges_removed {
-        lines.push(format!("edge removed {} {} {}", e.src, e.kind, e.tgt));
+        lines.push(edge("removed", &e.src, &e.kind, &e.tgt));
     }
     for e in &report.edges_changed {
-        lines.push(format!("edge changed {} {} {}", e.src, e.kind, e.tgt));
+        lines.push(edge("changed", &e.src, &e.kind, &e.tgt));
     }
     for name in &report.pathways_changed {
-        lines.push(format!("pathway changed {name}"));
+        lines.push(format!("pathway changed {}", sanitize_text(name)));
     }
     lines
 }
@@ -609,11 +652,145 @@ pub(super) fn format_diff_json(report: &DiffReport) -> String {
 }
 
 pub(super) fn format_diff_rich(report: &DiffReport) -> String {
-    let header = format!("{} -> {}", report.rev_a, report.rev_b);
+    let header = format!(
+        "{} -> {}",
+        sanitize_text(&report.rev_a),
+        sanitize_text(&report.rev_b)
+    );
     if report.is_empty() {
         return format!("{header}\nNo differences.");
     }
     let lines = diff_lines(report);
     let count = lines.len();
     format!("{header}\n{}\n\n{count} difference(s)", lines.join("\n"))
+}
+
+// --- rule coverage ---
+
+fn rule_coverage_lines(report: &crate::types::RuleCoverageReport) -> Vec<String> {
+    let pct = report
+        .covered_pct
+        .map_or_else(|| "n/a".into(), |pct| format!("{pct:.1}"));
+    let mut lines = vec![
+        format!(
+            "rule:{} code:COVERAGE target_kind:{} edge_kind:{} direction:incoming",
+            report.rule,
+            sanitize_text(&report.target_kind),
+            sanitize_text(&report.edge_kind)
+        ),
+        format!(
+            "denominator:explicit-targets where:{} total:{} covered:{} covered_pct:{}",
+            sanitize_text(&report.where_.to_string()),
+            report.total,
+            report.covered,
+            pct
+        ),
+        format!(
+            "source_kinds:{} source_where:{} source_total:{} unattributed:{}",
+            sanitize_text(&report.source_kinds.join(",")),
+            sanitize_text(&report.source_where.to_string()),
+            report.source_total,
+            report.unattributed
+        ),
+        format!(
+            "input_status:{} findings:{}; counts cover the input read; completeness remains unproven",
+            if report.input_partial {
+                "partial"
+            } else {
+                "unknown"
+            },
+            report.findings.len()
+        ),
+    ];
+    for gap in &report.missing {
+        lines.push(format!(
+            "missing:{} file:{} line:{} state:{}",
+            sanitize_text(&gap.id),
+            sanitize_text(gap.provenance.file()),
+            gap.provenance.line().map_or(0, std::num::NonZeroU32::get),
+            gap.state
+        ));
+    }
+    lines
+}
+
+pub(super) fn format_rule_coverage_plain(report: &crate::types::RuleCoverageReport) -> String {
+    let mut lines = rule_coverage_lines(report);
+    lines.extend(report.findings.iter().map(finding_line));
+    lines.join("\n")
+}
+
+pub(super) fn format_rule_coverage_rich(report: &crate::types::RuleCoverageReport) -> String {
+    let mut lines = rule_coverage_lines(report);
+    lines.extend(report.findings.iter().map(rich_finding_line));
+    lines.join("\n")
+}
+
+pub(super) fn format_rule_coverage_json(report: &crate::types::RuleCoverageReport) -> String {
+    #[derive(serde::Serialize)]
+    struct GapJson<'a> {
+        file: &'a str,
+        id: &'a str,
+        line: u32,
+        state: &'a str,
+    }
+    #[derive(serde::Serialize)]
+    struct UncertaintyJson<'a> {
+        findings: Vec<super::FindingJson<'a>>,
+        input_status: &'static str,
+        source_kinds: &'a [String],
+        source_total: usize,
+        unattributed: usize,
+    }
+    #[derive(serde::Serialize)]
+    struct RuleJson<'a> {
+        covered: usize,
+        covered_pct: Option<f64>,
+        direction: &'static str,
+        edge_kind: &'a str,
+        missing: Vec<GapJson<'a>>,
+        rule: usize,
+        source_where: SortedValue<'a>,
+        target_kind: &'a str,
+        total: usize,
+        uncertainty: UncertaintyJson<'a>,
+        #[serde(rename = "where")]
+        where_: SortedValue<'a>,
+    }
+    render_json(&RuleJson {
+        covered: report.covered,
+        covered_pct: report.covered_pct,
+        direction: "incoming",
+        edge_kind: &report.edge_kind,
+        missing: report
+            .missing
+            .iter()
+            .map(|gap| GapJson {
+                file: gap.provenance.file(),
+                id: &gap.id,
+                line: gap.provenance.line().map_or(0, std::num::NonZeroU32::get),
+                state: gap.state.as_str(),
+            })
+            .collect(),
+        rule: report.rule,
+        source_where: SortedValue(&report.source_where),
+        target_kind: &report.target_kind,
+        total: report.total,
+        uncertainty: UncertaintyJson {
+            findings: report
+                .findings
+                .iter()
+                .map(super::FindingJson::from)
+                .collect(),
+            input_status: if report.input_partial {
+                "partial"
+            } else {
+                "unknown"
+            },
+            source_kinds: &report.source_kinds,
+            source_total: report.source_total,
+            unattributed: report.unattributed,
+        },
+        where_: SortedValue(&report.where_),
+    })
 }

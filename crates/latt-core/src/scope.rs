@@ -14,21 +14,22 @@ use crate::types::ValidateScope;
 
 /// Per-kind tallies over one graph, keyed by kind name.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct KindTally {
+pub(crate) struct KindTally<'g> {
     /// Declared node kind → (declared nodes, the distinct files declaring them).
-    pub(crate) nodes: BTreeMap<String, (usize, BTreeSet<String>)>,
+    /// The files borrow the graph's own strings: a tally lives for one walk.
+    pub(crate) nodes: BTreeMap<String, (usize, BTreeSet<&'g str>)>,
     /// Declared edge kind → edges of that kind.
     pub(crate) edges: BTreeMap<String, usize>,
     /// Every distinct file named by the provenance of a counted node or edge.
-    pub(crate) files: BTreeSet<String>,
+    pub(crate) files: BTreeSet<&'g str>,
 }
 
-impl KindTally {
+impl<'g> KindTally<'g> {
     /// Walk `graph` once, tallying every kind `profile` declares.
     ///
     /// Only explicitly declared nodes count (`iter_nodes`): an edge endpoint no
     /// adapter declared is a `VACANCY`, and a node it does not add.
-    pub(crate) fn of(graph: &LatticeGraph, profile: &Profile) -> Self {
+    pub(crate) fn of(graph: &'g LatticeGraph, profile: &Profile) -> Self {
         let mut tally = Self {
             nodes: profile
                 .node_kinds()
@@ -46,14 +47,44 @@ impl KindTally {
             if let Some((count, files)) = tally.nodes.get_mut(&node.kind) {
                 *count += 1;
                 let file = node.provenance.file();
-                files.insert(file.to_owned());
-                tally.files.insert(file.to_owned());
+                files.insert(file);
+                tally.files.insert(file);
             }
         }
         for edge in graph.iter_edges() {
             if let Some(count) = tally.edges.get_mut(&edge.kind) {
                 *count += 1;
-                tally.files.insert(edge.provenance.file().to_owned());
+                tally.files.insert(edge.provenance.file());
+            }
+        }
+        tally
+    }
+
+    /// Tally the declared kinds over bare instance kinds, for a population no
+    /// one graph holds: fuse lists edges its composed graph leaves out, and
+    /// declares kinds its composed profile does not.
+    pub(crate) fn of_kinds<'a>(
+        node_kinds: impl IntoIterator<Item = String>,
+        edge_kinds: impl IntoIterator<Item = String>,
+        nodes: impl IntoIterator<Item = &'a str>,
+        edges: impl IntoIterator<Item = &'a str>,
+    ) -> Self {
+        let mut tally = Self {
+            nodes: node_kinds
+                .into_iter()
+                .map(|kind| (kind, (0, BTreeSet::new())))
+                .collect(),
+            edges: edge_kinds.into_iter().map(|kind| (kind, 0)).collect(),
+            files: BTreeSet::new(),
+        };
+        for kind in nodes {
+            if let Some((count, _)) = tally.nodes.get_mut(kind) {
+                *count += 1;
+            }
+        }
+        for kind in edges {
+            if let Some(count) = tally.edges.get_mut(kind) {
+                *count += 1;
             }
         }
         tally
@@ -93,6 +124,16 @@ impl KindTally {
 pub(crate) enum EmptyOf {
     Node,
     Edge,
+}
+
+impl EmptyOf {
+    /// The `EMPTY_KIND` message for `kind`.
+    pub(crate) fn message(self, kind: &str) -> String {
+        match self {
+            Self::Node => format!("node kind '{kind}' has no node"),
+            Self::Edge => format!("edge kind '{kind}' has no edge"),
+        }
+    }
 }
 
 #[cfg(test)]

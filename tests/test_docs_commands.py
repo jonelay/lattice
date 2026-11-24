@@ -12,21 +12,22 @@ import json
 import re
 import shlex
 import subprocess
-from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).parent.parent
-CORE_BIN = REPO_ROOT / "target" / "debug" / "latt"
+from conftest import CORE_BIN, REPO_ROOT, needs_core
+
 DOC_FILES = ["README.md", *sorted(
     str(p.relative_to(REPO_ROOT)) for p in (REPO_ROOT / "docs").glob("*.md")
 )]
 PLACEHOLDERS = ("/path/to", "yours", "<")
 BINARY_SPELLINGS = ("latt", "target/debug/latt", "target/release/latt")
 
-needs_core = pytest.mark.skipif(
-    not CORE_BIN.exists(), reason="core not built; run: cargo build"
-)
+def test_cli_exit_zero_definition_is_command_dependent() -> None:
+    """A query can answer while reporting error-severity input findings."""
+    page = (REPO_ROOT / "docs/cli.md").read_text()
+    exit_section = page.split("## Exit codes\n", 1)[1].split("A failed write", 1)[0]
+    assert "| `0` | Command ran; whether findings gate depends on the command |" in exit_section
 
 
 @needs_core
@@ -34,8 +35,8 @@ needs_core = pytest.mark.skipif(
 def test_shipped_binary_has_native_adapters() -> None:
     """Fail when a later feature-restricted build left the binary without its defaults.
 
-    Every gate after the workspace build sees ``target/debug/latt`` as whichever
-    cargo invocation wrote it last, and CI ships that file as the artifact.
+    Later gate steps use the binary from the last Cargo invocation. CI ships
+    that binary as the artifact.
     """
     target = ["--profile", "profiles/md.yaml", "--target", "tests/fixtures/mini-md"]
     validate = subprocess.run(
@@ -138,7 +139,7 @@ def subcommand_path(argv: list[str]) -> list[str]:
 def test_documented_flags_exist_on_the_subcommand(where: str, argv: list[str]):
     path = subcommand_path(argv)
     if path == ["browse"] and not _has_browse():
-        pytest.skip("target/debug/latt was built without the tui feature")
+        pytest.skip(f"{CORE_BIN} was built without the tui feature")
     help_run = subprocess.run(
         [str(CORE_BIN), *path, "--help"], capture_output=True, text=True, timeout=60,
     )

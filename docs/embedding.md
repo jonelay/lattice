@@ -22,7 +22,7 @@ examples ingest:
 
 ```toml
 [dependencies]
-latt-core = { git = "https://github.com/jonelay/lattice", tag = "v0.8.0" }
+latt-core = { git = "https://github.com/jonelay/lattice", tag = "v0.8.1" }
 # or, from a checkout: latt-core = { path = "/path/to/lattice/crates/latt-core" }
 serde_json = "1"
 ```
@@ -93,9 +93,9 @@ its source or authorization changes.
 
 | Your input | Call |
 |---|---|
-| Records the host holds | Write the interface document [adapters.md](https://github.com/jonelay/lattice/blob/v0.8.0/docs/adapters.md#writing-your-own-adapter) describes (`interface_version`, `nodes`, `edges`, each with a `provenance` object), then pass it to `document::ingest_document` |
+| Records the host holds | Write the interface document [adapters.md](https://github.com/jonelay/lattice/blob/v0.8.1/docs/adapters.md#writing-your-own-adapter) describes (`interface_version`, `nodes`, `edges`, each with a `provenance` object), then pass it to `document::ingest_document` |
 | That document as text | `document::ingest_text`: the same graph and the same refusal messages, without first holding a JSON tree of the whole document |
-| A register in a repository | `document::resolve_adapter`, then `document::run_adapter_spec`, which run an adapter in-process (below) |
+| A register in a repository | `document::resolve_adapter`, then `document::run_adapter_spec`, which run a native adapter in-process and an external adapter as a bounded subprocess (below) |
 
 Ingestion keeps the schema and version checks and the duplicate findings. A graph built
 by hand proves nothing about correct interface ingestion.
@@ -154,17 +154,25 @@ The supported service entry points:
 |---|---|
 | `prepare_profile`, `prepare_profile_str` | build a `Profile` (above) |
 | `execute` | answer one `Request` over a `View` |
+| `execute_trace_owned` | a `Request::Trace` that consumes the `LatticeGraph`, moving node and edge attributes into the report so the register is held once; answers with `Response<TraceReport>`, and on error the graph comes back beside the `ServiceError` |
 | `compare` | compare two supplied graphs with opaque labels; it runs no Git and compares no authorization policies |
 
 Inputs and results are documented by their public Rust types. Requests reuse the core's
 existing semantics.
 
 A `Request` is one of `Reach` (either direction), `Path`, `Orphans`, `Counts`,
-`Coverage` (per-kind incidence coverage), `At` (file-provenance selection, below),
+`Coverage` (per-kind incidence coverage), `RuleCoverage` (one direct rule), `At` (file-provenance selection, below),
 `Validate`, `Summary` or `Trace`.
 
 - `Reach` and `Path` take their edge-kind filter as a `&[&str]`. Order and repeats do
   not matter, and an empty slice permits every kind.
+- `RuleCoverage { rule }` selects the one-based ordinal among resolved `COVERAGE`
+  entries. Its `RuleCoverageReport` carries the filtered denominator, covered
+  count, located `CoverageGap` entries, each with a `GapState` (`Unverified` or `Unknown`), and input uncertainty; [json.md](json.md#coverage---rule-n)
+  defines the rendered shape. `PARSE_ERROR` or `InputStatus::Partial` marks the
+  payload's `input_partial`; false leaves completeness unknown. Its adapter
+  findings duplicate the envelope diagnostics for standalone rendering, so count
+  them once. SUPPRESS applies to neither copy. Missing rules return `InvalidRequest`.
 - `Validate` answers with a `ValidateReport`, whose `findings` and `scope` are what the
   CLI renders.
 
@@ -215,10 +223,10 @@ and accessors, construct them as the table shows, match with `..`, and give a `m
 one of their enums a wildcard arm.
 
 **Origins in text.** The JSON writes the whole-input origins as `<profile>` and the
-other reserved names ([json.md](json.md)). In Rust, match on the variant rather than on
-that string. `Provenance`'s `Display` writes the wire form, `file:0` for the whole-file
-case, as the CLI's plain output does; `Origin`'s `Display` writes `<profile>:0` the same
-way.
+other reserved names ([json.md](https://github.com/jonelay/lattice/blob/v0.8.1/docs/json.md)).
+In Rust, match on the variant rather than on that string. `Provenance`'s `Display`
+writes the wire form, `file:0` for the whole-file case, as the CLI's plain output does;
+`Origin`'s `Display` writes `<profile>:0` the same way.
 
 **Conditions.** `Condition::parse` splits at the earliest operator, taking the longest
 operator there. Each refusal is a `profile::FilterError` whose `message()` names it:
@@ -242,9 +250,7 @@ Parsing and host loading remain outside execution.
   tasks. Lattice does not attest it or use it as a cache key.
 - An empty `diagnostics` never establishes complete input.
 - `ExecutionStatus::Complete` says the operation finished over supplied input. It does
-  not upgrade Unknown or Partial input status. `Complete` is its only variant; the enum
-  is `#[non_exhaustive]` so a future status can be added without an API break. No
-  partial execution result is currently supported.
+  not upgrade Unknown or Partial input status.
 
 ### Two finding channels
 
@@ -262,12 +268,14 @@ list or double-count their severities.
 | Validate, Trace | Payload findings control display and gating; the envelope is input attribution |
 | At | Findings inside the answer do not gate; the CLI also reports the adapter's findings on stderr |
 | Summary | The payload is a rollup/aggregate; the CLI applies the profile's SUPPRESS to the adapter's findings, then exits 1 only on one that still gates, as `validate` would |
+| RuleCoverage | Adapter findings stay beside the aggregate on stdout in every format, without suppression; a completed CLI query exits 0 (exception below) |
 | Other queries, coverage, compare | Answer plus separate envelope diagnostics; a completed CLI query exits 0 (exception below) |
 
 Where the service and the CLI differ for those other queries, a host applies the CLI's
 rules itself:
 
-- When the graph has no node and an adapter finding gates, the CLI withholds the answer
+- When the graph has no node and an adapter reported an error-severity finding, suppressed
+  or not, the CLI withholds the answer
   and exits 2: the register could not be read (for compare, at either revision). The
   service still returns the answer.
 - The CLI names on stderr any filter attr that no node carries. The service does not,
@@ -275,8 +283,7 @@ rules itself:
 
 The envelope never carries `suppressed`. The CLI applies the profile's SUPPRESS to it
 before printing and gating; a host that shows or gates on envelope diagnostics applies
-the same policy itself with `validate::apply_suppressions`. Preserve these distinctions
-in integrated displays. Lattice does not gate on findings; hosts own that policy.
+the same policy itself with `validate::apply_suppressions`. Hosts own the gating policy.
 
 ### Errors
 
@@ -285,7 +292,7 @@ execution returns `ServiceError`.
 
 | Error | When | What it carries |
 |---|---|---|
-| `ContractError`, `graph::PathwayError` | preparation (`ContractError`); `graph::check_pathway` (`PathwayError`) | only an explanation, read through `message()` or `Display` |
+| `ContractError`, `graph::PathwayError` | preparation (`ContractError`); `graph::check_pathway` (`PathwayError`) | for `ContractError`, `kind()` names the failure (`ContractErrorKind`: empty output, not JSON, unsupported version, not UTF-8, wrong shape, could not launch, failed, timed out, unavailable) and `source()` the parser or I/O error under it when there is one; for `PathwayError`, only an explanation, read through `message()` or `Display`. The text of either is for people and may change |
 | `ProfileError` | preparation | for `ProfileError::Yaml`, `Display` names only the file; the parser's line and column are on its `source()` |
 | `ServiceError` with `ErrorKind::InvalidRequest` | unknown IDs or kinds, absent At paths, invalid context combinations | input contexts and available diagnostics; no partial payload |
 | `ServiceError` with `ErrorKind::InvalidConfiguration` | summary configuration failures | the same |
@@ -322,15 +329,15 @@ checks that this list names the same items.
 ### Supported items
 
 - `latt_core`: `serde_norway`
-- `latt_core::document`: `INTERFACE_VERSION`, `SUPPORTED_INTERFACE_VERSIONS`, `ContractError`, `ResolveError`, `parse_document`, `ingest_document`, `ingest_text`, `AdapterSpec`, `NativeAdapter`, `resolve_adapter`, `run_adapter_spec`
+- `latt_core::document`: `INTERFACE_VERSION`, `SUPPORTED_INTERFACE_VERSIONS`, `ContractError`, `ContractErrorKind`, `ResolveError`, `parse_document`, `ingest_document`, `ingest_text`, `AdapterSpec`, `NativeAdapter`, `resolve_adapter`, `run_adapter_spec`
 - `latt_core::graph`: `Pathway`, `PathwayError`, `check_pathway`, `DuplicateNode`, `Node`, `Edge`, `EdgeSpec`, `LatticeGraph`
 - `latt_core::output`: `Format`, `ParseFormatError`, `Payload`, `output_result`
 - `latt_core::profile`: `ProfileError`, `AttrType`, `AttrSchema`, `NodeKind`, `EdgeKind`, `PathwayBinding`, `Comparable`, `Condition`, `FilterError`, `Profile`, `resolved_document`, `load_profile`, `load_profile_value`
-- `latt_core::service`: `Direction`, `AtReport`, `CivilDate`, `CountsReport`, `CoverageReport`, `DiffReport`, `EdgeChangedRef`, `EdgeRef`, `FindingTally`, `Issue`, `KindCoverage`, `NodeChangedRef`, `NodeRef`, `Note`, `Origin`, `OrphanEntry`, `OrphansReport`, `PathReport`, `PathwayEntry`, `Provenance`, `ReachReport`, `Severity`, `StatusRollup`, `StructuralSummary`, `SummaryReport`, `TraceEdge`, `TraceEntry`, `TraceReport`, `Until`, `ValidateReport`, `ValidateScope`, `View`, `InputContext`, `Scope`, `InputStatus`, `ExecutionStatus`, `InputSide`, `InputDiagnostic`, `InputRecord`, `Response`, `Request`, `Report`, `ErrorKind`, `ServiceError`, `prepare_profile`, `prepare_profile_str`, `execute`, `compare`
+- `latt_core::service`: `Direction`, `AtReport`, `CivilDate`, `CountsReport`, `CoverageGap`, `GapState`, `CoverageReport`, `RuleCoverageReport`, `DiffReport`, `EdgeChangedRef`, `EdgeRef`, `FindingTally`, `Issue`, `KindCoverage`, `NodeChangedRef`, `NodeRef`, `Note`, `Origin`, `OrphanEntry`, `OrphansReport`, `PathReport`, `PathwayEntry`, `Provenance`, `ReachReport`, `Severity`, `StatusRollup`, `StructuralSummary`, `SummaryReport`, `TraceEdge`, `TraceEntry`, `TraceReport`, `Until`, `ValidateReport`, `ValidateScope`, `View`, `InputContext`, `Scope`, `InputStatus`, `ExecutionStatus`, `InputSide`, `InputDiagnostic`, `InputRecord`, `Response`, `Request`, `Report`, `ErrorKind`, `ServiceError`, `prepare_profile`, `prepare_profile_str`, `execute`, `execute_trace_owned`, `compare`
 - `latt_core::suggest`: `SUGGESTION_VERSION`, `SUPPORTED_SUGGESTION_VERSIONS`
 - `latt_core::validate`: `apply_messages`, `apply_suppressions`
 - `latt_adapter`: `decode_utf8`, `decode_lines`, `InvalidLine`, `INTERFACE_VERSION`, `Document`, `Node`, `Edge`, `Pathway`, `Severity`, `Issue`, `Provenance`
-- `latt_adapter::codes`: `PARSE_ERROR`, `PATHWAY_INVALID`, `EXTERNAL_REF`, `SOURCE_MISSING`, `NO_MATCHING_FILES`, `WRAPPED_REF`, `AMBIGUOUS_REF`, `UNREAD_ENTRIES`, `ALL`
+- `latt_adapter::codes`: `PARSE_ERROR`, `PATHWAY_INVALID`, `EXTERNAL_REF`, `SOURCE_MISSING`, `NO_MATCHING_FILES`, `WRAPPED_REF`, `AMBIGUOUS_REF`, `UNREAD_ENTRIES`, `UNFOLLOWED_LINK`, `ALL`
 - `latt_adapter::fence`: `FenceState`
 
 Each item is documented at one path. The report types, `Direction` and the entry
@@ -357,13 +364,9 @@ Some of the Rust API is committed in ways its types do not show:
 |---|---|
 | `serde_norway` | re-exported at the crate root because `prepare_profile` takes its `Value`; a move off its 0.9 line is a breaking change |
 | `serde_json` | committed to its 1.x line: `ingest_document`, `load_profile_value`, `Condition::eq` and the attr maps name its `Value` |
-| `regex` | uncommitted: `Condition::matches` takes pattern text, and no supported item names a `regex` type |
 | `Profile`'s accessors | return `&BTreeMap`; deterministic output relies on their sorted order, so that type is committed |
-| `serde_json::Map` iteration order | uncommitted: a host whose dependencies enable `serde_json/preserve_order` sees attrs in insertion order, but `output_result`'s JSON sorts them by key either way |
 | a new `Request` parameter, a new `Scope::Declared` field | a minor-version event: each changes a variant hosts construct |
 | a new `InputContext` field | a minor-version event, additive only because the struct is non-exhaustive |
 
-The service is tested on Rust 1.99 on Linux `x86_64`, with default and no-default
-features. A call is single-threaded and has no cancellation or resource budget: a host
-that needs hard limits runs calls behind its own worker boundary. Lattice's own tests
-use synthetic fixtures, so a host's authorization needs the host's own tests.
+A call is single-threaded and has no cancellation or resource budget: a host that needs
+hard limits runs calls behind its own worker boundary.

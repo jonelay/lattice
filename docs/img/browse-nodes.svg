@@ -77,7 +77,7 @@
 <text x="999.6" y="336.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">█</text>
 <text x="0.0" y="353.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">│</text>
 <text x="8.4" y="353.0" fill="#56b6c2" textLength="109.2" lengthAdjust="spacingAndGlyphs">  scenarios: </text>
-<text x="117.6" y="353.0" fill="#d4d7de" textLength="882.0" lengthAdjust="spacingAndGlyphs">11                                                                                                       </text>
+<text x="117.6" y="353.0" fill="#d4d7de" textLength="882.0" lengthAdjust="spacingAndGlyphs">14                                                                                                       </text>
 <text x="999.6" y="353.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">█</text>
 <text x="0.0" y="370.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">│</text>
 <text x="8.4" y="370.0" fill="#56b6c2" textLength="75.6" lengthAdjust="spacingAndGlyphs">  title: </text>
@@ -85,36 +85,36 @@
 <text x="999.6" y="370.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">█</text>
 <text x="0.0" y="387.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">│</text>
 <text x="8.4" y="387.0" fill="#56b6c2" textLength="117.6" lengthAdjust="spacingAndGlyphs">  provenance: </text>
-<text x="126.0" y="387.0" fill="#d4d7de" textLength="873.6" lengthAdjust="spacingAndGlyphs">openspec/specs/cli/spec.md:146                                                                          </text>
+<text x="126.0" y="387.0" fill="#d4d7de" textLength="873.6" lengthAdjust="spacingAndGlyphs">openspec/specs/cli/spec.md:176                                                                          </text>
 <text x="999.6" y="387.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">█</text>
 <text x="0.0" y="404.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">│</text>
 <text x="8.4" y="404.0" fill="#d4d7de" textLength="168.0" lengthAdjust="spacingAndGlyphs" font-weight="bold">── Incoming edges ──</text>
-<text x="999.6" y="404.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">█</text>
+<text x="999.6" y="404.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">║</text>
 <text x="0.0" y="421.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">│</text>
 <text x="8.4" y="421.0" fill="#98c379" textLength="126.0" lengthAdjust="spacingAndGlyphs">  ←[contains]— </text>
 <text x="134.4" y="421.0" fill="#d4d7de" textLength="865.2" lengthAdjust="spacingAndGlyphs">cli                                                                                                    </text>
-<text x="999.6" y="421.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">█</text>
+<text x="999.6" y="421.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">║</text>
 <text x="0.0" y="438.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">│</text>
 <text x="8.4" y="438.0" fill="#c678dd" textLength="126.0" lengthAdjust="spacingAndGlyphs">  ←[verifies]— </text>
 <text x="134.4" y="438.0" fill="#d4d7de" textLength="865.2" lengthAdjust="spacingAndGlyphs">crates/latt/tests/cli.rs::a_clean_register_exits_zero                                                  </text>
-<text x="999.6" y="438.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">█</text>
+<text x="999.6" y="438.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">║</text>
 <text x="0.0" y="455.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">│</text>
 <text x="8.4" y="455.0" fill="#c678dd" textLength="126.0" lengthAdjust="spacingAndGlyphs">  ←[verifies]— </text>
-<text x="134.4" y="455.0" fill="#d4d7de" textLength="865.2" lengthAdjust="spacingAndGlyphs">crates/latt/tests/cli.rs::a_profile_suppressing_config_error_exits_two                                 </text>
+<text x="134.4" y="455.0" fill="#d4d7de" textLength="865.2" lengthAdjust="spacingAndGlyphs">crates/latt/tests/cli.rs::a_deep_acyclic_profile_chain_loads_without_aborting                          </text>
 <text x="999.6" y="455.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">║</text>
 <text x="0.0" y="472.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">│</text>
 <text x="8.4" y="472.0" fill="#c678dd" textLength="126.0" lengthAdjust="spacingAndGlyphs">  ←[verifies]— </text>
-<text x="134.4" y="472.0" fill="#d4d7de" textLength="865.2" lengthAdjust="spacingAndGlyphs">crates/latt/tests/cli.rs::a_query_omits_an_adapter_issue_the_profile_suppressed_from_plain_stderr      </text>
+<text x="134.4" y="472.0" fill="#d4d7de" textLength="865.2" lengthAdjust="spacingAndGlyphs">crates/latt/tests/cli.rs::a_native_adapter_into_a_closed_pipe_exits_two_quietly                        </text>
 <text x="999.6" y="472.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">║</text>
 <text x="0.0" y="489.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">│</text>
 <text x="8.4" y="489.0" fill="#c678dd" textLength="126.0" lengthAdjust="spacingAndGlyphs">  ←[verifies]— </text>
-<text x="134.4" y="489.0" fill="#d4d7de" textLength="865.2" lengthAdjust="spacingAndGlyphs">crates/latt/tests/cli.rs::a_stale_suppress_entry_is_reported_at_info_and_exits_zero                    </text>
+<text x="134.4" y="489.0" fill="#d4d7de" textLength="865.2" lengthAdjust="spacingAndGlyphs">crates/latt/tests/cli.rs::a_profile_suppressing_config_error_exits_two                                 </text>
 <text x="999.6" y="489.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">║</text>
 <text x="0.0" y="506.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">│</text>
 <text x="8.4" y="506.0" fill="#c678dd" textLength="126.0" lengthAdjust="spacingAndGlyphs">  ←[verifies]— </text>
-<text x="134.4" y="506.0" fill="#d4d7de" textLength="865.2" lengthAdjust="spacingAndGlyphs">crates/latt/tests/cli.rs::an_unwritable_stdout_exits_two                                               </text>
+<text x="134.4" y="506.0" fill="#d4d7de" textLength="865.2" lengthAdjust="spacingAndGlyphs">crates/latt/tests/cli.rs::a_query_omits_an_adapter_issue_the_profile_suppressed_from_plain_stderr      </text>
 <text x="999.6" y="506.0" fill="#d4d7de" textLength="8.4" lengthAdjust="spacingAndGlyphs" opacity="0.6">▼</text>
 <text x="0.0" y="523.0" fill="#d4d7de" textLength="1008.0" lengthAdjust="spacingAndGlyphs" opacity="0.6">└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘</text>
 <rect x="0.0" y="527.0" width="688.8" height="17.0" fill="#d4d7de"/>
-<text x="0.0" y="540.0" fill="#1e1e2e" textLength="688.8" lengthAdjust="spacingAndGlyphs"> Nodes /cli/Exit codes/ | 1656 nodes, 1553 edges | 0 errors, 0 warnings, 159 hints</text>
+<text x="0.0" y="540.0" fill="#1e1e2e" textLength="688.8" lengthAdjust="spacingAndGlyphs"> Nodes /cli/Exit codes/ | 1817 nodes, 1706 edges | 0 errors, 0 warnings, 157 hints</text>
 </g></svg>

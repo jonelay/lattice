@@ -8,20 +8,14 @@ from pathlib import Path
 
 import pytest
 
-from conftest import resolve_profile
+from conftest import CORE_BIN, needs_core, resolve_profile
 
 REPO_ROOT = Path(__file__).parent.parent
 PROFILE_PATH = REPO_ROOT / "profiles" / "md.yaml"
 MULTI_PROFILE_PATH = REPO_ROOT / "profiles" / "md-multi.yaml"
 ADAPTER_PATH = REPO_ROOT / "adapters" / "md"
-CORE_BIN = REPO_ROOT / "target" / "debug" / "latt"
 FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "mini-md"
 MULTI_FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "mini-md-multi"
-
-needs_core = pytest.mark.skipif(
-    not CORE_BIN.exists(), reason="core not built; run: cargo build"
-)
-
 
 def _run_adapter(target: Path, tmp_path: Path) -> dict:
     resolved = resolve_profile(PROFILE_PATH, tmp_path)
@@ -794,3 +788,21 @@ def test_a_duplicate_rows_edges_are_not_read(tmp_path: Path) -> None:
         finding["message"] for finding in entries["REQ-1"]["findings"]
         if finding["message"].startswith("duplicate node")
     ] == ["duplicate node 'REQ-1': first at r.md:3; its 2 edges were not read"]
+
+
+# Requirement: adapter-md/Select configured files beneath the target
+def test_symlinked_directory_is_reported_and_not_followed(tmp_path: Path) -> None:
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    shutil.copy(FIXTURE_PATH / "requirements.md", shared / "requirements.md")
+    target = tmp_path / "tgt"
+    target.mkdir()
+    (target / "other.md").write_text("# Other\n")
+    (target / "specs").symlink_to("../shared")
+    document = _run_adapter(target, tmp_path)
+    assert [
+        (f["code"], f["severity"], f["provenance"]["file"], f["message"])
+        for f in document["findings"]
+        if f["code"] == "UNFOLLOWED_LINK"
+    ] == [("UNFOLLOWED_LINK", "info", "specs", "symlinked directory 'specs' not followed")]
+    assert document["nodes"] == []

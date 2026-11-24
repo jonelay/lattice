@@ -31,6 +31,7 @@ option	latt coverage	--adapter	ADAPTER	optional	-	-
 option	latt coverage	--format	FORMAT	optional	-	plain, json, rich
 option	latt coverage	--profile	PROFILE	required	-	-
 option	latt coverage	--profile-version	VERSION	optional	-	-
+option	latt coverage	--rule	N	optional	-	-
 option	latt coverage	--target	TARGET	required	-	-
 option	latt coverage	--version	-	optional	-	-
 option	latt describe	--adapter	ADAPTER	optional	-	-

@@ -61,6 +61,41 @@ development repository, which holds the eval crate the GitHub release withholds,
 - **WHEN** `crates/latt/Cargo.toml` lists no `[[bin]]` target
 - **THEN** the script exits non-zero naming the missing `[[bin]]` target and no `<dest>/latt` exists
 
+### Requirement: Release binaries run on glibc 2.28 and later
+`tools/release-binaries.sh <rev> <out-dir>` SHALL build every binary target of the
+`latt` package at `<rev>` for Linux `x86_64` and `aarch64` against glibc 2.28, as
+`<name>-<arch>-linux`, with `SHA256SUMS` beside them, and SHALL refuse an existing
+`<out-dir>`. It SHALL pin the versions of the build tools it runs and exit 2 naming the
+install command when one differs. It SHALL end by running
+`tools/check-release-binaries.sh 2.28` over what it built.
+
+`tools/check-release-binaries.sh <floor> <binary>...` SHALL fail, naming the binary
+and the version, for every `GLIBC_` version in a binary's version needs that is newer
+than the floor. Weak versions count: where one is missing the loader prints a
+`weak version … not found` line on stderr on every run, and stderr carries Lattice's
+findings. It SHALL also fail for a binary that contains the builder's `$HOME/`, a source
+path the build did not remap. Versions compare numerically by dotted part. A missing
+`readelf`, a file `readelf` cannot read, an unset `HOME` or bad usage SHALL exit 2.
+
+Verified by: `.venv/bin/python -m pytest tests/test_release_binaries.py`, and at each
+cut, the release binaries run on a glibc 2.28 system with nothing on stderr.
+
+#### Scenario: A host build is refused
+- **WHEN** the check runs at floor 2.28 over a binary linked against a newer host glibc
+- **THEN** it exits 1, naming each version above 2.28
+
+#### Scenario: A weak version above the floor
+- **WHEN** a binary's only version above the floor is weak
+- **THEN** the check exits 1 and marks the version `(weak)`
+
+#### Scenario: An unremapped source path
+- **WHEN** a binary contains the builder's `$HOME/`
+- **THEN** the check exits 1 naming the binary
+
+#### Scenario: readelf is unavailable
+- **WHEN** no `readelf` is on PATH
+- **THEN** the check exits 2 before reading any binary
+
 ### Requirement: Agent material ships in the install
 The install SHALL hold `AGENTS.md` at its root, pointing an agent at the skill, the core
 docs and the rules for using Lattice, and `skills/`: one directory per agent skill, each

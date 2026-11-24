@@ -19,8 +19,8 @@ mod latt_core {
 
 mod latt_core_document {
     use latt_core::document::{
-        AdapterSpec, ContractError, INTERFACE_VERSION, NativeAdapter, ResolveError,
-        SUPPORTED_INTERFACE_VERSIONS, ingest_document, ingest_text, parse_document,
+        AdapterSpec, ContractError, ContractErrorKind, INTERFACE_VERSION, NativeAdapter,
+        ResolveError, SUPPORTED_INTERFACE_VERSIONS, ingest_document, ingest_text, parse_document,
         resolve_adapter, run_adapter_spec,
     };
 }
@@ -44,13 +44,14 @@ mod latt_core_profile {
 
 mod latt_core_service {
     use latt_core::service::{
-        AtReport, CivilDate, CountsReport, CoverageReport, DiffReport, Direction, EdgeChangedRef,
-        EdgeRef, ErrorKind, ExecutionStatus, FindingTally, InputContext, InputDiagnostic,
-        InputRecord, InputSide, InputStatus, Issue, KindCoverage, NodeChangedRef, NodeRef, Note,
-        Origin, OrphanEntry, OrphansReport, PathReport, PathwayEntry, Provenance, ReachReport,
-        Report, Request, Response, Scope, ServiceError, Severity, StatusRollup, StructuralSummary,
-        SummaryReport, TraceEdge, TraceEntry, TraceReport, Until, ValidateReport, ValidateScope,
-        View, compare, execute, prepare_profile, prepare_profile_str,
+        AtReport, CivilDate, CountsReport, CoverageGap, CoverageReport, DiffReport, Direction,
+        EdgeChangedRef, EdgeRef, ErrorKind, ExecutionStatus, FindingTally, GapState, InputContext,
+        InputDiagnostic, InputRecord, InputSide, InputStatus, Issue, KindCoverage, NodeChangedRef,
+        NodeRef, Note, Origin, OrphanEntry, OrphansReport, PathReport, PathwayEntry, Provenance,
+        ReachReport, Report, Request, Response, RuleCoverageReport, Scope, ServiceError, Severity,
+        StatusRollup, StructuralSummary, SummaryReport, TraceEdge, TraceEntry, TraceReport, Until,
+        ValidateReport, ValidateScope, View, compare, execute, execute_trace_owned,
+        prepare_profile, prepare_profile_str,
     };
 }
 
@@ -72,7 +73,7 @@ mod latt_adapter {
 mod latt_adapter_codes {
     use latt_adapter::codes::{
         ALL, AMBIGUOUS_REF, EXTERNAL_REF, NO_MATCHING_FILES, PARSE_ERROR, PATHWAY_INVALID,
-        SOURCE_MISSING, UNREAD_ENTRIES, WRAPPED_REF,
+        SOURCE_MISSING, UNFOLLOWED_LINK, UNREAD_ENTRIES, WRAPPED_REF,
     };
 }
 
@@ -190,11 +191,11 @@ fn collect(dir: &Path, files: &mut Vec<PathBuf>) {
 
 /// `(file, visible, hidden)` per library source file.
 const PINNED: &[(&str, usize, usize)] = &[
-    ("crates/latt-adapter/src/codes.rs", 9, 0),
+    ("crates/latt-adapter/src/codes.rs", 10, 0),
     ("crates/latt-adapter/src/fence.rs", 4, 0),
-    ("crates/latt-adapter/src/files.rs", 0, 6),
-    ("crates/latt-adapter/src/lib.rs", 61, 4),
-    ("crates/latt-adapter/src/process.rs", 9, 4),
+    ("crates/latt-adapter/src/files.rs", 0, 7),
+    ("crates/latt-adapter/src/lib.rs", 63, 4),
+    ("crates/latt-adapter/src/process.rs", 11, 6),
     ("crates/latt-adapter/src/profile.rs", 0, 3),
     ("crates/latt-adapter/src/sorted_map.rs", 9, 0),
     ("crates/latt-adapter/src/sources/go.rs", 0, 0),
@@ -215,19 +216,19 @@ const PINNED: &[(&str, usize, usize)] = &[
     ("crates/latt-core/src/adapters/toml/tree.rs", 0, 0),
     ("crates/latt-core/src/algo.rs", 5, 0),
     ("crates/latt-core/src/describe.rs", 0, 1),
-    ("crates/latt-core/src/document.rs", 14, 3),
+    ("crates/latt-core/src/document.rs", 16, 3),
     ("crates/latt-core/src/document/wire.rs", 0, 0),
     ("crates/latt-core/src/fuse/compose.rs", 1, 0),
     ("crates/latt-core/src/fuse/fuse_profile.rs", 2, 0),
     ("crates/latt-core/src/fuse/manifest.rs", 1, 0),
-    ("crates/latt-core/src/fuse/mod.rs", 22, 0),
+    ("crates/latt-core/src/fuse/mod.rs", 23, 0),
     ("crates/latt-core/src/fuse/trace.rs", 2, 0),
     ("crates/latt-core/src/graph.rs", 45, 0),
     ("crates/latt-core/src/lib.rs", 8, 9),
     ("crates/latt-core/src/notes.rs", 0, 0),
     ("crates/latt-core/src/output/describe.rs", 0, 0),
     ("crates/latt-core/src/output/fuse.rs", 0, 0),
-    ("crates/latt-core/src/output/mod.rs", 7, 2),
+    ("crates/latt-core/src/output/mod.rs", 7, 3),
     ("crates/latt-core/src/output/query.rs", 0, 0),
     ("crates/latt-core/src/output/sorted.rs", 0, 0),
     ("crates/latt-core/src/output/summary.rs", 0, 0),
@@ -246,15 +247,16 @@ const PINNED: &[(&str, usize, usize)] = &[
     ("crates/latt-core/src/query/materialize.rs", 2, 2),
     ("crates/latt-core/src/query/mod.rs", 14, 0),
     ("crates/latt-core/src/query/reports.rs", 6, 0),
+    ("crates/latt-core/src/query/rule_coverage.rs", 0, 0),
     ("crates/latt-core/src/query/schema.rs", 1, 1),
     ("crates/latt-core/src/query/traverse.rs", 1, 1),
     ("crates/latt-core/src/scope.rs", 0, 0),
-    ("crates/latt-core/src/service.rs", 42, 3),
+    ("crates/latt-core/src/service.rs", 43, 3),
     ("crates/latt-core/src/suggest.rs", 2, 1),
     ("crates/latt-core/src/summary.rs", 5, 1),
     ("crates/latt-core/src/template.rs", 10, 2),
-    ("crates/latt-core/src/trace.rs", 1, 0),
-    ("crates/latt-core/src/types.rs", 234, 26),
+    ("crates/latt-core/src/trace.rs", 2, 0),
+    ("crates/latt-core/src/types.rs", 258, 27),
     ("crates/latt-core/src/validate/adapter_issues.rs", 1, 0),
     ("crates/latt-core/src/validate/collect.rs", 0, 0),
     ("crates/latt-core/src/validate/conditions.rs", 0, 1),

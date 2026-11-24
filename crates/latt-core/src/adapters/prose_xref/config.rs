@@ -68,6 +68,7 @@ impl Config {
 
     /// Discover matching files under each content directory. Unreadable or missing
     /// directories become `PARSE_ERROR` findings; the walk continues past them. A
+    /// symlinked directory is not walked and is an info `UNFOLLOWED_LINK`. A
     /// readable target where nothing matches yields an info `NO_MATCHING_FILES`
     /// naming the globs and directories, so a mistyped glob never reads as an empty
     /// register.
@@ -147,10 +148,13 @@ impl Config {
                 }
             };
             // `entry.file_type()` does not follow symlinks, so a symlinked directory
-            // cycle cannot recurse; symlinks that resolve to files are still read, and
-            // a dangling one is kept so that reading it reports it.
+            // cycle cannot recurse; such a directory is reported, not walked.
+            // Symlinks that resolve to files are still read, and a dangling one is
+            // kept so that reading it reports it.
             if file_type.is_dir() {
                 self.walk_dir(&path, target, doc, files);
+            } else if file_type.is_symlink() && path.is_dir() {
+                latt_adapter::unfollowed_link(doc, relative(&path, target));
             } else if file_type.is_file()
                 || (file_type.is_symlink() && latt_adapter::is_file_or_dangling(&path))
             {

@@ -24,6 +24,11 @@ sources, contains duplicate source names, has a source name containing `:`,
 declares an unknown key, or has a `manifest_version` that is not X.Y.Z or whose
 major is unsupported.
 
+A manifest or fuse profile that cannot be read or is not valid YAML SHALL be one
+`FUSE_ERROR` whose message is one line, naming the file and then each cause once. Its
+provenance SHALL name that file, the manifest as given, and for a YAML error the line
+the parser reports.
+
 Verified by: `cargo test -p latt --test fuse -- manifest`
 
 #### Scenario: Valid manifest loads
@@ -43,6 +48,11 @@ Verified by: `cargo test -p latt --test fuse -- manifest`
 #### Scenario: Unknown manifest or source key
 - **WHEN** the manifest, or one of its sources, declares a key the format does not have
 - **THEN** the command exits 2 naming the key
+
+#### Scenario: Unreadable or malformed manifest
+- **WHEN** `--manifest` names a directory, or a file holding `manifest_version: [`
+- **THEN** the command exits 2 with one `FUSE_ERROR` on one line, carrying `Is a
+  directory` or the parser's error once; the malformed file's finding is at line 2
 
 #### Scenario: Duplicate source names
 - **WHEN** a manifest declares two sources with the same name
@@ -124,16 +134,25 @@ The command SHALL run `latt trace --format json --profile <profile> --adapter
 <adapter> --target <target>` for each source in manifest order. It SHALL parse
 the JSON trace payload from each run.
 
-A source whose trace run exits 2, fails to execute, or emits unparseable output
-SHALL be recorded as `SOURCE_FAILURE`. The command SHALL continue running
+Each source's trace run SHALL be bounded by its source profile's adapter timeout
+(`adapter.timeout_seconds`, or its default) plus 30 seconds for the trace's own work; a
+run still going at the bound SHALL be killed.
+
+A source whose trace run exits 2, fails to execute, runs past its bound, or emits
+unparseable output SHALL be recorded as `SOURCE_FAILURE`. The command SHALL continue running
 remaining sources. After all sources run, if any source failed, the command SHALL
 report the healthy sources' findings alongside SOURCE_FAILURE findings and exit 2
 without assembling the graph.
 
+A `SOURCE_FAILURE` message SHALL be one line: how the run ended (`trace exited 2`, or
+the signal that stopped it), then the run's stderr with its non-blank lines joined by
+`; `.
+
 A source whose trace run exits 0 or 1 SHALL contribute its trace payload to the
 merge.
 
-Verified by: `cargo test -p latt --test fuse -- failed_trace`
+Verified by: `cargo test -p latt --test fuse -- failed_trace`, and
+`cargo test -p latt-core --lib bounded_source_runs`
 
 #### Scenario: All sources succeed
 - **WHEN** all sources exit 0 or 1
@@ -143,6 +162,17 @@ Verified by: `cargo test -p latt --test fuse -- failed_trace`
 - **WHEN** one of two sources exits 2 and the other exits 0
 - **THEN** the command reports the healthy source's findings and
   SOURCE_FAILURE for the failed source, and exits 2
+
+#### Scenario: A source run does not finish
+- **WHEN** a source profile declares `adapter.timeout_seconds: 1` and its trace run does
+  not exit
+- **THEN** the run is killed at its bound and the source's `SOURCE_FAILURE` reads
+  `trace exceeded <N> s and was stopped`
+
+#### Scenario: A failed run's stderr spans lines
+- **WHEN** a source's adapter writes `first line` and `second line` to stderr and exits 2
+- **THEN** its `SOURCE_FAILURE` message starts `trace exited 2: ` and holds
+  `first line; second line`, on one line
 
 ### Requirement: Source-qualified merge with colon separator
 The command SHALL merge trace payloads from all successful sources in declared
@@ -238,7 +268,18 @@ composed ID (assembly wrote the qualifier), and the command SHALL check the raw 
 against the source profile's own `id_pattern`, emitting `ID_FORMAT` as the standard
 validator would. The source pattern is matched as compiled, never spliced into a
 qualified pattern as text: a nested anchor or an escaped `$` would change meaning.
+A node whose `ID_FORMAT` its source already reported SHALL NOT be checked again: the
+source's finding is the one report, unchanged but for qualification and attribution.
 Node kinds added only from fuse edge endpoint declarations SHALL accept any ID.
+
+The composed run owns `EMPTY_KIND`. Every `EMPTY_KIND` a source contributed SHALL be
+withdrawn at composition, and the command SHALL emit one per kind with no instance
+in the whole fused population: each node kind any source profile declares, qualified,
+with no composed node, and each edge kind a source profile or the fuse profile
+declares, by its shared name, with no composed edge. Every composed edge counts,
+resolved or not. A node kind's finding SHALL take its severity and suppression as a
+composed orphan finding does (below); an edge kind's SHALL take the fuse profile's
+alone, since the sources declaring it may disagree.
 
 The composed run owns the orphan findings. For a node kind emitted by a source
 trace, the temporary profile SHALL carry that source profile's `orphan_ok`, so the
@@ -272,7 +313,7 @@ entries MAY include `where:` and `source_where:` conditions, consistent with sta
 `--strict` SHALL promote warnings to errors after all findings are collected,
 consistent with single-source behavior.
 
-Verified by: `cargo test -p latt --test fuse -- standard_constraints duplicates_ambiguity coverage_undeclared coverage_repeated coverage_unknown coverage_where composed_ids source_pattern orphan`
+Verified by: `cargo test -p latt --test fuse -- standard_constraints duplicates_ambiguity coverage_undeclared coverage_repeated coverage_unknown coverage_where composed_ids source_pattern orphan empty kinds id_format composed_id_check`
 
 #### Scenario: Standard validators produce findings on composed graph
 - **WHEN** the fuse profile declares a CONSTRAINT validation and a composed
@@ -307,6 +348,22 @@ Verified by: `cargo test -p latt --test fuse -- standard_constraints duplicates_
   whose composed ID is `product:malformed`
 - **THEN** the command emits an ID_FORMAT finding for that composed node
 - **AND** it does not emit ID_FORMAT for a composed ID such as `product:REQ-001`
+
+#### Scenario: A malformed ID is reported once
+- **WHEN** source `product` reports `ID_FORMAT` on its node `malformed`
+- **THEN** the fuse output carries exactly that finding for `product:malformed`, with
+  its note, and no second `ID_FORMAT` for the node
+
+#### Scenario: A kind whose every edge dangles is not empty
+- **WHEN** every `verifies` edge of source `tests` names a target no source declares
+- **THEN** the fuse output lists those edges and carries no `EMPTY_KIND` for
+  `verifies`, beside the `VACANCY` per edge
+
+#### Scenario: Each empty kind is reported once
+- **WHEN** source `product` declares node kinds `requirement` and `hazard` and emits
+  no hazard, and edge kind `controls` has no edge in any source
+- **THEN** the fuse output carries one `EMPTY_KIND` for node kind `product:hazard`
+  and one for edge kind `controls`, and none naming the raw kind `hazard`
 
 #### Scenario: A source pattern keeps its meaning under composition
 - **WHEN** a source profile's `id_pattern` is `(?:^A$)` or `A\$`, and the source
@@ -367,14 +424,26 @@ entry with `node_ids` matches the node's raw ID (without the `S:` qualifier), an
 first entry for a code decides. This holds whether or not `S`'s run reported the node
 as an orphan: composition can make an orphan the source run did not see. A replacement
 SHALL also keep the suppression of a source finding that arrived suppressed; the
-command never unsuppresses one.
+command never unsuppresses one. A composed `EMPTY_KIND` for node kind `S:kind` SHALL be
+suppressed when `S`'s profile declares a `SUPPRESS` entry for `EMPTY_KIND` without
+`node_ids`.
+A source's `SUPPRESS_UNUSED` for an `UNREFERENCED` or `UNTRACED` entry was judged
+against the orphan findings composition withdrew, so the command SHALL judge that entry
+again against the composed run's findings of its code on `S`'s nodes, matching raw IDs:
+the source finding SHALL be withdrawn when the entry matches one, and otherwise SHALL
+name only the `node_ids` still unmatched. An entry `S`'s run used that matches no
+composed finding SHALL be reported as a `SUPPRESS_UNUSED` attributed to `S`, with the
+severity and suppression `S`'s profile gives that code.
 
 The fuse profile's `SUPPRESS` entries apply to the findings the command itself
 collects — cross-source resolution findings (`CROSS_SOURCE_DUPLICATE_ID`,
 `AMBIGUOUS_CROSS_REF`, `VACANCY`) and the standard-validator findings on the
 composed graph, which include `UNREFERENCED` and `UNTRACED`. A fuse-level
 `node_ids` entry SHALL match against composed IDs
-(`source:raw_id`), because that is the `node_id` the findings carry.
+(`source:raw_id`), because that is the `node_id` the findings carry. A fuse-profile
+entry SHALL only add suppression: an entry for a finding's code that does not match it
+(a `node_ids` entry, for a finding with no node) SHALL leave the suppression its source
+decided.
 Suppression runs after `--strict` promotion and before the exit-code decision,
 consistent with single-source behavior. `SUPPRESS_UNUSED` for a fuse-profile
 entry is emitted against the fuse profile and names it as provenance.
@@ -411,6 +480,27 @@ Verified by: `cargo test -p latt --test fuse -- suppress`
   the composed graph
 - **THEN** the fuse output carries one `UNTRACED` for `z:Z`, marked
   `suppressed: true`, and it does not affect the fuse exit code
+
+#### Scenario: A source entry the composed graph uses is not reported unused
+- **WHEN** source `z`'s profile declares `SUPPRESS: {code: UNREFERENCED}`, its run
+  reports no orphan and so reports that entry as `SUPPRESS_UNUSED`, and the composed
+  graph has `UNREFERENCED` for `z:X`
+- **THEN** the `z:X` finding is suppressed and the fuse output carries no
+  `SUPPRESS_UNUSED` for the entry
+
+#### Scenario: A source entry the composed graph leaves unmatched is reported unused
+- **WHEN** source `a`'s profile declares `SUPPRESS: {code: UNREFERENCED, node_ids: [A]}`,
+  its run suppresses `UNREFERENCED` for `A`, and an edge from source `z` resolves to `a:A`
+- **THEN** the fuse output carries no `UNREFERENCED` for `a:A` and one `SUPPRESS_UNUSED`
+  attributed to `a` naming `node_ids ["A"]`
+
+#### Scenario: A source's SUPPRESS_UNUSED message template survives reconciliation
+- **WHEN** the source profile gives `SUPPRESS_UNUSED` a `message:` template, and the
+  composed graph uses that source's entry wholly, in part, or not at all where the
+  source run used it
+- **THEN** the source's finding is withdrawn, rewritten or added exactly as without a
+  template, and every one the fuse output carries is rendered through the template at
+  its own severity
 
 #### Scenario: Fuse-level suppression of a cross-source finding
 - **WHEN** the fuse profile declares `SUPPRESS: {code: VACANCY}` and
@@ -458,10 +548,23 @@ formats (plain, json, rich). The JSON output SHALL include `header` (with `name`
 `version`, `manifest_version`, `fuse_version`), `nodes`, `edges`, `pathways`, and
 `findings`. `fuse_version` is the report envelope's version, an integer string
 (current value: the versioning capability's wire version axes), present even when the composition could not start; it changes when the top-level keys or the shape of a node, edge,
-pathway or finding change.
+pathway or finding change. A finding may gain an optional key (as `stage`) without
+changing `fuse_version`; removing a key or changing a key's type or meaning does.
 Each finding SHALL carry source attribution when applicable.
+Each `SOURCE_FAILURE` and `FUSE_ERROR` finding that fuse itself raises SHALL carry `stage`
+in `json`, naming where the run failed: `manifest`, `fuse_profile` (the fuse profile, or
+the composed profile refusing one of its entries), `source_run` (a source's run could
+not start, exited with a code other than 0 or 1, or was killed by a signal, a source
+profile that does not load inside that run included; with no `source`, fuse could not
+find its own executable), `timeout` (stopped past its bound), `source_output` (the trace
+did not parse), `source_profile` (fuse's own load of a source profile after the runs
+failed) or `composition` (a composition check that the earlier stages had passed). No
+other finding SHALL carry it, and its `message` SHALL be unchanged by it. A finding with
+one of those codes that a source's adapter wrote is carried as the source wrote it, with
+no `stage`.
 
-Verified by: `cargo test -p latt --test fuse -- cli_clean_warning`
+Verified by: `cargo test -p latt --test fuse -- cli_clean_warning stage source_profile_that`
+and `cargo test -p latt-core --lib bounded_source_runs`
 
 #### Scenario: JSON output contains composed graph
 - **WHEN** the command runs with `--format json` against two sources
@@ -473,16 +576,48 @@ Verified by: `cargo test -p latt --test fuse -- cli_clean_warning`
 - **THEN** the output contains a header line, node listings, edge listings,
   and finding lines
 
+#### Scenario: Failure findings carry a stage
+- **WHEN** the manifest is missing, or a source's `latt trace` exits 2, and the command
+  runs with `--format json`
+- **THEN** the `FUSE_ERROR` finding carries `"stage": "manifest"`, or the
+  `SOURCE_FAILURE` finding carries `"stage": "source_run"`, and a run that could run
+  has no finding with `stage`
+
+#### Scenario: The stage tells the manifest, the fuse profile and a source profile apart
+- **WHEN** the manifest is not valid YAML, the fuse profile is not valid YAML, the
+  composed profile refuses a fuse profile entry, a source profile breaks between its
+  trace run and fuse's own load of it, or a source's run passes its bound
+- **THEN** the finding's `stage` is `manifest`, `fuse_profile`, `fuse_profile`,
+  `source_profile` or `timeout` respectively
+
 ### Requirement: Fuse exit codes
 The command SHALL use the same three-valued exit codes as lattice:
 - **0** — no error-severity findings in any phase.
 - **1** — error-severity findings in source or cross-source validation.
 - **2** — could not run: bad manifest, bad fuse profile, source adapter failure,
-  unparseable trace output, or a source profile that cannot be loaded.
+  unparseable trace output, a source profile that cannot be loaded, or a panic in fuse itself.
 
 Exit 2 SHALL never be collapsed into 1.
 
-Verified by: `cargo test -p latt --test fuse -- cli_clean_warning source_profile`
+At exit 2 the command SHALL also name each `SOURCE_FAILURE` and `FUSE_ERROR` on stderr,
+after the report on stdout, which it SHALL leave unchanged: in `plain` and `rich` one line
+per failure, `fuse: source '<name>' failed at <stage>: <message>. Next: <action>` for a
+source and `fuse: <stage> failed: <message>. Next: <action>` for the composition's own,
+one trailing `.` of the message dropped; in `json` one object in the `validate` findings
+shape, with no `stage` key, whose `message` holds the same text without the `fuse: `
+prefix. The action SHALL follow the stage: for `timeout`, raise the source's
+`timeout_seconds` or run its trace alone; for `source_run`, `source_output` and
+`source_profile`, run the source's `latt trace` and read its stderr, except that a
+`source_run` with no source (fuse could not find its own executable) SHALL say to check
+or reinstall the `latt` binary; for `manifest` and `fuse_profile`, fix the file or entry
+the message names; for `composition`, report a bug. A failure a source carried has no
+stage and SHALL read `fuse: source '<name>' failed: <message>`, with no action. In that
+text, the source name included, each control character but tab, each bidi control
+(U+061C, U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069) and U+2028/U+2029 SHALL be
+written as a visible escape. A run that exits 0 or 1 SHALL write no such cause.
+
+Verified by: `cargo test -p latt --test fuse -- cli_clean_warning source_profile stderr staged`
+and `cargo test -p latt --bin latt loading::tests`
 
 #### Scenario: Clean run
 - **WHEN** all sources pass and no cross-source findings at error severity
@@ -500,16 +635,41 @@ Verified by: `cargo test -p latt --test fuse -- cli_clean_warning source_profile
 - **WHEN** a source's profile cannot be loaded at composition
 - **THEN** the report's exit code is 2
 
+#### Scenario: Failure cause on stderr
+- **WHEN** a source named `specs` exits 2 and the command runs with `--format plain`
+- **THEN** the command exits 2, stdout carries the report as before, and stderr carries
+  one line starting `fuse: source 'specs' failed at source_run: trace exited 2` and
+  ending `. Next: ` and the `source_run` action
+
 ### Requirement: Member findings keep their notes
 A finding read from a source's trace SHALL keep the `note` that source's own profile
 attached to it, unchanged, in the fuse report's JSON, plain and rich output, on the same
-terms as the output capability's noted findings. Fuse SHALL NOT attach notes of its own.
+terms as the output capability's noted findings. A finding of the command's own with the
+code and composed node of a source finding that carried a note SHALL carry that note,
+unchanged: the composed orphan findings, a `VACANCY` the command judged in place of the
+source's, and a fuse validation's finding on the node. `CROSS_SOURCE_DUPLICATE_ID` and
+`AMBIGUOUS_CROSS_REF` judge across sources and SHALL carry no source's note; a
+duplicate's node is a raw ID, which may spell another source's composed one. This
+copies notes the sources
+attached; fuse SHALL NOT read annotations of its own or match a source's notes file
+against the composed graph, so an entry that matched nothing in its source's run
+attaches to nothing in the fuse.
 
-Verified by: `cargo test -p latt --locked --test fuse notes`.
+Verified by: `cargo test -p latt --locked --test fuse note`.
 
 #### Scenario: A source's note survives composition
 - **WHEN** source `product` carries a `VACANCY` finding on `REQ-2` with a note
 - **THEN** the fuse JSON finding for `product:REQ-2` carries the same `note` object
+
+#### Scenario: A note reaches the finding that replaces its own
+- **WHEN** source `product`'s note is attached to its `UNTRACED` on `REQ-2`, which
+  composition withdraws and the composed run reports again
+- **THEN** the composed `UNTRACED` on `product:REQ-2` carries the same `note` object
+
+#### Scenario: A note stays with its source
+- **WHEN** sources `product` and `legacy` both declare raw ID `REQ-2`, and only
+  `product`'s note matches it
+- **THEN** findings on `legacy:REQ-2` carry no note
 
 ### Requirement: A source profile that cannot load is a source failure
 Composition reads each source's profile for the ID patterns it qualifies onto composed
@@ -518,13 +678,15 @@ node kinds. A source profile that cannot be loaded SHALL be recorded as a
 the same terms as a source whose trace run failed: the report SHALL carry the other
 sources' own findings and every `SOURCE_FAILURE`, the composition SHALL NOT run, and
 the command SHALL exit 2. Composing without the pattern set would validate that
-source's composed IDs against nothing and report the result as clean.
+source's composed IDs against nothing and report the result as clean. The other
+sources' findings SHALL arrive as each reported them, their `EMPTY_KIND` and notes
+included, except that `--strict` still promotes their warnings.
 
 A trace handed to composition SHALL have passed the trace checks; the type that
 carries it SHALL NOT be constructible by deserializing it directly, so an unchecked
 severity or note reaches composition as an error, never as a panic.
 
-Verified by: `cargo test -p latt --test fuse -- source_profile`
+Verified by: `cargo test -p latt --test fuse -- source_profile failed_assembly`
 
 #### Scenario: Unloadable source profile
 - **WHEN** two sources' traces parse and the first source's profile path is unreadable

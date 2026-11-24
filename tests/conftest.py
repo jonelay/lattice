@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -11,7 +12,86 @@ from adapters._profile import Profile
 from adapters._profile import load_profile as _load_resolved
 
 
-FIXTURES_DIR = Path(__file__).parent / "fixtures"
+REPO_ROOT = Path(__file__).parent.parent
+FIXTURES_DIR = REPO_ROOT / "tests" / "fixtures"
+CORE_BIN = REPO_ROOT / (os.environ.get("CARGO_TARGET_DIR") or "target") / "debug" / "latt"
+
+needs_core = pytest.mark.usefixtures("core_binary")
+
+GATE_SKIPS = {
+    "tests/test_adapter_md.py": {"needs cargo for libtest --list"},
+    "tests/test_adapter_openspec.py": {"directory permissions do not apply to root"},
+    "tests/test_adapter_templates.py": {
+        "go template: no go on PATH",
+        "root reads a file with no permissions",
+        "this file system refuses a non-UTF-8 name",
+    },
+    "tests/test_benchmark_tools.py": {"cargo is not installed"},
+    "tests/test_release_binaries.py": {"this host's glibc is 2.28 or older"},
+}
+SNAPSHOT_GATE_SKIPS = {
+    "tests/test_benchmark_tools.py": {"retained benchmark records not in the tree"},
+    "tests/test_suggest.py": {"measurement harness not in the tree"},
+}
+
+
+def require_binary(path: Path) -> None:
+    if path.is_file():
+        return
+    reason = (
+        "core not built; run: cargo build"
+        if path == CORE_BIN
+        else f"{path} is not built; run: cargo build --workspace"
+    )
+    if os.environ.get("LATT_GATE") == "1":
+        pytest.fail(reason, pytrace=False)
+    pytest.skip(reason)
+
+
+@pytest.fixture
+def core_binary() -> None:
+    require_binary(CORE_BIN)
+
+
+def gate_skip_allowed(path: Path, reason: str) -> bool:
+    if not path.is_relative_to(REPO_ROOT):
+        return False
+    filename = path.relative_to(REPO_ROOT).as_posix()
+    if reason in GATE_SKIPS.get(filename, ()):
+        return True
+    return (
+        os.environ.get("LATT_GATE_SNAPSHOT") == "1"
+        and reason in SNAPSHOT_GATE_SKIPS.get(filename, ())
+    )
+
+
+def _check_gate_skip(report, path: Path, reason: str) -> None:
+    if not gate_skip_allowed(path, reason):
+        report.outcome = "failed"
+        report.longrepr = f"Unexpected gate skip in {report.nodeid}: {reason}"
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(item, call):
+    report = yield
+    if report.skipped and os.environ.get("LATT_GATE") == "1":
+        _check_gate_skip(report, item.path, str(call.excinfo.value))
+    return report
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_make_collect_report(collector):
+    report = yield
+    if report.skipped and os.environ.get("LATT_GATE") == "1":
+        _, _, message = report.longrepr
+        # Pytest includes the exception type in a collection skip's message.
+        reason = (
+            message.split(": ", 1)[1]
+            if message.startswith(("Skipped: ", "SkipTest: "))
+            else message
+        )
+        _check_gate_skip(report, collector.path, reason)
+    return report
 
 
 def resolve_profile(yaml_path: str | Path, out_dir: str | Path) -> Path:

@@ -1,12 +1,12 @@
 //! The `browse` command: the interactive TUI and its reload.
 
-use std::io::{IsTerminal, Write};
+use std::io::IsTerminal;
 use std::process::ExitCode;
 
 use latt_core::graph::LatticeGraph;
 use latt_core::profile::Profile;
 
-use super::console::dumb_terminal;
+use super::console::{dumb_terminal, write_stderr};
 use super::loading::{load, load_graph, load_profile_from};
 use super::{BrowseArgs, Common, Outcome, exit_for, resolve_glyphs, tui};
 
@@ -14,20 +14,18 @@ pub(super) fn run_browse(args: BrowseArgs) -> ExitCode {
     // Before anything is read or the terminal is touched: browse draws with
     // cursor addressing, which a dumb terminal lacks.
     if dumb_terminal(std::env::var_os("TERM").as_deref()) {
-        let _ = writeln!(
-            std::io::stderr(),
+        write_stderr(
             "Error: browse needs a terminal with cursor addressing (TERM=dumb); \
-             the other commands read line by line with --format plain"
+             the other commands read line by line with --format plain",
         );
         return Outcome::CouldNotRun.into();
     }
     // Without a terminal on stdout the session cannot open, and the OS error it
     // would report names a device, not the cause.
     if !std::io::stdout().is_terminal() {
-        let _ = writeln!(
-            std::io::stderr(),
+        write_stderr(
             "Error: browse needs a terminal, and stdout is not one; \
-             the other commands read line by line with --format plain"
+             the other commands read line by line with --format plain",
         );
         return Outcome::CouldNotRun.into();
     }
@@ -41,7 +39,7 @@ pub(super) fn run_browse(args: BrowseArgs) -> ExitCode {
     let (mut profile, mut graph) = match load(&common) {
         Ok(loaded) => loaded,
         Err(message) => {
-            let _ = writeln!(std::io::stderr(), "Error: {message}");
+            write_stderr(&format!("Error: {message}"));
             return Outcome::CouldNotRun.into();
         }
     };
@@ -54,7 +52,7 @@ pub(super) fn run_browse(args: BrowseArgs) -> ExitCode {
     let mut session = match tui::Session::start(ascii) {
         Ok(session) => session,
         Err(e) => {
-            let _ = writeln!(std::io::stderr(), "Error: TUI failed: {e}");
+            write_stderr(&format!("Error: TUI failed: {e}"));
             return Outcome::CouldNotRun.into();
         }
     };
@@ -83,7 +81,7 @@ pub(super) fn run_browse(args: BrowseArgs) -> ExitCode {
             Ok(outcome) => outcome,
             Err(e) => {
                 drop(session);
-                let _ = writeln!(std::io::stderr(), "Error: TUI failed: {e}");
+                write_stderr(&format!("Error: TUI failed: {e}"));
                 return Outcome::CouldNotRun.into();
             }
         };

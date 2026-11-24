@@ -6,6 +6,8 @@
 //! distinct lattice names never encode alike: `_` itself is escaped, so the
 //! escape sequences cannot be forged by a name that already contains them.
 
+use std::fmt::Write as _;
+
 /// Encode a lattice name as a GraphQL identifier.
 ///
 /// `_` → `__`, `-` → `_h_`, `:` → `_c_`, `.` → `_p_`, any other non-identifier
@@ -24,7 +26,9 @@ pub fn encode(name: &str) -> String {
             ':' => out.push_str("_c_"),
             '.' => out.push_str("_p_"),
             c if c.is_ascii_alphanumeric() => out.push(c),
-            c => out.push_str(&format!("_u{:x}_", c as u32)),
+            c => {
+                let _ = write!(out, "_u{:x}_", c as u32);
+            }
         }
     }
     out

@@ -9,18 +9,12 @@ from pathlib import Path
 import pytest
 import yaml
 
-from conftest import resolve_profile
+from conftest import CORE_BIN, needs_core, resolve_profile
 
 REPO_ROOT = Path(__file__).parent.parent
 PROFILE_PATH = REPO_ROOT / "profiles" / "prose-xref.yaml"
 ADAPTER_BIN = REPO_ROOT / "adapters" / "prose-xref"
-CORE_BIN = REPO_ROOT / "target" / "debug" / "latt"
 FIXTURE = REPO_ROOT / "tests" / "fixtures" / "mini-prose-xref"
-
-needs_core = pytest.mark.skipif(
-    not CORE_BIN.exists(), reason="core not built; run: cargo build"
-)
-
 
 def _run_adapter(target: Path, tmp_path: Path) -> dict:
     resolved = resolve_profile(PROFILE_PATH, tmp_path)
@@ -653,3 +647,19 @@ def test_a_repeated_sections_xrefs_are_not_read(tmp_path: Path) -> None:
         finding["message"].endswith("; its 1 edge was not read")
         for finding in same["findings"]
     ), same["findings"]
+
+
+# Requirement: adapter-prose-xref/Build document and section nodes from content directories
+def test_symlinked_directory_is_reported_and_not_followed(tmp_path):
+    target = _fixture_copy(tmp_path)
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "linked.md").write_text("# Linked\n")
+    (target / "ref" / "more").symlink_to("../../shared")
+    document = _run_adapter(target, tmp_path)
+    linked = [f for f in _findings(document) if f["code"] == "UNFOLLOWED_LINK"]
+    assert [
+        (f["severity"], f["provenance"]["file"], f["message"]) for f in linked
+    ] == [("info", "ref/more", "symlinked directory 'ref/more' not followed")]
+    assert "ref/more/linked.md" not in _nodes(document)
+    assert "characters/alice.md" in _nodes(document)

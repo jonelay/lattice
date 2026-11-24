@@ -250,6 +250,33 @@ Verified by: `cargo test --test contract closed_keys`, `cargo test --test contra
 - **WHEN** a document carries non-empty `findings` and non-empty `issues`
 - **THEN** the core exits 2 naming both keys
 
+### Requirement: Legacy document keys are reported
+The core SHALL report each legacy document key a document it ingests carries,
+`contract_version` and `issues`, as one `DEPRECATED_KEY` finding per key, whatever its
+value, naming the key and its replacement. The finding SHALL default to `info`, so
+a document that ingested before passes as it did, `--strict` included; SHALL carry no
+node; SHALL be written at the reserved file `<adapter>`, line 0; and SHALL follow the
+adapter's own findings. Both ingest paths SHALL report it alike.
+
+Verified by: `cargo test --test contract alias_legacy`,
+`cargo test --test contract alias_deprecations`, and
+`cargo test --test cli alias_legacy`
+
+#### Scenario: Legacy version key
+- **WHEN** a document declares `contract_version`, with or without `interface_version`
+- **THEN** the core ingests it and reports one info `DEPRECATED_KEY` at `<adapter>:0`
+  naming `interface_version`
+
+#### Scenario: Legacy findings key, empty or not
+- **WHEN** a document carries an `issues` key, empty or populated
+- **THEN** the core reports one info `DEPRECATED_KEY` naming `findings`, after the
+  adapter's own findings
+
+#### Scenario: Strict run over a legacy document
+- **WHEN** `validate --strict` runs over a document whose only finding is a
+  `DEPRECATED_KEY`
+- **THEN** it exits 0
+
 ### Requirement: Core invokes the adapter with profile and target paths
 The core SHALL run the adapter program with a profile path and the target path, and
 SHALL read the document from the program's stdout. The profile path SHALL name the
@@ -294,7 +321,7 @@ profile's YAML source or a future schema as if it were the one it knows.
 
 Verified by: `cargo test --test contract resolved`,
 `cargo test -p latt-adapter load_resolved_profile`,
-`cargo test -p latt-core --lib adapters::prose_xref only_a_resolved_profile_document_loads` and
+`cargo test -p latt-core --lib only_a_resolved_profile_document_loads` and
 `.venv/bin/python -m pytest tests -k resolved`
 
 #### Scenario: Declared fields round-trip
@@ -567,6 +594,53 @@ Verified by: `cargo test --test cli adapter_exceeding_its_bound_exits_two` and
 #### Scenario: Default bound applies when the key is absent
 - **WHEN** the profile's `adapter:` block has no `timeout_seconds`
 - **THEN** the core waits at most 300 seconds for the adapter program
+
+### Requirement: Adapter output is bounded
+The core SHALL stop an external adapter program, and a `fuse` source's `latt trace`
+run, that writes more than 1 GiB to stdout, or more than the positive whole number of
+bytes in `LATT_ADAPTER_MAX_OUTPUT_BYTES` when that variable is set. It SHALL terminate
+and reap the process, SHALL ingest nothing, and SHALL NOT return a truncated buffer as
+the output. An adapter run over the limit SHALL exit 2 with a message naming the program
+and the limit; a `fuse` source whose own `latt trace` run is over the limit SHALL report
+`SOURCE_FAILURE` at stage `source_output`, while one whose adapter is over it fails as
+that trace's exit 2, at stage `source_run`. A cancelled pipe read SHALL end after at most
+4 MiB more, so a process that keeps writing cannot delay its own termination.
+A value of the variable that is not a positive whole number SHALL be exit 2 naming the
+variable, whether the adapter is external or native; the check runs before any adapter
+starts. Only the last 1 MiB of stderr SHALL be kept, and a flood of stderr SHALL NOT
+fail the run or change its exit code.
+
+Verified by: `cargo test -p latt-adapter process`, `cargo test -p latt --test native --
+never_stops_writing flooding_stderr output_limit address_space`
+(`output_limit` covers `an_unreadable_output_limit_is_a_setup_error_for_a_native_adapter`), and
+`cargo test -p latt-core --lib bounded_source_runs`.
+
+#### Scenario: Adapter writes without end
+- **WHEN** the adapter program writes to stdout until stopped and the limit is 1 MiB
+- **THEN** the core exits 2 with a message naming the program and `1 MiB`, the adapter
+  process no longer exists, and nothing is ingested
+
+#### Scenario: Output exactly at the limit is kept
+- **WHEN** the adapter writes exactly as many bytes as the limit
+- **THEN** the output is delivered whole
+
+#### Scenario: Adapter floods stderr
+- **WHEN** the adapter writes megabytes to stderr and exits 2
+- **THEN** the core exits 2 with `exited 2` and the end of that stderr, not its start
+
+#### Scenario: Address space is limited
+- **WHEN** the address space is limited to about 2 GB and the adapter writes without end
+- **THEN** the core exits 2, not by an allocation abort
+
+#### Scenario: The limit variable is not a number
+- **WHEN** `LATT_ADAPTER_MAX_OUTPUT_BYTES` is `lots`, `0` or empty, for an external or
+  a native adapter
+- **THEN** the core exits 2 naming the variable
+
+#### Scenario: A fuse source floods its trace
+- **WHEN** a source's `latt trace` writes past the limit to stdout
+- **THEN** the run is killed and the source's `SOURCE_FAILURE` is at stage
+  `source_output` and reads `trace wrote more than <N> MiB to stdout and was stopped`
 
 ### Requirement: Adapter-core document types admit additions
 The interface-document types the `latt-adapter` crate exports (the document, nodes, edges,

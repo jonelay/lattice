@@ -82,9 +82,9 @@ impl fmt::Display for Provenance {
 /// input Lattice reads itself and reports on as a whole.
 ///
 /// Only a [`Origin::File`] has a path. The others are written in the reports as
-/// reserved names (`<profile>`, `<fuse-profile>`, `<source>`, `<suggestions>`) at
-/// line 0, which is what [`Display`](fmt::Display) writes too; read them as
-/// variants, never as paths.
+/// reserved names (`<profile>`, `<fuse-profile>`, `<source>`, `<suggestions>`,
+/// `<adapter>`) at line 0, which is what [`Display`](fmt::Display) writes too;
+/// read them as variants, never as paths.
 ///
 /// ```
 /// use latt_core::service::{Origin, Provenance};
@@ -108,6 +108,8 @@ pub enum Origin {
     FuseSource,
     /// A suggestion document.
     Suggestions,
+    /// The adapter's interface document as a whole.
+    Adapter,
 }
 
 #[deny(missing_docs, clippy::missing_errors_doc, clippy::missing_panics_doc)]
@@ -129,6 +131,7 @@ impl Origin {
             Self::FuseProfile => "<fuse-profile>",
             Self::FuseSource => "<source>",
             Self::Suggestions => "<suggestions>",
+            Self::Adapter => "<adapter>",
         }
     }
 
@@ -145,6 +148,7 @@ impl Origin {
             "<fuse-profile>" => Self::FuseProfile,
             "<source>" => Self::FuseSource,
             "<suggestions>" => Self::Suggestions,
+            "<adapter>" => Self::Adapter,
             _ => Self::File(Provenance::new(file, line)),
         }
     }
@@ -840,6 +844,33 @@ impl PathReport {
     ///
     /// A message naming the broken shape when `nodes` is empty, `edges` is not
     /// one shorter than `nodes`, or the ends are not `src` and `tgt`.
+    ///
+    /// ```
+    /// use latt_core::types::PathReport;
+    ///
+    /// let ids = |s: &[&str]| s.iter().map(|&id| id.to_owned()).collect::<Vec<_>>();
+    /// let report = PathReport::found(
+    ///     "T-1".into(),
+    ///     "R-1".into(),
+    ///     ids(&["T-1", "S-1", "R-1"]),
+    ///     ids(&["verifies", "satisfies"]),
+    /// )?;
+    /// let (nodes, edges) = report.found_path().ok_or("no path")?;
+    /// assert_eq!((nodes.len(), edges.len()), (3, 2));
+    ///
+    /// // Each broken shape is refused, not repaired.
+    /// let refused = |nodes: &[&str], edges: &[&str]| {
+    ///     PathReport::found("T-1".into(), "R-1".into(), ids(nodes), ids(edges)).unwrap_err()
+    /// };
+    /// assert_eq!(refused(&[], &[]), "a found path must contain at least one node");
+    /// assert_eq!(
+    ///     refused(&["T-1", "R-1"], &[]),
+    ///     "a found path must have one fewer edge than nodes"
+    /// );
+    /// assert_eq!(refused(&["S-1", "R-1"], &["satisfies"]), "first node must equal src");
+    /// assert_eq!(refused(&["T-1", "S-1"], &["verifies"]), "last node must equal tgt");
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn found(
         src: String,
         tgt: String,
@@ -963,6 +994,105 @@ pub struct KindCoverage {
     pub incoming_pct: f64,
     /// Outgoing share expressed from zero through one hundred.
     pub outgoing_pct: f64,
+}
+
+/// Report one configured direct coverage rule over the supplied graph.
+///
+/// Input findings stay beside the aggregate, independently of suppression.
+#[deny(missing_docs, clippy::missing_errors_doc, clippy::missing_panics_doc)]
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct RuleCoverageReport {
+    /// One-based ordinal among resolved `COVERAGE` entries.
+    pub rule: usize,
+    /// Kind whose explicit nodes form the denominator after `where_` selection.
+    pub target_kind: String,
+    /// Incoming relationship required by the selected rule.
+    pub edge_kind: String,
+    /// Resolved target condition map; empty selects every node of the kind.
+    pub where_: serde_json::Value,
+    /// Resolved source condition map; empty admits every explicit source.
+    pub source_where: serde_json::Value,
+    /// Selected explicit target nodes.
+    pub total: usize,
+    /// Selected targets with at least one admitted incoming edge.
+    pub covered: usize,
+    /// Rounded one-decimal percentage, or `None` for an empty denominator.
+    pub covered_pct: Option<f64>,
+    /// Selected targets lacking evidence, ordered by ID.
+    pub missing: Vec<CoverageGap>,
+    /// Allowed source kinds for this target kind, ordered by name.
+    pub source_kinds: Vec<String>,
+    /// Explicit allowed-source-kind nodes matching `source_where`.
+    pub source_total: usize,
+    /// Admitted source nodes with no outgoing edge of the selected kind.
+    pub unattributed: usize,
+    /// Whether parse findings or the host identify partial input; false leaves
+    /// completeness unknown and makes no claim about unread records.
+    pub input_partial: bool,
+    /// Resolved adapter findings, retained regardless of suppression.
+    pub findings: Vec<Issue>,
+}
+
+/// Locate a selected node that lacks the rule's incoming relationship.
+#[deny(missing_docs, clippy::missing_errors_doc, clippy::missing_panics_doc)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct CoverageGap {
+    /// Explicit target identifier.
+    pub id: String,
+    /// Source location of the target declaration.
+    pub provenance: Provenance,
+    /// [`GapState::Unknown`] when admitted sources lack attribution, otherwise
+    /// [`GapState::Unverified`].
+    pub state: GapState,
+}
+
+/// What a coverage gap says about its target.
+///
+/// Serialized as its [`as_str`](Self::as_str) spelling, which is what `json`
+/// output carries.
+#[deny(missing_docs, clippy::missing_errors_doc, clippy::missing_panics_doc)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum GapState {
+    /// No source attributes to the target, and every admitted source is
+    /// attributed: the target is unverified.
+    Unverified,
+    /// Some admitted source lacks attribution, so whether it would cover the
+    /// target is unknown.
+    Unknown,
+}
+
+#[deny(missing_docs, clippy::missing_errors_doc, clippy::missing_panics_doc)]
+impl GapState {
+    /// The wire spelling: `unverified` or `unknown`.
+    ///
+    /// ```
+    /// use latt_core::service::GapState;
+    ///
+    /// assert_eq!(GapState::Unknown.as_str(), "unknown");
+    /// assert_eq!(GapState::Unverified.to_string(), "unverified");
+    /// ```
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            GapState::Unverified => "unverified",
+            GapState::Unknown => "unknown",
+        }
+    }
+}
+
+impl fmt::Display for GapState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl serde::Serialize for GapState {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
 }
 
 /// Two-revision diff answer: what the register gained, lost, and changed.
@@ -1208,6 +1338,48 @@ pub struct FuseFinding {
     /// Every location of a cross-source finding, such as a raw ID repeated
     /// across sources; empty otherwise.
     pub locations: Vec<FuseProvenance>,
+    /// Where a `SOURCE_FAILURE` or `FUSE_ERROR` arose; `None` for every other
+    /// finding.
+    pub stage: Option<FuseStage>,
+}
+
+/// The step of a `fuse` run at which it failed, as `findings[].stage` names it.
+#[deny(missing_docs, clippy::missing_errors_doc, clippy::missing_panics_doc)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+#[doc(hidden)]
+pub enum FuseStage {
+    /// Reading or checking the manifest.
+    Manifest,
+    /// Reading or checking the fuse profile, its endpoints included.
+    FuseProfile,
+    /// Running a source's `latt trace`: it could not start, exited other than
+    /// 0 or 1, or was killed by a signal.
+    SourceRun,
+    /// A source's `latt trace` ran past its bound and was stopped.
+    Timeout,
+    /// Reading a source's trace: not UTF-8, or not a valid trace document.
+    SourceOutput,
+    /// Loading a source's own profile at composition.
+    SourceProfile,
+    /// Composing the read traces into one graph.
+    Composition,
+}
+
+impl FuseStage {
+    /// Return the stage's name as `findings[].stage` writes it.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Manifest => "manifest",
+            Self::FuseProfile => "fuse_profile",
+            Self::SourceRun => "source_run",
+            Self::Timeout => "timeout",
+            Self::SourceOutput => "source_output",
+            Self::SourceProfile => "source_profile",
+            Self::Composition => "composition",
+        }
+    }
 }
 
 /// `describe`'s answer: what the profile declares and what the adapter read
@@ -1342,9 +1514,18 @@ impl FuseReport {
                 issue,
                 source: None,
                 locations: Vec::new(),
+                stage: None,
             }],
             ..Self::default()
         }
+    }
+
+    /// [`failed`](Self::failed), the one finding naming the `stage` it arose at.
+    #[must_use]
+    pub fn failed_at(issue: Issue, stage: FuseStage) -> Self {
+        let mut report = Self::failed(issue);
+        report.findings[0].stage = Some(stage);
+        report
     }
 
     /// The process exit code: 2 when the composition could not run, 1 when a

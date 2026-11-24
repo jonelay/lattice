@@ -17,7 +17,8 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).parent.parent
+from conftest import REPO_ROOT
+
 EXTERNAL_SHIMS = ("entomologist",)
 NATIVE_SHIMS = ("md", "prose-xref", "toml")
 SHIMS = EXTERNAL_SHIMS + NATIVE_SHIMS

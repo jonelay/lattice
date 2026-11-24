@@ -1,10 +1,12 @@
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 
 use serde::ser::{Serialize, SerializeSeq, Serializer};
 
 use super::sorted::{SortedMap, scalar_text};
 use super::{
-    PathwaysJson, ProvenanceJson, RESET, color_for, ljust, render_json, rjust, truncate, visible,
+    PathwaysJson, ProvenanceJson, RESET, color_for, ljust, render_json, rjust, sanitize_text,
+    truncate, visible,
 };
 use crate::types::{Issue, Severity, TraceEdge, TraceEntry, TraceReport};
 
@@ -18,7 +20,10 @@ fn summary_field(entry: &TraceEntry) -> Option<(&str, String)> {
 
 /// A trace row's key-attr cell in `rich`: the summary value cut to the column.
 pub(super) fn key_value(entry: &TraceEntry) -> String {
-    summary_field(entry).map_or(String::new(), |(_, value)| truncate(&value, 30))
+    summary_field(entry).map_or(String::new(), |(_, value)| {
+        // Cut before escaping, so the cut never lands inside an escape.
+        sanitize_text(&truncate(&value, 30)).into_owned()
+    })
 }
 
 /// An entry's `plain` line: every field as `name:value`, so it reads in any
@@ -27,14 +32,14 @@ pub(super) fn key_value(entry: &TraceEntry) -> String {
 pub(super) fn plain_entry_line(entry: &TraceEntry) -> String {
     let mut line = format!(
         "id:{} kind:{} edges:{} findings:{}",
-        entry.id,
-        entry.kind,
+        sanitize_text(&entry.id),
+        sanitize_text(&entry.kind),
         entry.edge_count(),
         visible(&entry.findings).count()
     );
     if let Some((attr, value)) = summary_field(entry) {
         let value = value.split_whitespace().collect::<Vec<_>>().join(" ");
-        line.push_str(&format!(" {attr}:{value}"));
+        let _ = write!(line, " {}:{}", sanitize_text(attr), sanitize_text(&value));
     }
     line
 }
@@ -43,9 +48,9 @@ pub(super) fn finding_line(issue: &Issue) -> String {
     let line = format!(
         "  {} {} {} {}",
         issue.severity.as_upper(),
-        issue.code,
-        issue.origin,
-        issue.message
+        sanitize_text(&issue.code),
+        sanitize_text(&issue.origin.to_string()),
+        sanitize_text(&issue.message)
     );
     super::with_plain_note(line, issue)
 }
@@ -57,9 +62,9 @@ pub(super) fn rich_finding_line(issue: &Issue) -> String {
         color_for(issue.severity),
         ljust(issue.severity.as_upper(), 7),
         RESET,
-        issue.code,
-        issue.origin,
-        issue.message
+        sanitize_text(&issue.code),
+        sanitize_text(&issue.origin.to_string()),
+        sanitize_text(&issue.message)
     );
     match &issue.note {
         Some(note) => format!("{line}\n    {}", super::note_text(note)),
@@ -228,8 +233,8 @@ pub(super) fn format_trace_rich(report: &TraceReport) -> String {
     for entry in &report.entries {
         lines.push(format!(
             "{} {} {} {} {}",
-            ljust(&entry.id, 20),
-            ljust(&entry.kind, 10),
+            ljust(&sanitize_text(&entry.id), 20),
+            ljust(&sanitize_text(&entry.kind), 10),
             ljust(&key_value(entry), 30),
             rjust(&entry.edge_count().to_string(), 5),
             rjust(&visible(&entry.findings).count().to_string(), 5)

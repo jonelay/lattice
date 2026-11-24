@@ -69,6 +69,7 @@ INVENTORY = {
     "json-check": ("error", "sh"),
     "mr-report": ("report", "mr"),
     "profile-test": ("test", "sh"),
+    "coverage-report": ("report", "sh"),
 }
 COULD_NOT_RUN = "lattice could not run"
 

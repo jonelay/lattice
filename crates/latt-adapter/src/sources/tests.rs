@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use proptest::prelude::*;
 use serde_json::{Value, json};
 
 use super::{ScanError, Scope, beyond_lines, check_sources, go, python, rust, validate_id_names};
@@ -425,6 +426,36 @@ fn source_rust_top_level_and_inline_modules() {
 }
 
 #[test]
+fn source_rust_deep_inline_modules_resolve() {
+    let target = Target::new();
+    let depth = 300;
+    target.write(
+        "deep.rs",
+        &("mod m {\n".repeat(depth) + "fn f() {}\n" + &"}\n".repeat(depth)),
+    );
+    let id = format!("deep.rs{}::f", "::m".repeat(depth));
+    let findings = check(&target, json!("cargo"), &[&id]);
+    assert!(findings.is_empty(), "{findings:?}");
+}
+
+#[test]
+fn source_rust_very_deep_scope_scans_and_drops_without_recursion() {
+    let depth = 30_000;
+    let source = "mod m {\n".repeat(depth) + "fn f() {}\n" + &"}\n".repeat(depth);
+    let target = Target::new();
+    target.write("deep.rs", &source);
+    let id = format!("deep.rs{}::f", "::m".repeat(depth));
+    assert!(check(&target, json!("cargo"), &[&id]).is_empty());
+    let scope = rust_scope(&source);
+    let mut current = &scope;
+    for _ in 0..depth {
+        current = &current.children["m"];
+    }
+    assert_eq!(names(current), ["f"]);
+    drop(scope);
+}
+
+#[test]
 fn source_rust_qualifiers_and_raw_identifiers() {
     let scope = rust_scope(
         "pub(crate) async unsafe extern \"C\" fn qualified() {}\n\
@@ -518,6 +549,58 @@ fn source_python_top_level_and_direct_methods() {
     assert_eq!(names(&scope), ["Single", "TestGroup", "test_a", "test_b"]);
     assert_eq!(names(&scope.children["TestGroup"]), ["test_c", "test_d"]);
     assert!(scope.children["Single"].names.is_empty());
+}
+
+#[test]
+fn source_python_combining_mark_names_the_normalized_definition() {
+    let target = Target::new();
+    target.write("test_unicode.py", "def test_cafe\u{301}(): pass\n");
+    assert_eq!(
+        reason(&target, json!("pytest"), "test_unicode.py::test_café"),
+        None
+    );
+    assert!(reason(&target, json!("pytest"), "test_unicode.py::test_cafe").is_some());
+}
+
+#[test]
+fn source_python_cr_only_lines_keep_later_definitions() {
+    let target = Target::new();
+    target.write("test_cr.py", "def first(): pass\rdef second(): pass\r");
+    assert_eq!(reason(&target, json!("pytest"), "test_cr.py::second"), None);
+}
+
+proptest! {
+    #[test]
+    fn source_python_generated_line_endings_agree_on_names_and_error_lines(
+        name in "[a-z]{1,10}",
+    ) {
+        let source = format!("def test_{name}(): pass\n# a comment\ndef second(): pass\n");
+        let expected = python::scan(&source).unwrap();
+        for ending in ["\n", "\r\n", "\r"] {
+            let variant = source.replace('\n', ending);
+            prop_assert_eq!(&python::scan(&variant).unwrap(), &expected);
+            let bad = format!("{variant}'''unterminated");
+            prop_assert_eq!(python::scan(&bad).unwrap_err().line, 4);
+        }
+    }
+}
+
+proptest! {
+    #[test]
+    fn source_python_generated_combining_names_keep_their_full_identity(
+        prefix in "[a-z]{0,8}",
+        vowel in prop::sample::select(vec!['a', 'e', 'i', 'o', 'u']),
+    ) {
+        let composed = match vowel {
+            'a' => 'á', 'e' => 'é', 'i' => 'í', 'o' => 'ó', 'u' => 'ú',
+            _ => unreachable!(),
+        };
+        let scope = python::scan(&format!("def test_{prefix}{vowel}\u{301}(): pass\n")).unwrap();
+        let full = format!("test_{prefix}{composed}");
+        let truncated = format!("test_{prefix}{vowel}");
+        prop_assert!(scope.names.contains(&full));
+        prop_assert!(!scope.names.contains(&truncated));
+    }
 }
 
 #[test]

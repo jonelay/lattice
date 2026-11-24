@@ -1,0 +1,23 @@
+# Profile for the adapter templates' fixture. The `adapter:` block is the templates'
+# own configuration; the core passes it through unread.
+name: lines-example
+profile_version: "1.0.0"
+
+adapter:
+  directory: register
+  extension: .reg
+
+node_kinds:
+  requirement:
+    id_pattern: "^REQ-[0-9]+$"
+    attrs:
+      text: { type: string, required: true }
+  test:
+    id_pattern: "^T-[0-9]+$"
+    attrs:
+      text: { type: string, required: true }
+
+edge_kinds:
+  verifies:
+    allowed:
+      - [test, requirement]

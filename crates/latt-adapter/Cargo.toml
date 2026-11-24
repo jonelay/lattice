@@ -13,9 +13,14 @@ workspace = true
 
 [dependencies]
 regex = { workspace = true }
+unicode-ident = { workspace = true }
+unicode-normalization = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true }
 
 [dev-dependencies]
 proptest.workspace = true

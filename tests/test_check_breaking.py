@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import subprocess
+import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -272,3 +274,40 @@ def test_the_tooling_gate_refuses_an_unknown_flag() -> None:
     )
     assert result.returncode == 2
     assert "usage:" in result.stderr
+
+
+@pytest.mark.parametrize("flag,expected", [("--snapshot", "--no-api-compat"), (None, "")])
+def test_verify_forwards_snapshot_mode(tmp_path: Path, flag: str | None, expected: str) -> None:
+    version = "0.8.1-rc.6"
+    (tmp_path / "Cargo.toml").write_text(f'[workspace.package]\nversion = "{version}"\n')
+    debug = tmp_path / "build" / "debug"
+    debug.mkdir(parents=True)
+    latt = debug / "latt"
+    latt.write_text(f'#!/bin/sh\necho "latt, version {version}"\n')
+    latt.chmod(0o755)
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    shutil.copy(ROOT / "tools" / "verify.sh", tools / "verify.sh")
+    (tools / "verify-rust-tooling.sh").write_text(
+        '#!/bin/sh\nprintf "%s" "$*" > tooling-args\nexit 37\n'
+    )
+    (tools / "verify-rust-tooling.sh").chmod(0o755)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "cargo").write_text(
+        '#!/bin/sh\nif [ "$1" = tree ]; then echo "crossterm v0.1"; fi\n'
+    )
+    (bin_dir / "cargo").chmod(0o755)
+    command = ["sh", str(tools / "verify.sh")]
+    if flag:
+        command.append(flag)
+    result = subprocess.run(
+        command,
+        cwd=tmp_path,
+        env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "CARGO_TARGET_DIR": "build"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 37, result.stderr
+    assert (tmp_path / "tooling-args").read_text() == expected

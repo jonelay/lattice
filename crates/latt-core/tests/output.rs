@@ -164,7 +164,7 @@ fn a_finding_with_no_node_id_goes_to_the_footer() {
     let graph = ingest(json!({
         "interface_version": "1.0",
         "nodes": [node("REQ-1", "req", 1)],
-        "issues": [{"severity": "warning", "code": "PARSE_ERROR", "message": "m",
+        "findings": [{"severity": "warning", "code": "PARSE_ERROR", "message": "m",
                     "provenance": {"file": "r.md", "line": 3}, "node_id": null}],
     }));
     let issues = validate(&graph, &profile, false);
@@ -1076,4 +1076,94 @@ fn format_parses_from_its_spelling_with_a_typed_error() {
     for &format in Format::ALL {
         assert_eq!(format.as_str().parse::<Format>(), Ok(format));
     }
+}
+
+// Requirement: output/Untrusted text in human formats
+
+/// Every ESC in `text` opens one of the rich format's own SGR sequences.
+fn only_sgr_escapes(text: &str) -> bool {
+    text.split('\u{1b}').skip(1).all(|rest| {
+        let Some(body) = rest.strip_prefix('[') else {
+            return false;
+        };
+        let end = body.find('m').unwrap_or(body.len());
+        end < body.len() && body[..end].chars().all(|c| c.is_ascii_digit() || c == ';')
+    })
+}
+
+fn hostile_issues() -> Vec<Issue> {
+    let id = "A\nERROR FORGED X.1 forged";
+    let mut noted = Issue::new(
+        Severity::Warning,
+        "UNREFERENCED",
+        "node has \u{1b}]8;;http://evil/\u{7}link\u{1b}]8;;\u{7} and \u{202e}rtl\r",
+        Provenance::new("bad\u{1b}[2J.md", 3),
+        Some(id.into()),
+    );
+    let mut note = Note::new("wait\nERROR FORGED X.2 note");
+    note.by = Some("by\u{1b}[31m".into());
+    noted.note = Some(note);
+    vec![
+        Issue::new(
+            Severity::Error,
+            "VACANCY",
+            format!("node '{id}' \u{1b}]8;;http://evil/\u{7}link\u{1b}]8;;\u{7}"),
+            Provenance::new("r.md", 1),
+            Some(id.into()),
+        ),
+        noted,
+    ]
+}
+
+#[test]
+fn plain_validate_cannot_forge_a_finding_line() {
+    let issues = hostile_issues();
+    let plain = output_result(&issues, Format::Plain);
+    assert_eq!(plain.lines().count(), issues.len(), "{plain}");
+    assert!(
+        !plain
+            .bytes()
+            .any(|b| (b < 0x20 && b != b'\n' && b != b'\t') || b == 0x7f),
+        "{plain:?}"
+    );
+    assert!(!plain.contains('\u{202e}'), "{plain:?}");
+    assert!(
+        plain.contains(r"\u{1b}]8;;http://evil/\u{7}link"),
+        "{plain}"
+    );
+    assert!(plain.contains(r"A\nERROR FORGED X.1 forged"), "{plain}");
+    assert!(plain.contains(r"bad\u{1b}[2J.md:3"), "{plain}");
+    assert!(
+        plain.contains(r"wait\nERROR FORGED X.2 note [by\u{1b}[31m]"),
+        "{plain}"
+    );
+
+    let rich = output_result(&issues, Format::Rich);
+    // Two findings, one note line, the blank line and the counts line.
+    assert_eq!(rich.lines().count(), issues.len() + 3, "{rich}");
+    assert!(only_sgr_escapes(&rich), "{rich:?}");
+    assert!(
+        !rich
+            .bytes()
+            .any(|b| (b < 0x20 && !matches!(b, b'\n' | b'\t' | 0x1b)) || b == 0x7f),
+        "{rich:?}"
+    );
+    assert!(rich.contains(r"\u{1b}]8;;http://evil/\u{7}link"), "{rich}");
+    assert!(rich.contains(r"wait\nERROR FORGED X.2 note"), "{rich}");
+}
+
+#[test]
+fn json_keeps_untrusted_text_raw() {
+    let parsed: Value =
+        serde_json::from_str(&output_result(&hostile_issues(), Format::Json)).unwrap();
+    // Sorted by file: `bad…` before `r.md`.
+    assert_eq!(parsed["findings"][0]["file"], "bad\u{1b}[2J.md");
+    assert_eq!(
+        parsed["findings"][0]["note"]["text"],
+        "wait\nERROR FORGED X.2 note"
+    );
+    assert_eq!(
+        parsed["findings"][1]["node_id"],
+        "A\nERROR FORGED X.1 forged"
+    );
 }

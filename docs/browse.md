@@ -36,6 +36,10 @@ The number keys switch views; `?` lists every key for the view you are in.
 | `4` | Provenance | the register drawn as lanes, with the git history of the selected node's source line |
 | `5` | Graph | the selected node's neighbourhood, layered ([references.md](references.md) names the method), with the cursor on the centre; `Enter` re-centres on a neighbour, `+`/`-` widen and narrow it. A neighbour's ID longer than 32 characters shows as `…` and its tail, and a wide graph scrolls sideways to keep the cursor's node in sight |
 
+The graph view emphasizes nodes by betweenness centrality over the selected
+edge kinds. Scores stay finite and within `[0, 1]` even for graphs with very
+many shortest paths.
+
 ![the graph view centred on the requirement graph-model/Dangling edge targets: its two tests and its capability above it](img/browse-graph.svg)
 
 ## Moving around

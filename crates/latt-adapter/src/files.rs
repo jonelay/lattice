@@ -1,6 +1,7 @@
 //! Path plumbing and file selection the Rust adapters share.
 
 use std::ffi::OsStr;
+use std::fmt::Write as _;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -66,10 +67,10 @@ pub fn glob_regex(pattern: &str) -> String {
             '*' if chars.get(index + 1) == Some(&'*') => {
                 index += 2;
                 if chars.get(index) == Some(&'/') {
-                    regex.push_str("(?:.*/)?");
+                    regex.push_str("(?s:.*/)?");
                     index += 1;
                 } else {
-                    regex.push_str(".*");
+                    regex.push_str("(?s:.*)");
                 }
             }
             '*' => {
@@ -213,19 +214,34 @@ fn visit_directory(
         };
         if file_type.is_dir() {
             visit_directory(document, root, &path, files);
+        } else if file_type.is_symlink() && path.is_dir() {
+            unfollowed_link(document, display_path(&path, root));
         } else if file_type.is_file() || (file_type.is_symlink() && is_file_or_dangling(&path)) {
             files.push(path);
         }
     }
 }
 
+/// Report a symlinked directory the walk does not enter, at the path it is shown by.
+#[doc(hidden)]
+pub fn unfollowed_link(document: &mut Document, file: String) {
+    document.findings.push(Issue::new(
+        Severity::Info,
+        codes::UNFOLLOWED_LINK,
+        format!("symlinked directory '{file}' not followed"),
+        Provenance::new_file(file),
+    ));
+}
+
 /// Select the files under `target` that `matcher` matches, in shown-name order,
 /// each paired with the name findings and provenance show for it.
 ///
-/// A directory target is walked recursively without following symlinked
-/// directories; a file target is matched by its file name. Unreadable input is
-/// reported, never dropped: a missing target, an unreadable directory or entry,
-/// and a matching path that is not valid UTF-8 are each a `PARSE_ERROR`. A
+/// A directory target is walked recursively; a file target is matched by its
+/// file name. A symlinked directory is not followed, so a link cycle cannot
+/// recurse, and each one is an info `UNFOLLOWED_LINK` at its shown path.
+/// Unreadable input is reported, never dropped: a missing target, an unreadable
+/// directory or entry, and a matching path that is not valid UTF-8 are each a
+/// `PARSE_ERROR`. A
 /// readable target where nothing matches yields one info `NO_MATCHING_FILES`
 /// naming the globs and the target, so a mistyped glob never reads as an empty
 /// register; when dropping a glob's leading directories that repeat the
@@ -296,9 +312,10 @@ pub fn selected_files(
             target.display()
         );
         if let Some((glob, up)) = retarget_hint(target, &matcher.globs, &named) {
-            message.push_str(&format!(
+            let _ = write!(
+                message,
                 "; '{glob}' matches under '{up}': use --target {up}"
-            ));
+            );
         }
         document.findings.push(Issue::new(
             Severity::Info,
@@ -392,6 +409,7 @@ fn ancestor_display(target: &Path, levels: usize) -> String {
 mod tests {
     use std::path::{Path, PathBuf};
 
+    use proptest::prelude::*;
     use regex::Regex;
 
     use super::{Document, FileMatcher, ancestor_display, glob_regex, selected_files};
@@ -489,5 +507,65 @@ mod tests {
         assert!(pattern.is_match("one.md"));
         assert!(pattern.is_match("nested/one.md"));
         assert!(!pattern.is_match("one.toml"));
+    }
+
+    // Requirement: adapter-md/Select configured files beneath the target
+    // Requirement: adapter-toml/Select configured TOML files beneath the target
+    #[cfg(unix)]
+    #[test]
+    fn a_symlinked_directory_is_reported_and_not_followed() {
+        let root = scratch("linkdir");
+        let target = root.join("tgt");
+        std::fs::create_dir_all(root.join("shared")).unwrap();
+        std::fs::create_dir_all(&target).unwrap();
+        std::fs::write(root.join("shared/requirements.md"), "").unwrap();
+        std::fs::write(target.join("other.md"), "").unwrap();
+        std::os::unix::fs::symlink("../shared", target.join("specs")).unwrap();
+        let mut document = Document::new();
+        let found = selected_files(
+            &mut document,
+            &target,
+            &FileMatcher::new(&["**/*.md"]).unwrap(),
+        );
+        let names: Vec<&str> = found.iter().map(|(_, name)| name.as_str()).collect();
+        assert_eq!(names, ["other.md"]);
+        let [finding] = document.findings.as_slice() else {
+            panic!("one finding: {:?}", document.findings);
+        };
+        assert_eq!(finding.code, "UNFOLLOWED_LINK");
+        assert_eq!(finding.severity, crate::Severity::Info);
+        assert_eq!(finding.provenance.file(), "specs");
+        assert_eq!(finding.provenance.line(), None);
+        assert_eq!(finding.message, "symlinked directory 'specs' not followed");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn recursive_glob_selects_a_file_under_a_newline_directory() {
+        let root = scratch("newline");
+        std::fs::create_dir_all(root.join("a\nb")).unwrap();
+        std::fs::write(root.join("normal.md"), "normal").unwrap();
+        std::fs::write(root.join("a\nb/hidden.md"), "hidden").unwrap();
+        let mut document = Document::new();
+        let found = selected_files(
+            &mut document,
+            &root,
+            &FileMatcher::new(&["**/*.md"]).unwrap(),
+        );
+        assert_eq!(found.len(), 2, "{found:?}");
+        assert!(document.findings.is_empty());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    proptest! {
+        #[test]
+        fn recursive_glob_matches_generated_path_segments(
+            segments in proptest::collection::vec("[a-z\\n]{1,5}", 0..5),
+            stem in "[a-z\\n]{1,5}",
+        ) {
+            let path = format!("{}{}.md", segments.iter().map(|part| format!("{part}/")).collect::<String>(), stem);
+            let pattern = Regex::new(&glob_regex("**/*.md")).unwrap();
+            prop_assert!(pattern.is_match(&path), "{path:?}");
+        }
     }
 }

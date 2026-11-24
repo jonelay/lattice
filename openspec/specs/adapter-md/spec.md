@@ -74,14 +74,17 @@ Verified by: `.venv/bin/python -m pytest tests/test_adapter_md.py`, and
 For a directory target, the adapter SHALL walk its directories recursively and read only
 regular files, and symlinks that resolve to files, whose target-relative slash-separated
 paths match at least one configured glob. `*` SHALL match within one path component,
-`?` SHALL match one non-separator character, and `**` SHALL span directories; in
+`?` SHALL match one non-separator character, and `**` SHALL span directories,
+including path components containing a newline; in
 particular, `**/*.md` matches both a root `.md` file and a nested one. For a file target,
 the adapter SHALL apply the same matching to that file's name. Selected files SHALL be
 processed in path order, making append-only document output deterministic.
 
 A symlink that matches a glob but resolves to nothing SHALL produce a `PARSE_ERROR`
 naming it, as SHALL a matching path that is not valid UTF-8; neither is read, and neither
-is skipped in silence. Symlinked directories SHALL NOT be followed.
+is skipped in silence. Symlinked directories SHALL NOT be followed, so a link cycle
+cannot recurse; each SHALL produce one `UNFOLLOWED_LINK` issue at `info` severity
+naming its target-relative path, so the files beneath it are not missing in silence.
 
 A missing or unreadable target, directory, directory entry or file SHALL produce a
 `PARSE_ERROR` naming the affected path. The adapter SHALL continue wherever traversal
@@ -92,8 +95,13 @@ When the target exists and is readable but no path matches the configured globs,
 adapter SHALL emit one `NO_MATCHING_FILES` issue at `info` severity whose message names
 the globs, so a mistyped glob never reads as an empty register.
 
-Verified by: `.venv/bin/python -m pytest tests/test_adapter_md.py -k "missing_target or non_utf8 or dangling_symlink or backslash or no_matching_files"`,
-and `cargo test -p latt-adapter recursive_glob_also_matches_a_root_file`
+Verified by: `.venv/bin/python -m pytest tests/test_adapter_md.py -k "missing_target or non_utf8 or dangling_symlink or symlinked_directory or backslash or no_matching_files"`,
+and `cargo test -p latt-adapter --locked recursive_glob`, and
+`cargo test -p latt-adapter --locked a_symlinked_directory`
+
+#### Scenario: Recursive glob selects a newline path
+- **WHEN** `**/*.md` selects a root file and a Markdown file beneath a directory whose name contains a newline
+- **THEN** the adapter reads both files and emits no finding for the selection
 
 #### Scenario: Directory target is filtered by glob
 - **WHEN** a directory target contains matching markdown files at the root and in nested
@@ -124,6 +132,18 @@ and `cargo test -p latt-adapter recursive_glob_also_matches_a_root_file`
 - **WHEN** `gone.md` is a symlink to a missing file
 - **THEN** the adapter emits a `PARSE_ERROR` naming `gone.md` and continues with the other
   files
+
+#### Scenario: Symlinked directory
+- **WHEN** the target holds `other.md` and `specs`, a symlink to a directory holding
+  `requirements.md`
+- **THEN** the adapter does not read `requirements.md` and emits one `UNFOLLOWED_LINK`
+  issue at `info` severity, "symlinked directory 'specs' not followed", naming `specs`
+
+#### Scenario: An unreached symlinked directory does not fail a strict run
+- **WHEN** the files glob is `registers/*.md`, the register under it validates clean, and
+  `.venv/lib64` is a symlink to a directory
+- **THEN** `latt validate --strict` exits 0 and reports `UNFOLLOWED_LINK` at `info`
+  naming `.venv/lib64`
 
 #### Scenario: Path is not valid UTF-8
 - **WHEN** a file whose name is not valid UTF-8 matches a configured glob
@@ -295,7 +315,7 @@ The adapter SHALL NOT check that a target node exists. An unresolvable target is
 the edge would hide it.
 
 Verified by: `.venv/bin/python -m pytest tests/test_adapter_md.py -k "edge_columns or provenance"`
-and `cargo test -p latt-core --lib adapters::md a_comma_inside_link`, and
+and `cargo test -p latt-core --lib a_comma_inside_link`, and
 `.venv/bin/python -m pytest tests/test_adapter_md.py -k strip_emphasis`
 
 #### Scenario: Comma-separated targets become edges
@@ -536,8 +556,8 @@ inside, or whose marker recurs inside as a run of the marker's own length
 not count (`*_**X**_*` strips to `X`). A Markdown link is not emphasis and SHALL be kept.
 
 Verified by: `.venv/bin/python -m pytest tests/test_adapter_md.py -k strip_emphasis`,
-`cargo test -p latt-core --lib adapters::md strip_emphasis`, and
-`cargo test -p latt-core --lib adapters::md wrapped_value_strips_back`
+`cargo test -p latt-core --lib strip_emphasis`, and
+`cargo test -p latt-core --lib wrapped_value_strips_back`
 
 #### Scenario: A bold ID and a bold target are stripped
 - **WHEN** a table sets `strip_emphasis: true` and a row's ID cell is `**1.1.1**` and its

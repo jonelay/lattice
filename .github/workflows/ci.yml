@@ -1,4 +1,7 @@
-# This pipeline runs the steps of the hermetic verification gate, tools/verify.sh, as jobs.
+# This pipeline runs the steps of the hermetic verification gate, tools/verify.sh, as jobs,
+# less what this release snapshot cannot run: the API compatibility comparison, whose
+# baseline commit is not in this history, and the agent-docs eval, which the snapshot
+# withholds. Both gate the development repository's CI before every cut.
 #
 # HONEST LABEL: green here is NOT a real-data gate. It says the core, the adapters
 # against their fixtures, and the specs are consistent — nothing about any consumer's
@@ -16,7 +19,7 @@ jobs:
   rust-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "1.99.1"
@@ -58,18 +61,19 @@ jobs:
       - run: cargo doc --workspace --all-features --no-deps --document-private-items --locked
         env:
           RUSTDOCFLAGS: -D warnings
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: lattice-binary
           path: |
             target/debug/latt
+            target/debug/lines-adapter
             target/debug/latt-adapter-*
             !target/debug/latt-adapter-*.d
 
   rust-tooling:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "1.99.1"
@@ -84,7 +88,7 @@ jobs:
       # commit, so the compatibility comparison is skipped here, by name; it gates
       # the development repository's CI before every cut.
       - run: ./tools/verify-rust-tooling.sh --no-api-compat
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: rust-coverage-lcov
           path: target/coverage/lcov.info
@@ -93,26 +97,47 @@ jobs:
     needs: rust-check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: lattice-binary
           path: target/debug
       # upload-artifact does not preserve the executable bit
-      - run: chmod +x target/debug/latt target/debug/latt-adapter-* && test -x target/debug/latt
-      - uses: actions/setup-python@v5
+      - run: chmod +x target/debug/latt target/debug/latt-adapter-* target/debug/lines-adapter && test -x target/debug/latt
+      # A new adapter binary missing from rust-check's artifact fails here by name,
+      # not as a wall of FileNotFoundErrors in its pytest module.
+      - run: |
+          for name in $(awk '/^\[/ { bin = ($0 == "[[bin]]") } bin && /^name = / { gsub(/^name = "|"$/, ""); print }' crates/latt/Cargo.toml); do
+            test -x "target/debug/$name" || { echo "rust-check artifacts lack $name" >&2; exit 1; }
+          done
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: python -m venv .venv
       - run: .venv/bin/pip install --quiet -e ".[test]"
       - run: .venv/bin/python -m pytest -q
+        env:
+          LATT_GATE: "1"
+          LATT_GATE_SNAPSHOT: "1"
       - run: target/debug/latt validate --profile profiles/openspec.yaml --adapter ./adapters/openspec --target .
+
+  go-template:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # The runner's own Go; its version is printed. GitLab CI pins one.
+      - run: go version
+      - working-directory: examples/adapters/go
+        run: |
+          test -z "$(gofmt -l .)" || { gofmt -l . >&2; exit 1; }
+          go vet ./...
+          go test ./...
 
   spec-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
       # Pinned: an unpinned upstream release could redden this pipeline with no

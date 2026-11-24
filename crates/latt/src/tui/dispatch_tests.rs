@@ -9,6 +9,7 @@
 //! depends on `$EDITOR`, and the `jump_to_source` tests in `app.rs` cover it.
 //! Keys are written `C-x` (Control), `A-x` (Alt) and `S-X` (Shift).
 
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 #[path = "../../tests/common/regen.rs"]
@@ -231,7 +232,7 @@ fn key_dispatch_matches_the_baseline() {
     let (profile, graph) = mini_toml();
     let mut out = String::new();
     for &(state, setup) in STATES {
-        out.push_str(&format!("## {state}  [{}]\n", setup.join(" ")));
+        let _ = writeln!(out, "## {state}  [{}]", setup.join(" "));
         for &k in KEYS {
             let mut app = make_app(&profile, &graph);
             for &s in setup {
@@ -257,7 +258,7 @@ fn key_dispatch_matches_the_baseline() {
             } else {
                 changes.join("; ")
             };
-            out.push_str(&format!("{k:<6} {:<6} {changes}\n", action(&act)));
+            let _ = writeln!(out, "{k:<6} {:<6} {changes}", action(&act));
         }
         out.push('\n');
     }
@@ -280,11 +281,11 @@ fn help_and_footer_match_the_baseline() {
         for &s in setup {
             app.handle_key_event(key(s));
         }
-        out.push_str(&format!("## {state}\nfooter: {}\n", app.view_hints()));
+        let _ = write!(out, "## {state}\nfooter: {}\n", app.view_hints());
         for (section, bindings) in app.view_bindings() {
-            out.push_str(&format!("[{section}]\n"));
+            let _ = writeln!(out, "[{section}]");
             for b in bindings {
-                out.push_str(&format!("  {:<24} {}\n", b.key, b.desc));
+                let _ = writeln!(out, "  {:<24} {}", b.key, b.desc);
             }
         }
         out.push('\n');

@@ -1,0 +1,14 @@
+# Fixture register holding one item row with no id. The row is reported by file
+# and index and produces no node; the sound row beside it still does.
+
+[register]
+id = "reg.baditem"
+register_version = 0
+status = "draft-1"
+
+[[item]]
+id = "has_an_id"
+stage = "s1"
+
+[[item]]
+doc = "this row declares no id"

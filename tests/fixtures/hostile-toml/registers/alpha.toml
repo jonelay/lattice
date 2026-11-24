@@ -1,0 +1,32 @@
+# Fixture register: mini-toml's alpha plus one item whose ID carries terminal control text.
+
+[register]
+id = "reg.alpha"
+register_version = 0
+status = "draft-3"
+
+# A top-level table that is not an array of tables: register metadata, not rows.
+[projection]
+id = "reg.path.projection"
+doc = "carried as metadata, never read as rows"
+
+[[item]]
+id = "one"
+stage = "s1"
+register = "beta"
+refs = ["beta/two"]
+
+[[item]]
+id = "two"
+stage = "s2"
+refs = ["alpha/one", "beta/two"]
+
+[[memo]]
+id = "context"
+text = "background for the alpha register"
+
+# Hostile: an OSC 8 link, BEL, a newline that would forge a finding line, CR, U+202E.
+[[item]]
+id = "bad\u001b]8;;http://evil/\u0007link\u001b]8;;\u0007\nERROR FORGED X.1 forged line\r‮txt"
+stage = "s1"
+register = "beta"

@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::fmt::Write as _;
 
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
@@ -503,7 +504,7 @@ fn note_line(indent: &str, note: &latt_core::types::Note) -> Line<'static> {
         });
     }
     if !qualifiers.is_empty() {
-        text.push_str(&format!(" [{}]", qualifiers.join(", ")));
+        let _ = write!(text, " [{}]", qualifiers.join(", "));
     }
     let style = if note.expired {
         Style::default().fg(Color::Yellow)
@@ -786,17 +787,20 @@ fn draw_provenance(frame: &mut Frame, app: &App<'_>, area: Rect, _edge_kinds: &[
     };
 
     let pending = app.git_fetch_pending();
-    let (lane_area, commit_area) =
-        if app.git_commits.is_empty() && !pending && !app.git_fetch_timed_out {
-            (area, None)
-        } else {
-            let commit_height = (app.git_commits.len().max(1) as u16 + 2)
-                .min(8)
-                .min(area.height / 3);
-            let chunks = Layout::vertical([Constraint::Min(4), Constraint::Length(commit_height)])
-                .split(area);
-            (chunks[0], Some(chunks[1]))
-        };
+    let (lane_area, commit_area) = if app.git_commits.is_empty()
+        && !pending
+        && !app.git_fetch_timed_out
+        && app.git_fetch_failed.is_none()
+    {
+        (area, None)
+    } else {
+        let commit_height = (app.git_commits.len().max(1) as u16 + 2)
+            .min(8)
+            .min(area.height / 3);
+        let chunks =
+            Layout::vertical([Constraint::Min(4), Constraint::Length(commit_height)]).split(area);
+        (chunks[0], Some(chunks[1]))
+    };
     let area = lane_area;
 
     let visible_indices = app.visible_provenance_indices();
@@ -887,7 +891,7 @@ fn draw_provenance(frame: &mut Frame, app: &App<'_>, area: Rect, _edge_kinds: &[
     if let Some(commit_area) = commit_area {
         let lanes = &app.git_lanes;
         let width = lanes.iter().map(git::CommitRow::width).max().unwrap_or(1);
-        let items: Vec<ListItem> = app
+        let mut items: Vec<ListItem> = app
             .git_commits
             .iter()
             .zip(lanes)
@@ -909,10 +913,18 @@ fn draw_provenance(frame: &mut Frame, app: &App<'_>, area: Rect, _edge_kinds: &[
                 ListItem::new(Line::from(spans))
             })
             .collect();
+        if let Some(reason) = &app.git_fetch_failed {
+            items.push(ListItem::new(Line::from(Span::styled(
+                reason.as_str(),
+                dim(),
+            ))));
+        }
         let title = if pending {
             " Git (fetching…) ".to_string()
         } else if app.git_fetch_timed_out {
             " Git (timed out) ".to_string()
+        } else if app.git_fetch_failed.is_some() {
+            " Git (failed) ".to_string()
         } else {
             format!(" Git ({}) ", app.git_commits.len())
         };

@@ -82,7 +82,29 @@ fn load_profile(path: &Path) -> Result<Duration, String> {
         .map_or(latt_adapter::DEFAULT_COMMAND_TIMEOUT, Duration::from_secs))
 }
 
-fn run(args: Args) -> Result<(), String> {
+/// Why a run produced no document.
+enum Failure {
+    /// The reader closed the pipe: its choice, so the exit is quiet.
+    Closed,
+    Message(String),
+}
+
+impl From<String> for Failure {
+    fn from(message: String) -> Self {
+        Self::Message(message)
+    }
+}
+
+/// Name a write failure, or note that the reader closed the pipe.
+fn write_failure(kind: Option<io::ErrorKind>, message: String) -> Failure {
+    if kind == Some(io::ErrorKind::BrokenPipe) {
+        Failure::Closed
+    } else {
+        Failure::Message(message)
+    }
+}
+
+fn run(args: Args) -> Result<(), Failure> {
     let bound = load_profile(&args.profile)?;
     let target = latt_adapter::absolute_path(args.target).map_err(|error| error.to_string())?;
     let mut document = Document::default();
@@ -96,18 +118,32 @@ fn run(args: Args) -> Result<(), String> {
     let mut writer = stdout.lock();
     let mut serializer =
         serde_json::Serializer::with_formatter(&mut writer, PythonFormatter::default());
-    document
-        .serialize(&mut serializer)
-        .map_err(|error| format!("could not serialize interface document: {error}"))?;
-    writeln!(writer).map_err(|error| format!("could not write interface document: {error}"))?;
+    document.serialize(&mut serializer).map_err(|error| {
+        let kind = error.io_error_kind();
+        let verb = if kind.is_some() { "write" } else { "serialize" };
+        write_failure(
+            kind,
+            format!("could not {verb} interface document: {error}"),
+        )
+    })?;
+    writeln!(writer).map_err(|error| {
+        write_failure(
+            Some(error.kind()),
+            format!("could not write interface document: {error}"),
+        )
+    })?;
     Ok(())
 }
 
 fn main() {
     let args = Args::parse();
-    if let Err(error) = run(args) {
-        eprintln!("Error: {error}");
-        std::process::exit(2);
+    match run(args) {
+        Ok(()) => {}
+        Err(Failure::Closed) => std::process::exit(2),
+        Err(Failure::Message(error)) => {
+            let _ = writeln!(io::stderr().lock(), "Error: {error}");
+            std::process::exit(2);
+        }
     }
 }
 

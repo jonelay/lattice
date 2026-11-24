@@ -9,40 +9,69 @@ use super::{Cursor, ScanError, Scope, is_ident_continue, is_ident_start};
 enum Token {
     Ident(String),
     /// An opening bracket and the index of its matching close.
-    Open(usize),
+    Open(usize, u32),
     Close,
     Punct(char),
 }
 
 pub(super) fn scan(text: &str) -> Result<Scope, ScanError> {
     let tokens = lex(text)?;
-    let mut scope = Scope::default();
-    read_items(&tokens, 0, tokens.len(), &mut scope);
-    Ok(scope)
+    Ok(read_items(&tokens))
 }
 
-fn read_items(tokens: &[Token], mut index: usize, end: usize, scope: &mut Scope) {
-    while index < end {
-        match &tokens[index] {
+fn read_items(tokens: &[Token]) -> Scope {
+    struct Frame {
+        name: Option<String>,
+        index: usize,
+        end: usize,
+        scope: Scope,
+    }
+
+    let mut stack = vec![Frame {
+        name: None,
+        index: 0,
+        end: tokens.len(),
+        scope: Scope::default(),
+    }];
+    loop {
+        let frame = stack.last_mut().expect("root frame remains until return");
+        if frame.index == frame.end {
+            let finished = stack.pop().unwrap();
+            if let Some(parent) = stack.last_mut() {
+                parent
+                    .scope
+                    .children
+                    .insert(finished.name.unwrap(), finished.scope);
+                continue;
+            }
+            return finished.scope;
+        }
+        match &tokens[frame.index] {
             Token::Ident(word) if word == "mod" => {
-                if let (Some(Token::Ident(name)), Some(Token::Open(close))) =
-                    (tokens.get(index + 1), tokens.get(index + 2))
+                if let (Some(Token::Ident(name)), Some(Token::Open(close, _))) =
+                    (tokens.get(frame.index + 1), tokens.get(frame.index + 2))
                 {
-                    let child = scope.children.entry(name.clone()).or_default();
-                    read_items(tokens, index + 3, *close, child);
-                    index = close + 1;
+                    let child = frame.scope.children.remove(name).unwrap_or_default();
+                    let start = frame.index + 3;
+                    frame.index = close + 1;
+                    stack.push(Frame {
+                        name: Some(name.clone()),
+                        index: start,
+                        end: *close,
+                        scope: child,
+                    });
                     continue;
                 }
-                index += 1;
+                frame.index += 1;
             }
             Token::Ident(word) if word == "fn" => {
-                if let Some(Token::Ident(name)) = tokens.get(index + 1) {
-                    scope.names.insert(name.clone());
+                if let Some(Token::Ident(name)) = tokens.get(frame.index + 1) {
+                    frame.scope.names.insert(name.clone());
                 }
-                index += 1;
+                frame.index += 1;
             }
-            Token::Open(close) => index = close + 1,
-            _ => index += 1,
+            Token::Open(close, _) => frame.index = close + 1,
+            _ => frame.index += 1,
         }
     }
 }
@@ -64,7 +93,7 @@ fn lex(text: &str) -> Result<Vec<Token>, ScanError> {
             '(' | '[' | '{' => {
                 cursor.bump();
                 open.push((tokens.len(), c, line));
-                tokens.push(Token::Open(0));
+                tokens.push(Token::Open(0, line));
             }
             ')' | ']' | '}' => {
                 cursor.bump();
@@ -74,8 +103,8 @@ fn lex(text: &str) -> Result<Vec<Token>, ScanError> {
                     _ => '{',
                 };
                 match open.pop() {
-                    Some((at, opener, _)) if opener == expected => {
-                        tokens[at] = Token::Open(tokens.len());
+                    Some((at, opener, opener_line)) if opener == expected => {
+                        tokens[at] = Token::Open(tokens.len(), opener_line);
                         tokens.push(Token::Close);
                     }
                     _ => return Err(ScanError::new(line, format!("unbalanced bracket '{c}'"))),

@@ -28,6 +28,12 @@ pub const AMBIGUOUS_REF: &str = "AMBIGUOUS_REF";
 /// It is reported at its line as written. Under a plain mapping the attr is not
 /// set, since its readable part would be a list the register never declared.
 pub const UNREAD_ENTRIES: &str = "UNREAD_ENTRIES";
+/// A symlinked directory beneath the target was not walked, so nothing beneath
+/// it was read.
+///
+/// Links to directories are not followed so that a link cycle cannot recurse; the
+/// finding names each one, so the files it holds are not missing in silence.
+pub const UNFOLLOWED_LINK: &str = "UNFOLLOWED_LINK";
 
 /// Every code a shipped Rust adapter emits. One list, so the core can tell a
 /// severity override for a shipped code from one for a code nothing ships.
@@ -40,4 +46,5 @@ pub const ALL: &[&str] = &[
     WRAPPED_REF,
     AMBIGUOUS_REF,
     UNREAD_ENTRIES,
+    UNFOLLOWED_LINK,
 ];

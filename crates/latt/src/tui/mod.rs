@@ -24,7 +24,7 @@ use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{EnterAlternateScreen, enable_raw_mode};
 
 use app::{Action, OutputPane, OwnerRun};
-use owner_action::{describe_exit, owner_command, read_capped, run_detached};
+use owner_action::{collect, describe_exit, owner_command, read_capped, run_detached};
 
 /// The signals that end browse, caught as flags so the event loop leaves
 /// through the terminal session's restore. `SIGINT` and `SIGQUIT` are kept
@@ -59,18 +59,37 @@ impl Signals {
     }
 }
 
-/// Open `$EDITOR` at a target through [`suspend_and_run`].
-fn suspend_and_edit(target: &app::EditorTarget, signals: &Signals) {
+/// Open `$EDITOR` at a target through [`suspend_and_run`], and return what the
+/// status line says afterwards: nothing after a clean exit.
+fn suspend_and_edit(target: &app::EditorTarget, signals: &Signals) -> Option<String> {
     let editor = std::env::var("EDITOR").unwrap_or_default();
     if editor.is_empty() {
-        return;
+        return None;
     }
-    let mut cmd = ProcessCommand::new(&editor);
+    editor_outcome(
+        &editor,
+        suspend_and_run(editor_command(&editor, target), signals),
+    )
+}
+
+/// The command that opens `editor` at `target`'s file and line.
+fn editor_command(editor: &str, target: &app::EditorTarget) -> ProcessCommand {
+    let mut cmd = ProcessCommand::new(editor);
     if let Some(line) = target.line {
         cmd.arg(format!("+{line}"));
     }
     cmd.arg(&target.file);
-    let _ = suspend_and_run(cmd, signals);
+    cmd
+}
+
+/// Say how an editor run went when it did not exit 0: it could not start, it
+/// exited non-zero, or a signal ended it.
+fn editor_outcome(editor: &str, result: io::Result<ExitStatus>) -> Option<String> {
+    match result {
+        Ok(status) if status.success() => None,
+        Ok(status) => Some(format!("{editor} {}", describe_exit(status))),
+        Err(e) => Some(format!("{editor} could not start: {e}")),
+    }
 }
 
 /// Leave the terminal to a program and take it back afterwards. Re-entry uses
@@ -122,8 +141,15 @@ fn run_capture(
             return Ok(Captured::NotStarted);
         }
     };
-    let out = read_capped(child.stdout.take().expect("stdout is piped"));
-    let err = read_capped(child.stderr.take().expect("stderr is piped"));
+    let cancel = Arc::new(AtomicBool::new(false));
+    let out = read_capped(
+        child.stdout.take().expect("stdout is piped"),
+        Arc::clone(&cancel),
+    );
+    let err = read_capped(
+        child.stderr.take().expect("stderr is piped"),
+        Arc::clone(&cancel),
+    );
     app.status_message = Some(format!("running {}… (Esc stops it)", run.verb));
     let waited = (|| -> io::Result<CaptureEnd> {
         loop {
@@ -158,21 +184,25 @@ fn run_capture(
         let _ = child.kill();
         let _ = child.wait();
     }
+    // The readers stop once the pipes hold nothing more: a descendant that
+    // outlives the program and keeps them open must not hold the event loop.
+    cancel.store(true, Ordering::Release);
     let end = waited?;
-    let (stdout_bytes, stdout_cut) = out.join().unwrap_or_default();
-    let (stderr_bytes, stderr_cut) = err.join().unwrap_or_default();
+    let stdout = collect(out);
+    let stderr = collect(err);
     app.status_message = None;
-    let outcome = match end {
+    let mut outcome = match end {
         CaptureEnd::Quit => return Ok(Captured::Quit),
         CaptureEnd::Stopped => "stopped".to_owned(),
         CaptureEnd::Exited(status) => describe_exit(status),
     };
+    if stdout.failed.is_some() || stderr.failed.is_some() {
+        outcome.push_str("; output incomplete");
+    }
     Ok(Captured::Pane(OutputPane::new(
         format!("{} — {outcome}", run.display()),
-        &String::from_utf8_lossy(&stdout_bytes),
-        stdout_cut,
-        &String::from_utf8_lossy(&stderr_bytes),
-        stderr_cut,
+        &stdout,
+        &stderr,
     )))
 }
 
@@ -270,11 +300,13 @@ fn event_loop(
             Action::Quit => return Ok(Outcome::Quit),
             Action::None => {}
             Action::OpenEditor(target) => {
-                suspend_and_edit(&target, signals);
+                if let Some(message) = suspend_and_edit(&target, signals) {
+                    app.status_message = Some(message);
+                }
                 terminal.clear()?;
             }
             Action::EditNotes(target) => {
-                suspend_and_edit(&target, signals);
+                app.after_reload = suspend_and_edit(&target, signals);
                 terminal.clear()?;
                 app.status_message = Some("reloading…".to_owned());
                 terminal.draw(|frame| draw(frame, app))?;
@@ -312,6 +344,54 @@ fn event_loop(
                 return Ok(Outcome::Reload(kind));
             }
         }
+    }
+}
+
+// Requirement: browse/Jump to source
+#[cfg(all(test, unix))]
+mod editor_tests {
+    use super::app::EditorTarget;
+    use super::{editor_command, editor_outcome};
+
+    fn target() -> EditorTarget {
+        EditorTarget {
+            file: "reqs.md".to_owned(),
+            line: std::num::NonZeroU32::new(3),
+        }
+    }
+
+    #[test]
+    fn an_editor_that_cannot_start_says_why() {
+        let editor = "/nonexistent/editor";
+        let message = editor_outcome(editor, editor_command(editor, &target()).status());
+        let message = message.expect("a failed start is reported");
+        assert!(
+            message.starts_with("/nonexistent/editor could not start: "),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn an_editor_exit_code_is_reported_unless_it_is_zero() {
+        let dir = std::env::temp_dir().join(format!("lattice-editor-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let failing = dir.join("failing-editor");
+        crate::stub::write_stub(&failing, "#!/bin/sh\nexit 3\n");
+        let clean = dir.join("clean-editor");
+        crate::stub::write_stub(
+            &clean,
+            "#!/bin/sh\n[ \"$1\" = +3 ] && [ \"$2\" = reqs.md ]\n",
+        );
+        let run = |editor: &std::path::Path| {
+            let editor = editor.to_str().unwrap();
+            editor_outcome(editor, editor_command(editor, &target()).status())
+        };
+        assert_eq!(
+            run(&failing),
+            Some(format!("{} exited 3", failing.display()))
+        );
+        assert_eq!(run(&clean), None);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
 

@@ -478,10 +478,10 @@ pub(super) fn parse_edge_kind(
 }
 
 const NODE_KIND_KEYS: &[&str] = &[
-    "attrs",
-    "id_pattern",
     "actions",
+    "attrs",
     "id_names",
+    "id_pattern",
     "orphan_ok",
     "summary_attr",
     "text_attrs",

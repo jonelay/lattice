@@ -94,13 +94,9 @@ pub(crate) fn collect(graph: &LatticeGraph, profile: &Profile) -> Vec<Issue> {
     // A declared kind nothing populated: the reason a clean exit over a
     // register that read no tests, or built no edges, carries on its own output.
     for (kind, side) in crate::scope::KindTally::of(graph, profile).empty_kinds() {
-        let message = match side {
-            crate::scope::EmptyOf::Node => format!("node kind '{kind}' has no node"),
-            crate::scope::EmptyOf::Edge => format!("edge kind '{kind}' has no edge"),
-        };
         issues.push(issue(
             FindingCode::EmptyKind,
-            message,
+            side.message(kind),
             Origin::Profile,
             profile,
             None,
@@ -445,7 +441,7 @@ pub(crate) fn collect(graph: &LatticeGraph, profile: &Profile) -> Vec<Issue> {
                     severity,
                     Some(node),
                 );
-                finding.state = Some(ctx.state().to_string());
+                finding.state = Some(ctx.state().as_str().to_owned());
                 issues.push(finding);
             }
         }
@@ -480,8 +476,8 @@ pub(crate) fn collect(graph: &LatticeGraph, profile: &Profile) -> Vec<Issue> {
         // Children keyed by parent. `via` edge targets are the parents. Only
         // target-kind endpoints join the rollup: a foreign-kind or dangling
         // source has no evidence semantics here and contributes no child.
-        // When via == evidence the original single-pass gave evidence priority;
-        // preserve that by skipping evidence edges here.
+        // An edge kind that is both `via` and evidence counts as evidence, so skip
+        // evidence edges here.
         let mut children: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
         for edge in graph.iter_edges() {
             if edge.kind == via
@@ -591,7 +587,7 @@ pub(crate) fn collect(graph: &LatticeGraph, profile: &Profile) -> Vec<Issue> {
                 finding.severity,
                 Some(node),
             );
-            finding.state = Some(ctx.state().to_string());
+            finding.state = Some(ctx.state().as_str().to_owned());
             issues.push(finding);
         }
 

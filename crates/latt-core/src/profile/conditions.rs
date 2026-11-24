@@ -1,5 +1,7 @@
 //! Parsing condition blocks and edge conditions, severity words and retired codes.
 
+use std::fmt::Write as _;
+
 use regex::Regex;
 use serde_norway::Value;
 
@@ -28,11 +30,14 @@ pub(crate) fn parse_severity_word(text: &str, code: &str) -> Result<Severity, St
     match text {
         "warn" => diagnostic.push_str("; lattice spells the lint level `warn` as `warning`"),
         "deny" => diagnostic.push_str("; lattice spells the lint level `deny` as `error`"),
-        "allow" => diagnostic.push_str(&format!(
-            "; there is no `allow`: write a `SUPPRESS: {{code: {code}}}` entry instead. A \
+        "allow" => {
+            let _ = write!(
+                diagnostic,
+                "; there is no `allow`: write a `SUPPRESS: {{code: {code}}}` entry instead. A \
              suppressed finding is still computed and kept in `--format json`, where an \
              `allow` lint does not run"
-        )),
+            );
+        }
         _ => {}
     }
     Err(diagnostic)

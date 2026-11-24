@@ -2,7 +2,9 @@ use serde::ser::{Serialize, SerializeSeq, Serializer};
 
 use std::collections::BTreeMap;
 
-use super::{FindingJson, RESET, color_for, ljust, note_text, render_json, with_plain_note};
+use super::{
+    FindingJson, RESET, color_for, ljust, note_text, render_json, sanitize_text, with_plain_note,
+};
 use crate::types::{Issue, Severity, ValidateReport, ValidateScope};
 
 struct FindingsJson<'a>(pub(super) &'a [&'a Issue]);
@@ -80,7 +82,7 @@ pub(super) fn format_report_rich(report: &ValidateReport) -> String {
 pub fn scope_line(scope: &ValidateScope) -> String {
     let counts = |map: &BTreeMap<String, usize>| {
         map.iter()
-            .map(|(kind, n)| format!("{kind} {n}"))
+            .map(|(kind, n)| format!("{} {n}", sanitize_text(kind)))
             .collect::<Vec<_>>()
             .join(", ")
     };
@@ -100,9 +102,9 @@ pub(super) fn format_plain(issues: &[&Issue]) -> String {
             let line = format!(
                 "{} {} {} {}",
                 i.severity.as_upper(),
-                i.code,
-                i.origin,
-                i.message
+                sanitize_text(&i.code),
+                sanitize_text(&i.origin.to_string()),
+                sanitize_text(&i.message)
             );
             with_plain_note(line, i)
         })
@@ -130,9 +132,9 @@ pub(super) fn format_rich(issues: &[&Issue]) -> String {
                 color_for(i.severity),
                 ljust(i.severity.as_upper(), 7),
                 RESET,
-                ljust(&i.code, 20),
-                ljust(&i.origin.to_string(), 30),
-                i.message
+                ljust(&sanitize_text(&i.code), 20),
+                ljust(&sanitize_text(&i.origin.to_string()), 30),
+                sanitize_text(&i.message)
             );
             std::iter::once(line)
                 .chain(i.note.as_ref().map(|note| format!("  {}", note_text(note))))

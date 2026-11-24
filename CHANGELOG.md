@@ -5,7 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 **While below 1.0.0, minor bumps (0.x.0) may include breaking changes to
-public surfaces. Patch bumps (0.x.y) do not change public surfaces.** The public
+public surfaces. Patch bumps (0.x.y) may add to public surfaces and do not break
+them: a run that worked on the previous patch of the same minor works unchanged.** The public
 surfaces are:
 - the supported Rust items `docs/embedding.md` lists, with the `serde_norway`
   and `serde_json` types they name;
@@ -14,8 +15,9 @@ surfaces are:
 - the wire version axes;
 - node IDs.
 
-A raised minimum Rust version is a minor-version event. Adapter library crates are not
-public surfaces. `openspec/specs/versioning/spec.md` has the full rule.
+A raised minimum Rust version is a minor-version event. Documented `latt-adapter`
+items are supported Rust items; undocumented internal items are outside that surface.
+`openspec/specs/versioning/spec.md` has the full rule.
 
 See `openspec/specs/trace-report/spec.md` for which trace-JSON fields are
 public and what each version axis governs.
@@ -25,6 +27,116 @@ item in backticks (`openspec/specs/development-verification/spec.md`);
 `tools/check-breaking.sh` enforces it.
 
 ## [Unreleased]
+
+## [0.8.1] — 2026-11-23
+
+Lattice 0.8.1 closes an option injection in `latt query diff`, where a revision such as
+`--output=<file>` could create or truncate a file, and escapes control characters in
+terminal output. It also ships Linux binaries that run on glibc 2.28 or later, reports
+why a `latt fuse` run failed on stderr, and adds `coverage --rule`, adapter templates and
+an authoring skill. The two new finding codes, `UNFOLLOWED_LINK` and `DEPRECATED_KEY`,
+are `info`, so neither fails a run that 0.8.0 passed, `--strict` included.
+
+### Added
+
+- `latt coverage --rule N` reports one configured `COVERAGE` rule: its relationship, the
+  nodes it counts, the ones missing a link and where attribution is uncertain. An empty
+  denominator has a null percentage. `coverage` without `--rule` is unchanged.
+- `latt fuse --format json`: a `SOURCE_FAILURE` or `FUSE_ERROR` that fuse raises carries a
+  `stage` key naming where the run failed (`manifest`, `source_run`, `timeout`, …).
+- `UNFOLLOWED_LINK` (`info`): a symlinked directory beneath the target is reported once at
+  its path. The md, TOML and prose-xref adapters still do not follow it; 0.8.0 skipped the
+  files beneath it without a finding.
+- `DEPRECATED_KEY` (`info`): an adapter document that uses the pre-1.2 key
+  `contract_version` or `issues` gets one finding per key, at the reserved file `<adapter>`.
+- Adapter templates in Python, Go and Rust under `examples/adapters/`, each with a fixture
+  and a test, for a register format no shipped adapter reads.
+- A second agent skill, `latt-author`, for writing a profile and an adapter; the `latt`
+  skill's "Write a profile" section moved into it. The `latt` skill explains attribution
+  uncertainty and `COVERAGE_UNKNOWN`.
+
+Rust embedders:
+
+- `Request::RuleCoverage`, `RuleCoverageReport`, `CoverageGap` and `GapState` serve
+  `coverage --rule`.
+- `service::execute_trace_owned` builds a trace from a graph it consumes and answers
+  `Response<TraceReport>`; the borrowing `execute` is unchanged.
+- `latt_adapter::Issue::with_state`, `ContractError::kind` with `ContractErrorKind`, and
+  `Origin::Adapter`.
+- `docs/ci.md` gains an empty-read gate, which raises `NO_MATCHING_FILES` to fail a run
+  that read nothing, and a coverage report recipe. A test runs both from an install.
+- `docs/profiles.md` documents per-item obligations: a boolean attr on the item, one
+  `COVERAGE` entry per provider kind and an `EDGE_WHERE` rejection for a provider no
+  item asked for. A test runs the page's profile and checks its findings.
+
+### Changed
+
+- Linux release binaries for x86_64 and aarch64 run on glibc 2.28 or later (Debian 10,
+  RHEL 8). 0.8.0's needed 2.34 and, below 2.39, printed
+  `weak version 'GLIBC_2.39' not found` on every run.
+- `latt fuse` at exit 2 writes each `SOURCE_FAILURE` and `FUSE_ERROR` to stderr after the
+  report, one line each; in `--format json` as a findings object, so a merged `2>&1`
+  capture holds two JSON values. `json` stdout gains the `stage` key; `plain` and `rich`
+  now print the findings before the composed graph.
+- A run whose profile suppresses a `PARSE_ERROR` writes `Partial input: the profile
+  suppresses N PARSE_ERROR; --format json lists it` to stderr in `plain` and `rich`.
+  Stdout and the exit code are unchanged. `coverage --rule` reports the parse findings on
+  stdout instead, and `browse` shows suppressed findings on `.`.
+- `latt trace` and every `--format json` output hold less memory on large registers;
+  output is unchanged.
+- Clarified deep coverage, profile regex matching and how to read findings when
+  stderr notices contain newlines. Behaviour is unchanged.
+
+### Fixed
+
+- `latt query diff` reads revisions with `git ls-tree` and `git cat-file` instead of
+  `git archive`, so git attributes (`export-ignore`, `filter`, `eol`), `refs/replace/*`
+  and an inherited `GIT_DIR` no longer change what it compares. Its git commands obey
+  `adapter.timeout_seconds`.
+- `latt fuse` stops a source run after the source profile's `timeout_seconds` plus 30 s,
+  as a `SOURCE_FAILURE`; a hung source held it without limit.
+- An adapter that writes without end exits 2 after 1 GiB of stdout
+  (`LATT_ADAPTER_MAX_OUTPUT_BYTES` sets the limit); `latt` grew until it was killed.
+- A panic on the main thread exits 2 ("could not run") where it exited 101.
+- `latt fuse` names each manifest or fuse-profile error once, at its file and YAML line,
+  and prints a `SOURCE_FAILURE` message on one line.
+- `latt fuse`, recomputing findings over the composed graph:
+  - keeps each source's notes and suppressions;
+  - reports a malformed ID once, and each empty kind once, counting dangling edges;
+  - reports a `SUPPRESS` entry as unused only if nothing in the composed graph matches it.
+- `latt browse`:
+  - reports a failed `$EDITOR` on the status line;
+  - marks a capture action's output when reading it failed, and no longer waits for a
+    descendant process when the action is cancelled;
+  - says why a node has no git history;
+  - keeps Graph-view centrality scores finite and within `[0, 1]` on graphs with very
+    many shortest paths.
+- `latt adapter <name>` and `--help` stay quiet when the reader closes the pipe; a failed
+  write of required stderr exits 2. Failed reach and path queries keep adapter findings
+  on stderr.
+- Source and file handling:
+  - Python source checks read CR-only line endings and Unicode identifiers;
+  - deeply nested Rust inline modules and long `extends` chains no longer overflow the
+    stack;
+  - `**` globs include paths that contain newlines.
+- Release qualification accepts an RC on a reopened release line against that line's
+  frozen release baseline, including `v0.8.1-rc.6` against `v0.8.1`.
+- CI uploads `lines-adapter` and runs pytest with `LATT_GATE=1`, so a missing template
+  binary fails the run instead of skipping its tests.
+
+### Security
+
+- `latt query diff` refuses a revision that starts with `-`, is empty or holds NUL, and
+  passes git an object id: in 0.8.0 `--output=<file>` reached `git archive` as an option
+  and could create or truncate a file. A tree entry that would leave its private scratch
+  directory (`..`, `.git`, an absolute path) is exit 2.
+- `plain` and `rich` output writes control, bidi and line-separator characters from
+  register and profile text as visible escapes (`\u{1b}`, `\n`), so a node ID cannot
+  carry terminal escapes or forge a finding line. Stderr notices escape the same
+  characters but keep newlines; `rich` passes only its own colours; `show` and `adapter`
+  JSON-escape the same characters.
+- `pulldown-cmark` 0.13.6 (RUSTSEC-2026-0433) and `rustix` 1.1.6 (RUSTSEC-2026-0486) are
+  locked; neither advisory affects `latt`.
 
 ## [0.8.0] — 2026-11-01
 

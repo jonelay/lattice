@@ -275,7 +275,7 @@ fn the_adapters_own_issues_read_before_the_duplicate_findings() {
     let graph = ingest(json!({
         "interface_version": "1.0",
         "nodes": [node("REQ-1", "req", 1), node("REQ-1", "req", 2)],
-        "issues": [{"severity": "warning", "code": "SOURCE_MISSING", "message": "m",
+        "findings": [{"severity": "warning", "code": "SOURCE_MISSING", "message": "m",
                     "provenance": {"file": "r.md", "line": 9}, "node_id": null}],
     }));
     let codes: Vec<&str> = graph
@@ -515,7 +515,7 @@ fn a_document_carrying_only_issues_is_not_a_failure() {
     // reporting, not failing. Refusing here would turn a report into exit 2.
     let graph = ingest(json!({
         "interface_version": "1.0",
-        "issues": [{"severity": "error", "code": "PARSE_ERROR", "message": "m",
+        "findings": [{"severity": "error", "code": "PARSE_ERROR", "message": "m",
                     "provenance": {"file": "r.md", "line": 1}, "node_id": null}],
     }));
     assert_eq!(graph.iter_nodes().count(), 0);
@@ -725,6 +725,7 @@ fn alias_issues_is_consumed_when_findings_is_empty_under_every_version() {
             .adapter_issues()
             .iter()
             .map(|i| i.code.as_str())
+            .filter(|code| *code != "DEPRECATED_KEY")
             .collect();
         assert_eq!(codes, ["FROM_ISSUES"], "{version:?}");
     }
@@ -741,6 +742,7 @@ fn alias_findings_is_consumed_when_issues_is_empty_under_every_version() {
             .adapter_issues()
             .iter()
             .map(|i| i.code.as_str())
+            .filter(|code| *code != "DEPRECATED_KEY")
             .collect();
         assert_eq!(codes, ["FROM_FINDINGS"], "{version:?}");
     }
@@ -758,6 +760,67 @@ fn alias_arrays_both_populated_are_refused_under_every_version() {
             "{version:?}: {error}"
         );
     }
+}
+
+// Requirement: adapter-contract/Legacy document keys are reported
+
+/// The `DEPRECATED_KEY` findings of `document`, as (message, origin, node) after
+/// both ingest paths agree on the graph.
+fn deprecations(document: Value) -> Vec<(String, String, Option<String>)> {
+    let text = document.to_string();
+    let graph = latt_core::document::ingest_text(&text).expect("ingests");
+    assert_eq!(graph, ingest_document(document).expect("ingests"), "{text}");
+    graph
+        .adapter_issues()
+        .iter()
+        .filter(|i| i.code == "DEPRECATED_KEY")
+        .inspect(|i| assert_eq!(i.severity, Severity::Info, "{text}"))
+        .map(|i| (i.message.clone(), i.origin.to_string(), i.node_id.clone()))
+        .collect()
+}
+
+#[test]
+fn alias_legacy_keys_are_each_reported_once_at_the_adapter() {
+    let version = "'contract_version' is the old name of 'interface_version'; \
+                   emit 'interface_version'";
+    let issues = "'issues' is the pre-1.2 name of 'findings'; emit 'findings'";
+    let at = |message: &str| (message.to_owned(), "<adapter>:0".to_owned(), None);
+    let cases = [
+        (json!({"interface_version": "1.2", "findings": []}), vec![]),
+        (json!({"contract_version": "1.2"}), vec![at(version)]),
+        (
+            json!({"interface_version": "1.2", "contract_version": "1.2"}),
+            vec![at(version)],
+        ),
+        (
+            json!({"interface_version": "1.2", "issues": [finding("A")]}),
+            vec![at(issues)],
+        ),
+        (
+            json!({"interface_version": "1.2", "findings": [finding("A")], "issues": []}),
+            vec![at(issues)],
+        ),
+        (
+            json!({"contract_version": "1.2", "issues": []}),
+            vec![at(version), at(issues)],
+        ),
+    ];
+    for (document, expected) in cases {
+        let rendered = document.to_string();
+        assert_eq!(deprecations(document), expected, "{rendered}");
+    }
+}
+
+#[test]
+fn alias_deprecations_follow_the_adapters_own_findings() {
+    let text = json!({"contract_version": "1.2", "issues": [finding("A")]}).to_string();
+    let graph = latt_core::document::ingest_text(&text).expect("ingests");
+    let codes: Vec<&str> = graph
+        .adapter_issues()
+        .iter()
+        .map(|i| i.code.as_str())
+        .collect();
+    assert_eq!(codes, ["A", "DEPRECATED_KEY", "DEPRECATED_KEY"]);
 }
 
 #[test]

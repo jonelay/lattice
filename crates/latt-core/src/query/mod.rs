@@ -11,6 +11,7 @@ mod index;
 mod layout;
 mod materialize;
 mod reports;
+mod rule_coverage;
 mod schema;
 mod traverse;
 
@@ -23,6 +24,7 @@ pub use layout::graph_layout;
 pub use materialize::{MaterializationDir, materialize_revision};
 pub(crate) use reports::{PathError, at_in_view, path_typed, tally};
 pub use reports::{at, counts, coverage, diff, orphans, path};
+pub(crate) use rule_coverage::rule_coverage;
 pub use schema::schema_graph;
 pub use traverse::{reach, traverse};
 

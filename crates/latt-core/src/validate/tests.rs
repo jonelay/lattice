@@ -160,6 +160,7 @@ mod docs_finding_code_table {
         "SOURCE_MISSING",
         "PATHWAY_INVALID",
         "NO_MATCHING_FILES",
+        "UNFOLLOWED_LINK",
     ];
 
     fn every_code() -> Vec<FindingCode> {
@@ -193,6 +194,7 @@ mod docs_finding_code_table {
             NoteInvalid,
             NoteUnused,
             NoteExpired,
+            DeprecatedKey,
         ];
         // Exhaustive on purpose: a new variant fails to compile here until the
         // list above carries it.
@@ -202,7 +204,7 @@ mod docs_finding_code_table {
             | EdgeConstraint | EmptyKind | EdgeCount | EdgeWhere | IdFormat | Unreferenced
             | Untraced | SuggestedEdge | SuggestionUnresolved | SuggestionUnranked
             | SuppressUnused | OverrideUnused | UnknownKind | NoteFileMissing | NoteInvalid
-            | NoteUnused | NoteExpired => {}
+            | NoteUnused | NoteExpired | DeprecatedKey => {}
         }
         all
     }

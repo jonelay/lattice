@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.2",
+  "id": "trace-large-text-v1",
+  "description": "Release CLI trace over 1 KiB of ASCII text per node, through the version-matched TOML adapter, as JSON",
+  "node_count": 16384,
+  "edge_count": 16383,
+  "generator": "deterministic-forward-chain-v1",
+  "text": { "bytes": 1024 },
+  "profile": "profile-text.yaml",
+  "warmup_runs": 2,
+  "measurement_runs": 10,
+  "expected_exit_status": 0,
+  "command": "lattice trace --profile <profile> --adapter <revision-adapter-toml> --target <fixture> --format json",
+  "expected": {
+    "node_counts": { "item": 16384 },
+    "edge_counts": { "references": 16383 },
+    "finding_counts": [
+      { "code": "UNREFERENCED", "severity": "info", "count": 1 },
+      { "code": "UNTRACED", "severity": "info", "count": 1 }
+    ]
+  }
+}

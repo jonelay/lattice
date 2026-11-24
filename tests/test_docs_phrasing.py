@@ -7,7 +7,7 @@ installed. A sentence is matched whole across wrapped lines; fenced code, inline
 code and quotations are left out, and ``negative-identity`` exempts a condition
 ("when stdout is not a TTY", "a value that is not a table").
 
-The pages are the docs an install ships (with ``AGENTS.md`` and ``skills/``), ``CONTRIBUTING.md``, ``CLAUDE.md``, latt-eval's README, and the
+The pages are the docs an install ships (with ``AGENTS.md``, ``skills/`` and ``examples/``), ``CONTRIBUTING.md``, ``CLAUDE.md``, latt-eval's README, and the
 unreleased part of ``CHANGELOG.md``: sections of a published release record what
 was written then.
 """
@@ -37,7 +37,8 @@ def pages() -> list[Path]:
     found = [REPO_ROOT / "README.md", REPO_ROOT / "AGENTS.md", REPO_ROOT / "CONTRIBUTING.md", REPO_ROOT / "CHANGELOG.md",
              REPO_ROOT / "CLAUDE.md", REPO_ROOT / "crates/latt-eval/README.md",
              *sorted((REPO_ROOT / "docs").rglob("*.md")),
-             *sorted((REPO_ROOT / "skills").rglob("*.md"))]
+             *sorted((REPO_ROOT / "skills").rglob("*.md")),
+             *sorted((REPO_ROOT / "examples").rglob("*.md"))]
     # The release snapshot withholds these two, and its CI runs this guard too.
     withheld = {REPO_ROOT / "CLAUDE.md", REPO_ROOT / "crates/latt-eval/README.md"}
     return [page for page in found if page not in withheld or page.exists()]
@@ -102,4 +103,20 @@ def test_rules_match_known_sentences(text: str, expected: list[str]) -> None:
 def test_page_avoids_banned_shapes(page: Path) -> None:
     found = [f"{page.relative_to(REPO_ROOT)}:{n} {name}: {sent[:120]}"
              for n, name, sent in violations(prose(page))]
+    assert not found, "\n".join(found)
+
+
+# What a terminal acts on and a reader cannot see: C0 but tab and newline, DEL,
+# C1, the bidi controls and the line and paragraph separators. Prose names
+# them (`U+202E`, `‮`) instead of carrying them.
+RAW_CONTROL = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f؜‎‏‪-‮⁦-⁩  ]")
+
+
+@pytest.mark.parametrize("page", [*pages(), *sorted((REPO_ROOT / "openspec/specs").rglob("*.md"))],
+                         ids=lambda p: str(p.relative_to(REPO_ROOT)))
+def test_page_carries_no_raw_control_character(page: Path) -> None:
+    found = [f"{page.relative_to(REPO_ROOT)}:{n}: U+{ord(m.group()):04X}"
+             # newline="" keeps a CR for the check; splitlines() would split at U+2028
+             for n, line in enumerate(page.open(encoding="utf-8", newline="").read().split("\n"), 1)
+             for m in RAW_CONTROL.finditer(line)]
     assert not found, "\n".join(found)

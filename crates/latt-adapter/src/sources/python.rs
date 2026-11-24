@@ -4,7 +4,25 @@
 //! continuation and bracket continuation never start one, so text that only
 //! looks like a definition is not one.
 
-use super::{Cursor, ScanError, Scope, is_ident_start};
+use unicode_normalization::UnicodeNormalization;
+
+use super::{Cursor, ScanError, Scope};
+
+fn is_python_start(c: char) -> bool {
+    c == '_' || unicode_ident::is_xid_start(c)
+}
+
+fn python_ident(cursor: &mut Cursor) -> String {
+    let mut ident = String::new();
+    while let Some(c) = cursor
+        .peek()
+        .filter(|c| *c == '_' || unicode_ident::is_xid_continue(*c))
+    {
+        ident.push(c);
+        cursor.bump();
+    }
+    ident
+}
 
 /// How much of a logical line the index needs: where it starts, how far it is
 /// indented, its leading words, and whether its last token is a `:`.
@@ -43,7 +61,9 @@ impl Logical {
 }
 
 pub(super) fn scan(text: &str) -> Result<Scope, ScanError> {
-    let lines = logical_lines(text)?;
+    // Python applies universal-newline translation before tokenizing source.
+    let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
+    let lines = logical_lines(&normalized)?;
     let mut scope = Scope::default();
     let mut index = 0;
     while index < lines.len() {
@@ -148,14 +168,14 @@ fn logical_lines(text: &str) -> Result<Vec<Logical>, ScanError> {
                 string(&mut cursor, c, false, line)?;
                 logical.mark(Token::Other);
             }
-            c if is_ident_start(c) => {
-                let word = cursor.ident();
+            c if is_python_start(c) => {
+                let word = python_ident(&mut cursor);
                 match cursor.peek() {
                     Some(quote @ ('\'' | '"')) if is_prefix(&word) => {
                         string(&mut cursor, quote, is_formatted(&word), line)?;
                         logical.mark(Token::Other);
                     }
-                    _ => logical.mark(Token::Word(word)),
+                    _ => logical.mark(Token::Word(word.nfkc().collect())),
                 }
             }
             '(' | '[' | '{' => {
@@ -266,8 +286,8 @@ fn replacement_field(cursor: &mut Cursor, line: u32) -> Result<(), ScanError> {
                     cursor.bump();
                 }
             }
-            c if is_ident_start(c) => {
-                let word = cursor.ident();
+            c if is_python_start(c) => {
+                let word = python_ident(cursor);
                 if let Some(quote @ ('\'' | '"')) = cursor.peek()
                     && is_prefix(&word)
                 {

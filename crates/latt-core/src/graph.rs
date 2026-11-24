@@ -232,6 +232,27 @@ impl LatticeGraph {
     ///
     /// [`DuplicateNode`] when the ID is already declared; the graph keeps the
     /// first node unchanged.
+    ///
+    /// ```
+    /// use latt_core::graph::LatticeGraph;
+    /// use latt_core::types::Provenance;
+    /// use serde_json::Map;
+    ///
+    /// let mut graph = LatticeGraph::new();
+    /// graph.add_node("R-1", "req", Map::new(), Provenance::new("r.md", 3))?;
+    ///
+    /// let repeat = graph
+    ///     .add_node("R-1", "test", Map::new(), Provenance::new("t.md", 8))
+    ///     .unwrap_err();
+    /// assert_eq!(repeat.node_id, "R-1");
+    /// assert_eq!(repeat.existing_provenance, Provenance::new("r.md", 3));
+    /// assert_eq!(repeat.new_provenance, Provenance::new("t.md", 8));
+    ///
+    /// // The first declaration is the one the graph holds.
+    /// assert_eq!(graph.node("R-1").ok_or("no node")?.kind, "req");
+    /// assert_eq!(graph.iter_nodes().count(), 1);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn add_node(
         &mut self,
         id: impl Into<String>,
@@ -391,6 +412,19 @@ impl LatticeGraph {
             }
         }
         (has_in, has_out)
+    }
+
+    pub(crate) fn nodes(&self) -> &[Node] {
+        &self.nodes
+    }
+
+    pub(crate) fn edges(&self) -> &[Edge] {
+        &self.edges
+    }
+
+    /// Take the declared nodes and edges, in insertion order.
+    pub(crate) fn into_nodes_and_edges(self) -> (Vec<Node>, Vec<Edge>) {
+        (self.nodes, self.edges)
     }
 
     /// Yield edges in the order they were added.

@@ -13,6 +13,9 @@ pub enum LogFetch {
     Commits(Vec<GitCommit>),
     /// `git log` did not answer within its bound and was killed.
     TimedOut,
+    /// `git log` could not run or exited non-zero: git's first stderr line, or
+    /// the launch error, as one line.
+    Failed(String),
 }
 
 pub struct GitCommit {
@@ -41,7 +44,8 @@ impl CommitRow {
 
 /// Run `git log -L<start>,<end>:<file>` under `bound` and parse its output.
 /// `--parents` rewrites parent hashes to the filtered set so lanes never dangle.
-/// A git that fails is no commits; only expiry is reported distinctly.
+/// A git that cannot run or exits non-zero is [`LogFetch::Failed`], so the panel
+/// says why it holds no commits.
 pub fn parse_git_log(
     git: &Path,
     target_dir: &str,
@@ -50,8 +54,18 @@ pub fn parse_git_log(
     end: usize,
     bound: Duration,
 ) -> LogFetch {
+    fetch(Command::new(git), target_dir, file, start, end, bound)
+}
+
+fn fetch(
+    mut command: Command,
+    target_dir: &str,
+    file: &str,
+    start: usize,
+    end: usize,
+    bound: Duration,
+) -> LogFetch {
     let range = format!("-L{start},{end}:{file}");
-    let mut command = Command::new(git);
     command.args([
         "-C",
         target_dir,
@@ -65,8 +79,20 @@ pub fn parse_git_log(
         Ok(output) if output.status.success() => {
             LogFetch::Commits(parse_log_output(&String::from_utf8_lossy(&output.stdout)))
         }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            LogFetch::Failed(
+                match stderr.lines().map(str::trim).find(|l| !l.is_empty()) {
+                    Some(line) => line.to_owned(),
+                    None => match output.status.code() {
+                        Some(code) => format!("git log exited {code}"),
+                        None => format!("git log was stopped: {}", output.status),
+                    },
+                },
+            )
+        }
         Err(BoundedError::TimedOut { .. }) => LogFetch::TimedOut,
-        _ => LogFetch::Commits(Vec::new()),
+        Err(error) => LogFetch::Failed(format!("could not run git: {error}")),
     }
 }
 
@@ -279,27 +305,74 @@ Initial commit
         dir
     }
 
-    fn log(dir: &str, file: &str, line: usize) -> Vec<GitCommit> {
-        match parse_git_log(Path::new("git"), dir, file, line, line, FETCH_BOUND) {
-            LogFetch::Commits(commits) => commits,
+    fn log(dir: &str, file: &str, line: usize) -> LogFetch {
+        parse_git_log(Path::new("git"), dir, file, line, line, FETCH_BOUND)
+    }
+
+    fn failure(fetch: LogFetch) -> String {
+        match fetch {
+            LogFetch::Failed(reason) => reason,
+            LogFetch::Commits(commits) => {
+                panic!("expected a failure, got {} commits", commits.len())
+            }
             LogFetch::TimedOut => panic!("a local git log does not time out"),
         }
     }
 
+    // Requirement: browse-provenance/Git log parser
     #[test]
     fn parse_git_log_real_repo() {
         let dir = make_git_repo("real");
         let d = dir.to_str().unwrap();
 
-        let commits = log(d, "reqs.md", 1);
-        assert!(!commits.is_empty(), "should find commits touching line 1");
+        let LogFetch::Commits(commits) = log(d, "reqs.md", 1) else {
+            panic!("line 1 of a committed file has history");
+        };
+        assert_eq!(
+            commits.len(),
+            1,
+            "only the commit adding reqs.md touches line 1"
+        );
         assert_eq!(commits[0].subject, "add reqs");
 
-        let empty = log(d, "nonexistent.txt", 1);
-        assert!(empty.is_empty(), "nonexistent file returns empty");
+        let missing = failure(log(d, "nonexistent.txt", 1));
+        assert!(missing.starts_with("fatal: "), "{missing}");
+        assert!(missing.contains("nonexistent.txt"), "{missing}");
+        assert!(!missing.contains('\n'), "{missing}");
 
-        let zero = log(d, "reqs.md", 0);
-        assert!(zero.is_empty(), "line 0 fails against a real repo");
+        let zero = failure(log(d, "reqs.md", 0));
+        assert!(zero.starts_with("fatal: "), "{zero}");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // Requirement: browse-provenance/Git log parser
+    #[test]
+    fn a_failed_git_log_carries_its_reason() {
+        let dir =
+            std::env::temp_dir().join(format!("lattice-git-not-a-repo-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // A ceiling at the directory itself keeps git from finding an enclosing repository.
+        let mut command = Command::new("git");
+        command.env("GIT_CEILING_DIRECTORIES", &dir);
+        let reason = failure(fetch(
+            command,
+            dir.to_str().unwrap(),
+            "reqs.md",
+            1,
+            1,
+            FETCH_BOUND,
+        ));
+        assert!(reason.contains("not a git repository"), "{reason}");
+
+        let absent = Path::new("/nonexistent/lattice-git");
+        let reason = failure(parse_git_log(absent, ".", "reqs.md", 1, 1, FETCH_BOUND));
+        assert!(reason.starts_with("could not run git: "), "{reason}");
+
+        let shim = dir.join("git");
+        crate::stub::write_stub(&shim, "#!/bin/sh\nexit 3\n");
+        let reason = failure(parse_git_log(&shim, ".", "reqs.md", 1, 1, FETCH_BOUND));
+        assert_eq!(reason, "git log exited 3");
 
         std::fs::remove_dir_all(&dir).ok();
     }

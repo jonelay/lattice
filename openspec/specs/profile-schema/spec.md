@@ -267,7 +267,7 @@ A node kind SHALL admit only `id_pattern`, `attrs`, `summary_attr`, `text_attrs`
 `text_chunk_line_prefix`, `orphan_ok`, `actions` and `id_names`; an attr declared in mapping form SHALL admit
 only `type`, `required`, `values` and `items`; an edge kind SHALL admit only `allowed`
 and `cross_source`. The loader SHALL reject any other key with an error naming the
-declaration, the offending key and the accepted keys. As with validation entries, a typo
+declaration, the offending key and the accepted keys, in sorted order. As with validation entries, a typo
 becomes a load error instead of a setting that silently does nothing.
 
 Verified by: `cargo test --test profile_schema unknown`.
@@ -609,7 +609,7 @@ order). A child key that overrides a parent kind keeps the parent's position.
 A parent that is not a YAML mapping SHALL be rejected at load time, naming the
 parent file.
 
-Verified by: `cargo test --test profile_schema child_inherits scalar_child_wins list_replaces mapping_deep_merge child_missing resolved_document chain direct_cycle self_extends non_string missing_parent parent_first non_mapping`
+Verified by: `cargo test --test profile_schema -- child_inherits scalar_child_wins list_replaces mapping_deep_merge child_missing resolved_document chain direct_cycle self_extends non_string missing_parent parent_first non_mapping`
 
 #### Scenario: Child inherits parent's node kinds and edge kinds
 - **WHEN** a parent profile declares node kind `req` and edge kind `derives`, and a
@@ -646,9 +646,11 @@ Verified by: `cargo test --test profile_schema child_inherits scalar_child_wins 
 
 ### Requirement: Inheritance chain support
 Chains of inheritance (A extends B extends C) SHALL be supported. Each link in
-the chain follows the same merge rules.
+the chain follows the same merge rules. An acyclic chain SHALL load without
+recursive-stack failure, including chains of 3,000 profiles.
 
-Verified by: `cargo test --test profile_schema chain_three_levels`
+Verified by: `cargo test --test profile_schema chain_three_levels`,
+`cargo test -p latt --test cli --locked a_deep_acyclic_profile_chain_loads_without_aborting`
 
 #### Scenario: Three-level chain
 - **WHEN** profile C extends B which extends A, and each adds a node kind
@@ -660,7 +662,7 @@ a profile that extends itself. The error message SHALL name the file that closes
 the cycle. Cycle detection SHALL use canonicalized file paths so that different
 relative paths to the same file are recognized.
 
-Verified by: `cargo test --test profile_schema direct_cycle self_extends`
+Verified by: `cargo test --test profile_schema -- direct_cycle self_extends`
 
 #### Scenario: Direct cycle
 - **WHEN** profile A extends B and profile B extends A
@@ -675,7 +677,7 @@ The `extends` key, when present, SHALL be a string. A non-string value (list,
 mapping, number, boolean) SHALL be rejected at load time. A path that does not
 resolve to an existing file SHALL be rejected with an error naming the path.
 
-Verified by: `cargo test --test profile_schema non_string_extends missing_parent`
+Verified by: `cargo test --test profile_schema -- non_string_extends missing_parent`
 
 #### Scenario: Non-string extends is rejected
 - **WHEN** a profile declares `extends: [a.yaml, b.yaml]`
@@ -1009,4 +1011,3 @@ Verified by: `cargo test -p latt --locked --test rejected_profiles`
 #### Scenario: A blocking fault is reported alone
 - **WHEN** a profile is not valid YAML
 - **THEN** the loader refuses it with the YAML error only
-

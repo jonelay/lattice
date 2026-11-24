@@ -653,7 +653,7 @@
    }
   }
  ],
- "issues": [
+ "findings": [
   {
    "severity": "error",
    "code": "REGISTER_CONFLICT",

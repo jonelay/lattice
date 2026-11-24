@@ -5,9 +5,13 @@
 
 use std::ffi::OsStr;
 use std::fmt;
-use std::io::{self, Read};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcessCommand, ExitStatus, Stdio};
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+
+use latt_adapter::process::{Pollable, read_until_cancelled};
 
 use latt_core::graph::Node;
 use latt_core::profile::{ActionDecl, Segment};
@@ -178,15 +182,53 @@ pub fn describe_exit(status: ExitStatus) -> String {
 /// The most a capture keeps of each stream.
 pub const CAPTURE_LIMIT: u64 = 1 << 20;
 
+/// What a capture kept of one stream.
+#[derive(Default)]
+pub struct StreamCapture {
+    /// The bytes kept, at most [`CAPTURE_LIMIT`].
+    pub bytes: Vec<u8>,
+    /// True when output past the limit was drained unkept.
+    pub cut: bool,
+    /// Why the read stopped before the stream ended, when it did: the pane says
+    /// so, so a broken read never passes for the program's whole output.
+    pub failed: Option<String>,
+}
+
 /// Read up to [`CAPTURE_LIMIT`] of a stream, then drain the rest so the
-/// program never blocks on a full pipe. True when output was cut.
-pub fn read_capped(stream: impl Read + Send + 'static) -> std::thread::JoinHandle<(Vec<u8>, bool)> {
+/// program never blocks on a full pipe.
+///
+/// Setting `cancel` ends the read once the pipe holds nothing more, so a
+/// descendant that outlives the program and keeps the pipe open cannot hold
+/// the caller's join. Collect the result with [`collect`].
+pub fn read_capped(
+    mut stream: impl Read + Pollable + Send + 'static,
+    cancel: Arc<AtomicBool>,
+) -> std::thread::JoinHandle<StreamCapture> {
     std::thread::spawn(move || {
-        let mut kept = Vec::new();
-        let mut stream = stream;
-        let _ = (&mut stream).take(CAPTURE_LIMIT).read_to_end(&mut kept);
-        let cut = io::copy(&mut stream, &mut io::sink()).is_ok_and(|n| n > 0);
-        (kept, cut)
+        let mut capture = StreamCapture::default();
+        let mut read = 0usize;
+        let result = read_until_cancelled(&mut stream, &cancel, |bytes| {
+            read = read.saturating_add(bytes.len());
+            let room = usize::try_from(CAPTURE_LIMIT)
+                .unwrap_or(usize::MAX)
+                .saturating_sub(capture.bytes.len());
+            let (keep, rest) = bytes.split_at(bytes.len().min(room));
+            capture.bytes.extend_from_slice(keep);
+            capture.cut |= !rest.is_empty();
+        });
+        if let Err(error) = result {
+            capture.failed = Some(format!("read failed after {read} bytes: {error}"));
+        }
+        capture
+    })
+}
+
+/// Join a [`read_capped`] reader. A reader that panicked kept nothing it can
+/// hand back, and its stream is marked failed.
+pub fn collect(reader: std::thread::JoinHandle<StreamCapture>) -> StreamCapture {
+    reader.join().unwrap_or_else(|_| StreamCapture {
+        failed: Some("read failed: the reader stopped".to_owned()),
+        ..StreamCapture::default()
     })
 }
 
@@ -446,22 +488,106 @@ fn run_of(argv: &[&str], cwd: &Path) -> OwnerRun {
 #[cfg(test)]
 mod capture {
     use std::process::Stdio;
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
 
     use super::super::app::OutputPane;
-    use super::{CAPTURE_LIMIT, describe_exit, owner_command, read_capped, run_of};
+    use super::{
+        CAPTURE_LIMIT, StreamCapture, collect, describe_exit, owner_command, read_capped, run_of,
+    };
+
+    fn text(text: &str, cut: bool) -> StreamCapture {
+        StreamCapture {
+            bytes: text.as_bytes().to_vec(),
+            cut,
+            failed: None,
+        }
+    }
 
     #[test]
     fn the_pane_shows_stdout_then_stderr_under_a_heading() {
-        let pane = OutputPane::new("t".into(), "a\nb\n", false, "not found\n", false);
+        let pane = OutputPane::new(
+            "t".into(),
+            &text("a\nb\n", false),
+            &text("not found\n", false),
+        );
         assert_eq!(pane.lines, ["a", "b", "── stderr ──", "not found"]);
     }
 
     #[test]
     fn a_cut_stream_says_so_and_silence_is_shown() {
-        let pane = OutputPane::new("t".into(), "a\n", true, "", false);
+        let pane = OutputPane::new("t".into(), &text("a\n", true), &text("", false));
         assert_eq!(pane.lines, ["a", "[output cut at 1 MiB]"]);
-        let empty = OutputPane::new("t".into(), "", false, "", false);
+        let empty = OutputPane::new("t".into(), &text("", false), &text("", false));
         assert_eq!(empty.lines, ["(no output)"]);
+    }
+
+    /// Hands out its bytes, then fails every read, as a broken pipe does.
+    struct FailsAfter(Vec<u8>);
+
+    impl latt_adapter::process::Pollable for FailsAfter {
+        fn readable_within(&self, _: std::time::Duration) -> std::io::Result<bool> {
+            Ok(true)
+        }
+    }
+
+    impl std::io::Read for FailsAfter {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if self.0.is_empty() {
+                return Err(std::io::Error::other("pipe read failed"));
+            }
+            let count = self.0.len().min(buf.len());
+            buf[..count].copy_from_slice(&self.0[..count]);
+            self.0.drain(..count);
+            Ok(count)
+        }
+    }
+
+    /// A reader with a bug: its first read panics.
+    struct Panics;
+
+    impl latt_adapter::process::Pollable for Panics {
+        fn readable_within(&self, _: std::time::Duration) -> std::io::Result<bool> {
+            Ok(true)
+        }
+    }
+
+    impl std::io::Read for Panics {
+        fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+            panic!("reader bug")
+        }
+    }
+
+    #[test]
+    fn a_failed_read_marks_its_stream_in_the_pane() {
+        let stdout = collect(read_capped(
+            FailsAfter(b"partial\n".to_vec()),
+            Arc::new(AtomicBool::new(false)),
+        ));
+        assert_eq!(stdout.bytes, b"partial\n");
+        assert_eq!(
+            stdout.failed.as_deref(),
+            Some("read failed after 8 bytes: pipe read failed")
+        );
+        let pane = OutputPane::new("t".into(), &stdout, &text("", false));
+        assert_eq!(
+            pane.lines,
+            [
+                "partial",
+                "[stdout read failed after 8 bytes: pipe read failed]"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_reader_that_panics_marks_its_stream_instead_of_reading_as_silence() {
+        let stderr = collect(read_capped(Panics, Arc::new(AtomicBool::new(false))));
+        assert!(stderr.bytes.is_empty());
+        let pane = OutputPane::new("t".into(), &text("", false), &stderr);
+        assert_eq!(
+            pane.lines,
+            ["── stderr ──", "[stderr read failed: the reader stopped]"]
+        );
     }
 
     #[test]
@@ -471,7 +597,12 @@ mod capture {
             .stdout(Stdio::piped())
             .spawn()
             .unwrap();
-        let (kept, cut) = read_capped(child.stdout.take().unwrap()).join().unwrap();
+        let StreamCapture {
+            bytes: kept, cut, ..
+        } = collect(read_capped(
+            child.stdout.take().unwrap(),
+            Arc::new(AtomicBool::new(false)),
+        ));
         assert!(
             child.wait().unwrap().success(),
             "drained, so the writer never blocks"
@@ -481,13 +612,40 @@ mod capture {
     }
 
     #[test]
+    fn a_descendant_holding_the_pipe_does_not_hold_the_join_once_cancelled() {
+        let mut child = std::process::Command::new("sh")
+            .args(["-c", "printf kept; sleep 3 & wait"])
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let cancel = Arc::new(AtomicBool::new(false));
+        let reader = read_capped(child.stdout.take().unwrap(), Arc::clone(&cancel));
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        child.kill().unwrap();
+        child.wait().unwrap();
+        let started = std::time::Instant::now();
+        cancel.store(true, std::sync::atomic::Ordering::Release);
+        let StreamCapture {
+            bytes: kept, cut, ..
+        } = collect(reader);
+        assert!(started.elapsed() < std::time::Duration::from_secs(1));
+        assert_eq!(kept, b"kept");
+        assert!(!cut);
+    }
+
+    #[test]
     fn output_under_the_limit_is_kept_whole() {
         let mut child = std::process::Command::new("sh")
             .args(["-c", "printf hello"])
             .stdout(Stdio::piped())
             .spawn()
             .unwrap();
-        let (kept, cut) = read_capped(child.stdout.take().unwrap()).join().unwrap();
+        let StreamCapture {
+            bytes: kept, cut, ..
+        } = collect(read_capped(
+            child.stdout.take().unwrap(),
+            Arc::new(AtomicBool::new(false)),
+        ));
         child.wait().unwrap();
         assert_eq!(kept, b"hello");
         assert!(!cut);

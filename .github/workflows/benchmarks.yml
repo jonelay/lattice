@@ -8,15 +8,15 @@ on:
   workflow_dispatch:
     inputs:
       baseline_ref:
-        description: Previous release or comparison baseline
-        required: true
-        default: v0.7.1
+        description: Comparison baseline; empty for the previous release in contracts/released/VERSION
+        required: false
+        default: ""
       main_ref:
         description: Main for routine runs; exact development-baseline commit for release qualification
         required: true
         default: main
       release_candidate_ref:
-        description: Optional immutable 0.8.0 release-candidate tag
+        description: Optional immutable release-candidate tag (vX.Y.Z-rc.N after the previous release)
         required: false
         default: ""
 
@@ -24,7 +24,7 @@ jobs:
   criterion:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
@@ -35,7 +35,7 @@ jobs:
           cache-targets: false
       # actions/cache never overwrites a key, so each run saves a fresh entry and
       # the prefix restore picks up the most recent one.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: target/criterion
           key: criterion-main-${{ github.run_id }}
@@ -53,18 +53,23 @@ jobs:
           LATTICE_CRITERION_DIR: ${{ github.workspace }}/target/criterion
       - name: Compare release, main, and optional release candidate
         run: |
+          BASELINE_REF=${BASELINE_REF:-v$(cat contracts/released/VERSION)}
           if [ -n "$RELEASE_CANDIDATE_REF" ]; then
             python3 tools/benchmark-revisions.py --release-qualification \
               "$BASELINE_REF" "$MAIN_REF" "$RELEASE_CANDIDATE_REF"
           else
             python3 tools/benchmark-revisions.py "$BASELINE_REF" "$MAIN_REF"
+            for scenario in trace-large-text-v1 trace-sparse-non-ascii-v1; do
+              python3 tools/benchmark-revisions.py --scenario "benchmarks/e2e/$scenario.json" \
+                "$BASELINE_REF" "$MAIN_REF"
+            done
           fi
         env:
-          BASELINE_REF: ${{ inputs.baseline_ref || 'v0.7.1' }}
+          BASELINE_REF: ${{ inputs.baseline_ref || '' }}
           MAIN_REF: ${{ inputs.main_ref || 'main' }}
           RELEASE_CANDIDATE_REF: ${{ inputs.release_candidate_ref || '' }}
           LATTICE_E2E_WORK_DIR: ${{ github.workspace }}/target/e2e-benchmark/${{ github.run_id }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: lattice-development-benchmarks
@@ -72,5 +77,6 @@ jobs:
             target/criterion/
             target/benchmarks/lattice-benchmark-v2.json
             target/benchmarks/lattice-e2e-v1.json
+            target/benchmarks/lattice-e2e-trace-*.json
           if-no-files-found: warn
           retention-days: 30

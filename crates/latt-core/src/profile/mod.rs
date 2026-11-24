@@ -31,6 +31,7 @@ pub(crate) use raw::to_json;
 use raw::{
     check_adapter_timeouts, check_version, key_name, load_raw, read_notes, reject_unknown_keys,
 };
+pub(crate) use types::DEFAULT_ADAPTER_TIMEOUT_SECONDS;
 #[cfg(test)]
 pub(crate) use types::FILTER_OPERATORS;
 pub(crate) use types::NoteItem;

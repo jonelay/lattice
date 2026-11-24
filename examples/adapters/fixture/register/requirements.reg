@@ -1,0 +1,5 @@
+﻿# Requirements for the pump controller
+requirement REQ-1: The pump stops on overpressure
+requirement REQ-2: The relay opens within 50 ms
+
+requirement REQ-3: Every stop is logged

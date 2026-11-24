@@ -14,11 +14,12 @@ place of a profile and target (the program-composition capability). `show` takes
 adapter name, `--profile` and `--target` only (Requirement: Adapter command). `browse` takes
 `--profile`, `--target`, `--adapter`, `--strict`, `--filter`, and `--glyphs` but not `--format` —
 it owns its terminal directly and does not route output through `output_result`.
-Every command that takes `--profile` also takes the optional `--profile-version`
-(Requirement: Profile version pin); `fuse` does not.
-`validate` and `trace` additionally take `--strict`;
-`summary`, `coverage`, and `query` do not — `summary` runs no validation pass,
-and only error-severity adapter issues affect its exit code; `coverage` is a
+Every command that loads profile YAML also takes the optional `--profile-version`
+(Requirement: Profile version pin); `adapter` reads resolved JSON and does not take
+the pin, and `fuse` takes no profile.
+`validate`, `trace`, `fuse` and `browse` additionally take `--strict`;
+`summary`, `coverage`, and `query` do not — only error-severity adapter issues
+affect the exit code of `summary`; `coverage` is a
 report that produces no findings; `query` produces no findings at all, so no
 severity affects its exit code (see the `query` capability).
 
@@ -27,12 +28,22 @@ profile overrides, then pathway demotion — the same severities `validate` woul
 the same graph, and SHALL honour the profile's `SUPPRESS` entries the same way: a
 suppressed adapter issue is omitted from `plain` and `rich`, kept in `json` with
 `"suppressed": true`, and does not exit 1. The same applies to the adapter issues
-`coverage`, `query` and `query diff` report on stderr. When every adapter issue is
-suppressed, `plain` and `rich` write nothing to stderr. Running no validation pass means
-`summary` computes no findings of its own; it does not mean it reports an adapter issue
-at a severity, or a suppression, the profile has already said is wrong. A register from
+`coverage` without `--rule`, `query` and `query diff` report on stderr.
+`coverage --rule N` keeps these diagnostics in its stdout report (coverage-query spec). When every adapter issue is
+suppressed, `plain` and `rich` write no finding to stderr. `summary` gates its exit code on adapter findings alone. Its structural report also tallies
+unsuppressed validation findings. It does not report an adapter issue at a severity, or a suppression, the profile has already said is wrong. A register from
 which the adapter read no node is still refused on the adapter's unsuppressed report
 (see Exit codes).
+
+Suppression SHALL NOT hide that input went unread. When a suppressed `PARSE_ERROR` is
+among the findings or adapter issues a run reports, `validate`, `trace`, `fuse`,
+`summary`, `coverage` without `--rule`, `describe` and every `query` SHALL write, in
+`plain` and `rich`, one line to stderr after their output:
+`Partial input: the profile suppresses N PARSE_ERROR; --format json lists it` (`them`
+when N is above 1). `query diff` writes one per revision, prefixed with the revision
+and a colon. No profile entry removes the line, and it changes no exit code. `json`
+gets no line: it carries the suppressed records, marked. `coverage --rule N` says the
+same through its `input_status` (coverage-query spec).
 
 All subcommands that previously required `--adapter` SHALL accept it as optional.
 When supplied, `--adapter` names either a known native adapter by name (e.g.
@@ -107,12 +118,31 @@ Verified by: `cargo test --test cli` and `cargo test --test native`.
 
 #### Scenario: A query omits a suppressed adapter issue from plain stderr
 - **WHEN** the profile suppresses `PARSE_ERROR` and `query counts` runs with `--format plain`
-- **THEN** the answer is printed, stderr carries no `PARSE_ERROR` line, and the exit is 0
+- **THEN** the answer is printed, stderr carries no `PARSE_ERROR` finding line, and the exit is 0
 
-#### Scenario: Stderr is empty when every adapter issue is suppressed
-- **WHEN** the profile suppresses every adapter issue and `summary` or `query counts` runs
-  with `--format plain` or `--format rich`
-- **THEN** stderr is empty: no blank line and no `No findings.`
+#### Scenario: Stderr holds only the notice when every adapter issue is suppressed
+- **WHEN** the profile suppresses every adapter issue, one of them a `PARSE_ERROR`, and
+  `summary` or `query counts` runs with `--format plain` or `--format rich`
+- **THEN** stderr is the partial-input line alone: no finding, no blank line and no
+  `No findings.`
+
+#### Scenario: A suppressed parse error leaves a partial-input notice
+- **WHEN** the profile suppresses `PARSE_ERROR`, the adapter reports two, and any
+  command listed above runs with `--format plain` or `--format rich`
+- **THEN** stderr carries `Partial input: the profile suppresses 2 PARSE_ERROR; --format json lists them`
+  once, the exit code is the one the run has without it, and `--format json` adds no line
+
+#### Scenario: Only a suppressed parse error leaves the notice
+- **WHEN** the `PARSE_ERROR` is unsuppressed, or the suppressed finding has another code
+- **THEN** no partial-input line is written
+
+#### Scenario: A diff names the revision left partial
+- **WHEN** the profile suppresses `PARSE_ERROR` and only the later revision reports one
+- **THEN** `query diff` stderr is `<rev>: Partial input: …` for that revision alone
+
+#### Scenario: A fused source's suppressed parse error leaves the notice
+- **WHEN** a source profile suppresses its `PARSE_ERROR` and `fuse` runs with `--format plain`
+- **THEN** stderr carries the partial-input line
 
 ### Requirement: Version flag
 `latt --version` SHALL print the installed package version and exit 0. The version
@@ -124,7 +154,7 @@ header, so the two cannot disagree.
 - **THEN** lattice prints the package version and exits 0
 
 ### Requirement: Format flag
-Every subcommand except `browse` and `show` SHALL accept `--format=plain|json|rich` (default: `rich` when TTY,
+Every subcommand except `browse`, `show` and `adapter` SHALL accept `--format=plain|json|rich` (default: `rich` when TTY,
 `plain` otherwise). The parser SHALL reject any other value as a usage error, naming
 the value and the three accepted ones, with exit 2: the flag parses straight into
 `output::Format`, so the dispatcher never sees a format it does not know.
@@ -148,7 +178,8 @@ Lattice SHALL use three exit codes: 0 when the command succeeded with no errors,
 the register produced error-severity findings, and 2 when lattice could not run the
 command at all (unreadable profile, profile refused by `--profile-version`, adapter program that cannot be run, adapter that
 exits non-zero, adapter output that cannot be parsed or does not satisfy the interface
-schema, or an interface version the core does not support). With `--strict` (on the
+schema, an interface version the core does not support, or an internal panic on the main
+thread). With `--strict` (on the
 commands that take it), warnings are promoted to errors before the exit code decision.
 
 A suppressed finding SHALL NOT count toward exit code 1, whatever its severity and
@@ -161,21 +192,40 @@ Exit 2 distinguishes "lattice is misconfigured" from "the register has errors", 
 caller can tell a broken setup from a genuine finding.
 
 A report that cannot be written to stdout was not delivered, so a failed stdout write
-SHALL exit 2 whatever the findings, never 0 over a truncated report and never a
-panic's 101. A write refused by a full disk or similar SHALL be said on stderr; a
+SHALL exit 2 whatever the findings, never 0 over a truncated report. A write refused by a full disk or similar SHALL be said on stderr; a
 closed pipe is the reader's choice and SHALL be quiet.
+Failure to write a required diagnostic or scope line to stderr SHALL also exit 2.
 
-`query` subcommands and `coverage` never exit 1: they produce no findings, so their
+`query` subcommands and `coverage` never exit 1: their answers do not gate, so their
 exit codes are 0 (answered) or 2 (could not run or could not pose the question) only —
 the three-valued contract stays with `validate`, `summary`, `trace`, and `fuse`. A register
 from which the adapter read no node while reporting an error-severity issue is a
 question that cannot be posed (see the `query` capability).
 
-Verified by: `cargo test --test cli exit`, `cargo test --test cli an_unwritable_stdout_exits_two`, and `cargo test --test query exit`
+A panic that unwinds to `main` SHALL exit 2 and still print its message. An abort, a double
+panic and a worker thread's panic that its owner handles are outside this.
+
+Verified by: `cargo test --test cli exit`, `cargo test --test cli unwritable`, `cargo test --test query exit`, and `cargo test -p latt --bin latt panic_boundary`
+
+#### Scenario: A panic reaches main
+- **WHEN** a command panics on the main thread
+- **THEN** the panic message prints and lattice exits 2
 
 #### Scenario: Stdout cannot be written
 - **WHEN** `latt validate` writes its report to a full device
 - **THEN** lattice says it could not write output on stderr and exits 2
+
+#### Scenario: A native adapter's reader closes the pipe
+- **WHEN** `latt adapter md` writes its interface document into a pipe whose reader has
+  closed it
+- **THEN** lattice exits 2 and writes nothing to stderr; into a full device it says it
+  could not write the interface document
+
+#### Scenario: The entomologist adapter's reader closes the pipe
+- **WHEN** `latt-adapter-entomologist` writes its interface document into a pipe whose
+  reader has closed it
+- **THEN** it exits 2 and writes nothing to stderr; into a full device it says it could
+  not write the interface document
 
 #### Scenario: Clean validation
 - **WHEN** validation produces zero errors
@@ -219,7 +269,7 @@ Verified by: `cargo test --test cli exit`, `cargo test --test cli an_unwritable_
 - **THEN** no answer is printed and the exit code is 2
 
 #### Scenario: Coverage never exits 1
-- **WHEN** `latt coverage` runs against a register whose adapter emitted error-severity issues
+- **WHEN** `latt coverage` without `--rule` runs against a register whose adapter emitted error-severity issues
   beside at least one node
 - **THEN** the exit code is 0, with the issues reported on stderr
 
@@ -367,7 +417,7 @@ Verified by: `cargo test --test suggestions unranked`
 - **THEN** the report carries the `SUGGESTED_EDGE` hints and one `SUGGESTION_UNRANKED` hint
 
 ### Requirement: Profile version pin
-Every command that takes `--profile` SHALL accept an optional `--profile-version <X.Y.Z>`.
+Every command that loads profile YAML SHALL accept an optional `--profile-version <X.Y.Z>`.
 When it is given, lattice SHALL load the profile and then refuse it unless its
 `profile_version` equals the pin exactly, before any adapter runs. The pin SHALL be held to
 the `profile_version` shape (X.Y.Z, each component a non-negative integer without leading

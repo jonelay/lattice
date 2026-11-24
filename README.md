@@ -22,8 +22,7 @@ Three design rules hold throughout:
   nothing; edits go through your editor or the register's own tool.
 - **Your vocabulary lives in the profile.** A new vocabulary needs a profile, no code.
 - **Unreadable input is reported.** An unparsable row becomes a `PARSE_ERROR` at its line.
-
-Beside the CLI come a terminal browser and a Rust library.
+  A profile may suppress the finding; the run still says its input was partial.
 
 ![latt browse on Lattice's own register: from a finding to a requirement no test verifies, then from a requirement along an edge to its test](docs/img/browse-walk.gif)
 
@@ -47,18 +46,21 @@ and leaves the core alone.
 first: `0` no error-severity findings (warnings may still print), `1` error-severity
 findings, `2` Lattice could not run. `--format json` is the output whose shape is a
 public surface, and [json.md](docs/json.md) lists every key. A release install carries
-the documentation beside the binary, so an agent can read it there. Two files prime an
+the documentation beside the binary, so an agent can read it there. Three files prime an
 agent before it starts:
 
-- [`AGENTS.md`](AGENTS.md) points an agent at the skill, the core docs and the rules for
+- [`AGENTS.md`](AGENTS.md) points an agent at the skills, the core docs and the rules for
   using Lattice.
-- [`skills/latt/`](skills/latt/SKILL.md) is an agent skill: the commands, what each exit
-  code means, how to read a finding and how to write a profile. Copy the directory into
-  your agent's skills directory (for Claude Code, `~/.claude/skills/`).
+- [`skills/latt/`](skills/latt/SKILL.md) is an agent skill for checks and queries: the
+  commands, what each exit code means and how to read a finding.
+- [`skills/latt-author/`](skills/latt-author/SKILL.md) is an agent skill for writing a
+  profile and, for a format no shipped adapter reads, an adapter.
+
+Copy either directory into your agent's skills directory (for Claude Code,
+`~/.claude/skills/`).
 
 **In CI.** A job or hook runs the same `latt validate` line you run by hand, and decides
-on the exit code: `0` passes, `1` fails on error-severity findings, and `2` flags a
-broken setup, such as a profile that will not load. [ci.md](docs/ci.md) has a recipe for
+on the exit code ([cli.md](docs/cli.md#exit-codes)). [ci.md](docs/ci.md) has a recipe for
 each way to gate:
 
 - a pre-commit hook and a GitLab CI job that stop only when Lattice cannot run;
@@ -99,17 +101,23 @@ checks references across registers in several repositories.
 
 ## Install
 
-Releases are on [GitHub](https://github.com/jonelay/lattice/releases/tag/v0.8.0), for Linux
-on x86_64 and aarch64. A release carries `latt` and the `latt-adapter-<name>` programs as
-single binaries, one set per architecture, and GitHub's source archive of the tag, which
-holds `profiles/`, `adapters/` and `docs/`.
+The [v0.8.1 release](https://github.com/jonelay/lattice/releases/tag/v0.8.1) has Linux
+binaries for x86_64 and aarch64 that require glibc 2.28 or later, such as Debian 10 and
+RHEL 8. On musl systems such as Alpine, build from a checkout as below. A release
+carries `latt` and the `latt-adapter-<name>` programs as single binaries, one set per
+architecture, and GitHub's source archive of the tag, which holds `profiles/`,
+`adapters/` and `docs/`.
 
 1. Unpack the source archive.
-2. Put your architecture's binaries in a `bin/` beside `profiles/`, named `latt` and
-   `latt-adapter-<name>` without the architecture suffix.
-3. Put that `bin/` on your PATH.
+2. Check the downloaded binaries against the release's `SHA256SUMS` before renaming
+   them: `sha256sum -c --ignore-missing SHA256SUMS`.
+3. Put your architecture's binaries in a `bin/` beside `profiles/`, named `latt` and
+   `latt-adapter-<name>` without the architecture suffix, and make them executable
+   (`chmod +x bin/*`); a download arrives without the executable bit.
+4. Put that `bin/` on your PATH.
 
-That directory is a release install.
+That directory is a release install. The `openspec` adapter also needs Python 3.12 or
+later, newer than the `python3` that RHEL 8 ships.
 
 To build from a checkout, install [rustup](https://rustup.rs); the first `cargo` command
 fetches the pinned toolchain. Then:
@@ -128,21 +136,21 @@ The Python programs, the `openspec` adapter and the `latt-suggest` sidecar, need
 
 ## Quick start
 
-Lattice's own repository is a register: its specs state 367 requirements in
+Lattice's own repository is a register: its specs state requirements in
 `### Requirement:` headings, and its tests cite the requirement they verify in a comment
 such as `// Requirement: cli/Exit codes`. With `latt` on your PATH, and Python 3.12 or
 later for the `openspec` adapter, clone the release and validate it:
 
 ```sh
-git clone --branch v0.8.0 https://github.com/jonelay/lattice
+git clone --branch v0.8.1 https://github.com/jonelay/lattice
 cd lattice
 latt validate --profile profiles/openspec.yaml --adapter adapters/openspec --target . --format plain
 ```
 
 The profile, `profiles/openspec.yaml`, asks for a `verifies` edge into every requirement.
-The 158 requirements without one print as `COVERAGE` hints, each at its spec line. Hints
-show on every run and gate nothing, so the run exits `0`. A last line on stderr says what
-the run read: 98 files, 367 requirements, 1249 tests.
+Each requirement without one prints as a `COVERAGE` hint at its spec line. Hints show on
+every run and gate nothing, so the run exits `0`. A last line on stderr says what the run
+read: how many files, and the nodes and edges of each kind.
 
 Ask which tests verify a requirement:
 
@@ -165,7 +173,7 @@ with a profile for a Markdown table.
 | `validate` | Where does the register break the profile's rules? |
 | `trace` | Every node, with its edges and findings |
 | `summary` | How many nodes are in each status? |
-| `coverage` | Per kind, how many nodes have incoming and outgoing edges? |
+| `coverage` | How many nodes of each kind have links? `--rule N` checks one configured rule |
 | `query` | Reachability, paths, orphans, counts, a file's declarations, a diff between revisions |
 | `fuse` | Do the references between several registers resolve? |
 | `browse` | Interactive navigation of nodes, edges and findings |

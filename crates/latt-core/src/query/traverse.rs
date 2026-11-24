@@ -398,12 +398,50 @@ mod traversal_tests {
         g.add_edge(edge("X", "B", "derives"), prov());
         let idx = AdjacencyIndex::build(&g);
         let report = traverse(&g, &idx, "A", Direction::Forward).unwrap();
-        let b_first = report
+        let b_steps: Vec<_> = report.steps.iter().filter(|s| s.node_id == "B").collect();
+        assert_eq!(b_steps.len(), 2);
+        assert!(
+            b_steps.iter().all(|step| !step.tainted),
+            "every B visit has a clean route"
+        );
+    }
+
+    #[test]
+    fn traversal_vacancy_first_then_clean_reconvergence_clears_descendants() {
+        // A → AA (vacant) → B → E, then A → C → D → B.
+        let mut g = LatticeGraph::new();
+        for id in ["A", "B", "C", "D", "E"] {
+            g.add_node(id, "req", Map::new(), prov()).unwrap();
+        }
+        for (src, tgt) in [
+            ("A", "AA"),
+            ("AA", "B"),
+            ("B", "E"),
+            ("A", "C"),
+            ("C", "D"),
+            ("D", "B"),
+        ] {
+            g.add_edge(edge(src, tgt, "derives"), prov());
+        }
+        let idx = AdjacencyIndex::build(&g);
+        let report = traverse(&g, &idx, "A", Direction::Forward).unwrap();
+        let ids: Vec<_> = report.steps.iter().map(|step| step.node_id).collect();
+        assert_eq!(ids, ["A", "AA", "B", "E", "C", "D", "B"]);
+        assert!(
+            report
+                .steps
+                .iter()
+                .any(|step| step.node_id == "AA" && step.tainted)
+        );
+        assert_eq!(ids.iter().filter(|&&id| id == "B").count(), 2);
+        assert!(ids.contains(&"E"));
+        for step in report
             .steps
             .iter()
-            .find(|s| s.node_id == "B" && s.visit == Visit::First)
-            .unwrap();
-        assert!(!b_first.tainted, "B has a clean direct path from A");
+            .filter(|step| ["B", "E"].contains(&step.node_id))
+        {
+            assert!(!step.tainted, "{} has a clean route", step.node_id);
+        }
     }
 
     #[test]
@@ -636,5 +674,119 @@ mod centrality_tests {
         let idx = AdjacencyIndex::build(&g);
         let c = betweenness_centrality(&idx);
         assert!(c.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod slot_properties {
+    use std::collections::VecDeque;
+
+    use proptest::prelude::*;
+    use serde_json::Map;
+
+    use super::reach;
+    use crate::graph::{EdgeSpec, LatticeGraph};
+    use crate::query::{Direction, path};
+    use crate::service::prepare_profile_str;
+    use crate::types::Provenance;
+
+    // Independent queue over the generated edge triples, without SlotIndex.
+    fn distances(
+        edges: &[(u8, u8, u8)],
+        origin: u8,
+        reverse: bool,
+        selected: bool,
+        declared: Option<&[bool; 6]>,
+    ) -> [Option<usize>; 6] {
+        let mut dist = [None; 6];
+        dist[usize::from(origin)] = Some(0);
+        let mut queue = VecDeque::from([origin]);
+        while let Some(here) = queue.pop_front() {
+            for &(src, tgt, kind) in edges {
+                if selected && kind != 0 {
+                    continue;
+                }
+                let (near, far) = if reverse { (tgt, src) } else { (src, tgt) };
+                if near != here || declared.is_some_and(|declared| !declared[usize::from(far)]) {
+                    continue;
+                }
+                let far = usize::from(far);
+                if dist[far].is_none() {
+                    dist[far] = Some(dist[usize::from(here)].unwrap() + 1);
+                    queue.push_back(far as u8);
+                }
+            }
+        }
+        dist
+    }
+
+    proptest! {
+        #[test]
+        fn public_reach_and_path_match_generated_graph_oracles(
+            edges in proptest::collection::vec((0u8..6, 0u8..6, 0u8..2), 0..24),
+            middle in 0u8..8,
+            selected in any::<bool>(),
+            reverse in any::<bool>(),
+            shuffle in any::<bool>(),
+        ) {
+            let mut declared = [false; 6];
+            declared[0] = true;
+            declared[4] = true;
+            for (at, present) in declared.iter_mut().enumerate().take(4).skip(1) {
+                *present = middle & (1 << (at - 1)) != 0;
+            }
+            let mut graph = LatticeGraph::new();
+            for (at, present) in declared.iter().enumerate() {
+                if *present {
+                    graph.add_node(format!("N{at}"), "req", Map::new(), Provenance::new("g", 1)).unwrap();
+                }
+            }
+            let mut inserted = edges.clone();
+            if shuffle {
+                inserted.reverse();
+            }
+            for &(src, tgt, kind) in &inserted {
+                graph.add_edge(
+                    EdgeSpec { src: format!("N{src}"), tgt: format!("N{tgt}"),
+                        kind: if kind == 0 { "x" } else { "y" }.into(), attrs: Map::new() },
+                    Provenance::new("g", 1),
+                );
+            }
+            let profile = prepare_profile_str(
+                "name: g\nprofile_version: '1.0.0'\nnode_kinds: {req: {id_pattern: '^N[0-5]$'}}\nedge_kinds: {x: {allowed: [[req, req]]}, y: {allowed: [[req, req]]}}\n",
+                "g",
+            ).unwrap();
+            let kinds: &[&str] = if selected { &["x"] } else { &[] };
+            let direction = if reverse { Direction::Reverse } else { Direction::Forward };
+            let report = reach(&graph, &profile, "N0", kinds, direction, &[], true).unwrap();
+            let all = distances(&edges, 0, reverse, selected, None);
+            let clean = distances(&edges, 0, reverse, selected, Some(&declared));
+            let expected: Vec<_> = (1..6)
+                .filter(|&at| declared[at] && all[at].is_some())
+                .map(|at| (format!("N{at}"), Some(clean[at].is_none())))
+                .collect();
+            let actual: Vec<_> = report.nodes.iter().map(|node| (node.id.clone(), node.tainted)).collect();
+            prop_assert_eq!(actual, expected);
+
+            let path_report = path(&graph, &profile, "N0", "N4", kinds).unwrap();
+            let shortest = distances(&edges, 0, false, selected, None)[4];
+            match (shortest, path_report.found_path()) {
+                (None, None) => {},
+                (Some(length), Some((nodes, kinds_on_path))) => {
+                    prop_assert_eq!(kinds_on_path.len(), length);
+                    prop_assert_eq!(nodes.len(), length + 1);
+                    prop_assert_eq!(nodes.first().map(String::as_str), Some("N0"));
+                    prop_assert_eq!(nodes.last().map(String::as_str), Some("N4"));
+                    for (pair, kind) in nodes.windows(2).zip(kinds_on_path) {
+                        let src: u8 = pair[0][1..].parse().unwrap();
+                        let tgt: u8 = pair[1][1..].parse().unwrap();
+                        let label = if kind == "x" { 0 } else { 1 };
+                        prop_assert!(edges.iter().any(|&(s, t, k)| s == src && t == tgt && k == label));
+                        prop_assert!(!selected || label == 0);
+                    }
+                },
+                (expected, actual) => prop_assert!(false, "distance {expected:?}, path {actual:?}"),
+            }
+        }
     }
 }

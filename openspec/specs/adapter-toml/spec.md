@@ -68,7 +68,9 @@ output deterministic.
 
 A symlink that matches a glob but resolves to nothing SHALL produce a `PARSE_ERROR`
 naming it, as SHALL a matching path that is not valid UTF-8; neither is read, and neither
-is skipped in silence. Symlinked directories SHALL NOT be followed.
+is skipped in silence. Symlinked directories SHALL NOT be followed, so a link cycle
+cannot recurse; each SHALL produce one `UNFOLLOWED_LINK` issue at `info` severity
+naming its target-relative path, so the files beneath it are not missing in silence.
 
 A missing or unreadable target or file SHALL produce a `PARSE_ERROR` naming the affected
 path. The adapter SHALL continue wherever reading can continue.
@@ -79,7 +81,8 @@ the globs, so a mistyped glob never reads as an empty register. A path that is n
 valid UTF-8 and matches a glob is a match: its `PARSE_ERROR` stands alone.
 
 Verified by: `cargo test -p latt-core --lib adapters::toml`,
-`cargo test -p latt-adapter recursive_glob_also_matches_a_root_file`, and
+`cargo test -p latt-adapter recursive_glob_also_matches_a_root_file`,
+`cargo test -p latt-adapter a_symlinked_directory`, and
 `.venv/bin/python -m pytest tests/test_adapter_toml.py -k "missing_target or dangling_symlink or non_utf8_path or no_matching_files"`
 
 #### Scenario: Directory target is filtered by glob
@@ -100,6 +103,11 @@ Verified by: `cargo test -p latt-core --lib adapters::toml`,
 - **WHEN** `registers/gone.toml` is a symlink to a missing file
 - **THEN** the adapter emits a `PARSE_ERROR` naming `registers/gone.toml` and continues with the other
   files
+
+#### Scenario: Symlinked directory
+- **WHEN** `registers/shared` is a symlink to a directory holding TOML files
+- **THEN** the adapter reads none of them and emits one `UNFOLLOWED_LINK` issue at
+  `info` severity naming `registers/shared`
 
 #### Scenario: Path is not valid UTF-8
 - **WHEN** a file whose name is not valid UTF-8 matches a configured glob
@@ -507,7 +515,7 @@ source-existence check to the nodes it builds — table, directory-mode and head
 alike — against the `--target` directory. A kind without `id_names` SHALL contribute no `SOURCE_MISSING`
 finding.
 
-Verified by: `cargo test -p latt-core --locked --lib adapters::toml sources`
+Verified by: `cargo test -p latt-core --locked --lib sources`
 
 #### Scenario: TOML row naming a deleted file
 - **WHEN** a table's kind declares `id_names: file` and a row's ID names no file in the target

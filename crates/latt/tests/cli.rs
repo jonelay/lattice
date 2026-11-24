@@ -34,6 +34,32 @@ fn a_clean_register_exits_zero() {
     assert!(stdout(&output).contains("WARNING UNREFERENCED"));
 }
 
+#[test]
+fn a_deep_acyclic_profile_chain_loads_without_aborting() {
+    let dir = std::env::temp_dir().join(format!("latt-deep-profiles-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("p0.yaml"),
+        "name: deep\nprofile_version: '1.0.0'\nnode_kinds: {}\nedge_kinds: {}\n",
+    )
+    .unwrap();
+    for depth in 1..=3000 {
+        std::fs::write(
+            dir.join(format!("p{depth}.yaml")),
+            format!("profile_version: '1.0.0'\nextends: p{}.yaml\n", depth - 1),
+        )
+        .unwrap();
+    }
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_latt"))
+        .args(["show", "--profile"])
+        .arg(dir.join("p3000.yaml"))
+        .output()
+        .unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert!(stdout(&output).contains("\"name\":\"deep\""));
+}
+
 // A report that could not be delivered is not a result: a full disk must not read
 // as exit 0 over a truncated file, nor as a panic's 101.
 #[cfg(target_os = "linux")]
@@ -53,6 +79,154 @@ fn an_unwritable_stdout_exits_two() {
         stderr(&output)
     );
     assert!(!stderr(&output).contains("panicked"), "{}", stderr(&output));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn top_level_help_delivery_failure_exits_two() {
+    let full = std::fs::File::create("/dev/full").unwrap();
+    let output = lattice().arg("--help").stdout(full).output().unwrap();
+    assert_eq!(code(&output), 2, "{}", stderr(&output));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn subcommand_help_delivery_failure_exits_two() {
+    let full = std::fs::File::create("/dev/full").unwrap();
+    let output = lattice()
+        .args(["query", "--help"])
+        .stdout(full)
+        .output()
+        .unwrap();
+    assert_eq!(code(&output), 2, "{}", stderr(&output));
+}
+
+// A closed pipe is the reader's choice (`latt --help | head -0`), so it exits 2 quietly.
+#[cfg(unix)]
+#[test]
+fn help_into_a_closed_pipe_exits_two_quietly() {
+    for args in [&["--help"][..], &["query", "--help"][..]] {
+        let (reader, writer) = std::io::pipe().unwrap();
+        drop(reader);
+        let output = lattice().args(args).stdout(writer).output().unwrap();
+        assert_eq!(code(&output), 2, "{args:?}: {}", stderr(&output));
+        assert_eq!(stderr(&output), "", "{args:?}");
+    }
+}
+/// The resolved `profiles/<profile>.yaml`, as an adapter reads it.
+fn resolved_profile(profile: &str, name: &str) -> std::path::PathBuf {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let output = lattice()
+        .args(["show", "--profile"])
+        .arg(root.join(format!("profiles/{profile}.yaml")))
+        .output()
+        .unwrap();
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    let path = std::env::temp_dir().join(format!("latt-{name}-{}.json", std::process::id()));
+    std::fs::write(&path, &output.stdout).unwrap();
+    path
+}
+
+// `latt adapter md | head -c1` closes the pipe: as for every other command, that is
+// the reader's choice, so it exits 2 quietly, and a full disk is still said.
+#[cfg(all(target_os = "linux", feature = "native-adapters"))]
+#[test]
+fn a_native_adapter_into_a_closed_pipe_exits_two_quietly() {
+    let profile = resolved_profile("md", "closed-pipe");
+    let target =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/mini-md");
+    let adapter = |stdout: std::process::Stdio| {
+        lattice()
+            .args(["adapter", "md", "--profile"])
+            .arg(&profile)
+            .arg("--target")
+            .arg(&target)
+            .stdout(stdout)
+            .output()
+            .unwrap()
+    };
+    let (reader, writer) = std::io::pipe().unwrap();
+    drop(reader);
+    let closed = adapter(writer.into());
+    let full = adapter(std::fs::File::create("/dev/full").unwrap().into());
+    std::fs::remove_file(&profile).unwrap();
+    assert_eq!(code(&closed), 2, "{}", stderr(&closed));
+    assert_eq!(stderr(&closed), "");
+    assert_eq!(code(&full), 2, "{}", stderr(&full));
+    assert!(
+        stderr(&full).contains("could not write interface document"),
+        "{}",
+        stderr(&full)
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn an_unwritable_required_stderr_exits_two() {
+    let case = Case::emitting(CLEAN_DOCUMENT);
+    let full = std::fs::File::create("/dev/full").unwrap();
+    let output = case
+        .command(&["validate", "--format", "plain"])
+        .stderr(full)
+        .output()
+        .unwrap();
+    assert_eq!(code(&output), 2);
+}
+
+#[cfg(target_os = "linux")]
+// The entomologist adapter keeps a closed pipe as quiet as `latt adapter` does.
+#[cfg(target_os = "linux")]
+#[test]
+fn entomologist_into_a_closed_pipe_exits_two_quietly() {
+    let profile = resolved_profile("entomologist", "ent-closed-pipe");
+    let target = std::env::temp_dir().join(format!("latt-ent-closed-pipe-{}", std::process::id()));
+    std::fs::create_dir_all(&target).unwrap();
+    let init = std::process::Command::new("git")
+        .args(["init", "-q"])
+        .current_dir(&target)
+        .status()
+        .unwrap();
+    assert!(init.success());
+    let adapter = |stdout: std::process::Stdio| {
+        std::process::Command::new(env!("CARGO_BIN_EXE_latt-adapter-entomologist"))
+            .arg("--profile")
+            .arg(&profile)
+            .arg("--target")
+            .arg(&target)
+            .stdout(stdout)
+            .output()
+            .unwrap()
+    };
+    let (reader, writer) = std::io::pipe().unwrap();
+    drop(reader);
+    let closed = adapter(writer.into());
+    let full = adapter(std::fs::File::create("/dev/full").unwrap().into());
+    std::fs::remove_dir_all(&target).ok();
+    std::fs::remove_file(&profile).ok();
+    assert_eq!(code(&closed), 2, "{}", stderr(&closed));
+    assert_eq!(stderr(&closed), "");
+    assert_eq!(code(&full), 2, "{}", stderr(&full));
+    assert!(
+        stderr(&full).contains("could not write interface document"),
+        "{}",
+        stderr(&full)
+    );
+}
+
+#[test]
+fn entomologist_unwritable_error_stream_exits_two() {
+    let full = std::fs::File::create("/dev/full").unwrap();
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_latt-adapter-entomologist"))
+        .args([
+            "--profile",
+            "/tmp/latt-missing-ent-profile",
+            "--target",
+            ".",
+        ])
+        .stderr(full)
+        .output()
+        .unwrap();
+    assert_eq!(code(&output), 2);
 }
 
 #[test]
@@ -284,6 +458,27 @@ fn alias_error_finding_under_issues_beside_empty_findings_gates() {
     );
 }
 
+// Requirement: adapter-contract/Legacy document keys are reported
+#[test]
+fn alias_legacy_key_is_an_info_finding_and_exits_zero() {
+    let case = Case::emitting(r#"{"contract_version": "1.2", "nodes": []}"#);
+    let output = case.run(&["validate", "--format", "plain"]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert!(
+        stdout(&output).contains("INFO DEPRECATED_KEY <adapter>:0 'contract_version'"),
+        "{}",
+        stdout(&output)
+    );
+
+    let strict = case.run(&["validate", "--format", "plain", "--strict"]);
+    assert_eq!(
+        code(&strict),
+        0,
+        "info is not promoted: {}",
+        stdout(&strict)
+    );
+}
+
 #[test]
 fn alias_arrays_both_populated_exit_two() {
     let finding = r#"{"severity": "error", "code": "PARSE_ERROR", "message": "m",
@@ -430,7 +625,7 @@ fn summary_does_not_exit_on_an_adapter_issue_the_profile_suppressed() {
         stderr(&plain)
     );
     assert!(
-        !stderr(&plain).contains("PARSE_ERROR"),
+        !stderr(&plain).contains("a.md:9"),
         "plain omits a suppressed finding: {}",
         stderr(&plain)
     );
@@ -456,23 +651,19 @@ fn a_query_omits_an_adapter_issue_the_profile_suppressed_from_plain_stderr() {
     );
     let output = case.run(&["query", "counts", "--format", "plain"]);
     assert_eq!(code(&output), 0);
-    assert!(
-        !stderr(&output).contains("PARSE_ERROR"),
-        "{}",
-        stderr(&output)
-    );
+    assert!(!stderr(&output).contains("a.md:9"), "{}", stderr(&output));
 }
 
-// When every adapter issue is suppressed there is nothing to report: a blank
+// When every adapter issue is suppressed there is no finding to report: a blank
 // line or "No findings." on stderr reads as a diagnostic the user must inspect.
 // Requirement: cli/CLI entry point
 #[test]
-fn stderr_is_empty_when_every_adapter_issue_is_suppressed() {
+fn stderr_holds_only_the_partial_input_notice_when_every_adapter_issue_is_suppressed() {
     let document = r#"{"interface_version": "1.0",
       "nodes": [{"id": "REQ-1", "kind": "req",
                  "attrs": {"status": "done", "file": "a.md"},
                  "provenance": {"file": "a.md", "line": 1}}],
-      "issues": [{"severity": "error", "code": "PARSE_ERROR", "message": "m",
+      "findings": [{"severity": "error", "code": "PARSE_ERROR", "message": "m",
                   "provenance": {"file": "a.md", "line": 9}, "node_id": null}]}"#;
     let case = Case::with_profile(
         &summary_profile("  - SUPPRESS:\n      code: PARSE_ERROR\n"),
@@ -482,7 +673,80 @@ fn stderr_is_empty_when_every_adapter_issue_is_suppressed() {
         for format in ["plain", "rich"] {
             let output = case.run(&[args, &["--format", format][..]].concat());
             assert_eq!(code(&output), 0, "{args:?} {format}: {}", stderr(&output));
-            assert_eq!(stderr(&output), "", "{args:?} {format}");
+            assert_eq!(
+                stderr(&output),
+                "Partial input: the profile suppresses 1 PARSE_ERROR; --format json lists it\n",
+                "{args:?} {format}"
+            );
+        }
+    }
+}
+
+// Suppression hides the finding and its exit code, but an answer over input the
+// adapter could not read must not read as complete.
+// Requirement: cli/CLI entry point
+#[test]
+fn a_suppressed_parse_error_leaves_a_partial_input_notice() {
+    let document = |code: &str| {
+        format!(
+            r#"{{"interface_version": "1.2",
+      "nodes": [{{"id": "REQ-1", "kind": "req",
+                 "attrs": {{"status": "done", "file": "a.md"}},
+                 "provenance": {{"file": "a.md", "line": 1}}}}],
+      "findings": [{{"severity": "error", "code": "{code}", "message": "m",
+                  "provenance": {{"file": "a.md", "line": 9}}, "node_id": null}},
+                 {{"severity": "error", "code": "{code}", "message": "m",
+                  "provenance": {{"file": "a.md", "line": 12}}, "node_id": null}}]}}"#
+        )
+    };
+    let notice = "Partial input: the profile suppresses 2 PARSE_ERROR; --format json lists them";
+    let commands: [&[&str]; 6] = [
+        &["validate"],
+        &["trace"],
+        &["summary"],
+        &["coverage"],
+        &["describe"],
+        &["query", "counts"],
+    ];
+    let suppressed = Case::with_profile(
+        &summary_profile("  - SUPPRESS:\n      code: PARSE_ERROR\n"),
+        &format!("cat <<'DOC'\n{}\nDOC", document("PARSE_ERROR")),
+    );
+    for args in commands {
+        for format in ["plain", "rich"] {
+            let output = suppressed.run(&[args, &["--format", format][..]].concat());
+            assert_eq!(code(&output), 0, "{args:?} {format}: {}", stderr(&output));
+            let err = stderr(&output);
+            assert_eq!(
+                err.lines().filter(|line| *line == notice).count(),
+                1,
+                "{args:?} {format}: {err}"
+            );
+            assert!(!err.contains("a.md:9"), "{args:?} {format}: {err}");
+        }
+        // json carries the suppressed records themselves.
+        let json = suppressed.run(&[args, &["--format", "json"][..]].concat());
+        assert!(!stderr(&json).contains("Partial input"), "{args:?}");
+    }
+
+    // An unsuppressed parse error is reported as itself; a suppressed finding
+    // of another code says nothing about the input.
+    let shown = Case::with_profile(
+        &summary_profile(""),
+        &format!("cat <<'DOC'\n{}\nDOC", document("PARSE_ERROR")),
+    );
+    let other = Case::with_profile(
+        &summary_profile("  - SUPPRESS:\n      code: AMBIGUOUS_REF\n"),
+        &format!("cat <<'DOC'\n{}\nDOC", document("AMBIGUOUS_REF")),
+    );
+    for case in [&shown, &other] {
+        for args in commands {
+            let output = case.run(&[args, &["--format", "plain"][..]].concat());
+            assert!(
+                !stderr(&output).contains("Partial input"),
+                "{args:?}: {}",
+                stderr(&output)
+            );
         }
     }
 }
@@ -2072,4 +2336,228 @@ fn describe_exits_two_when_the_profile_does_not_load() {
         "{}",
         stderr(&output)
     );
+}
+
+// Requirement: output/Untrusted text in human formats
+#[test]
+fn hostile_profile_path_and_rev_are_escaped_on_stderr() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let dir = common::scratch();
+    let raw_free = |text: &str, what: &str| {
+        assert!(
+            !text
+                .chars()
+                .any(|c| c.is_control() && c != '\n' && c != '\t'),
+            "{what}: {text:?}"
+        );
+    };
+    for format in ["plain", "rich"] {
+        let profile = dir.join("bad\u{1b}[2J.yaml");
+        let output = lattice()
+            .args(["validate", "--format", format, "--target"])
+            .arg(&dir)
+            .arg("--profile")
+            .arg(&profile)
+            .env("FORCE_COLOR", "1")
+            .output()
+            .unwrap();
+        assert_eq!(code(&output), 2, "{}", stderr(&output));
+        raw_free(&stderr(&output), "profile path");
+        assert!(
+            stderr(&output).contains(r"bad\u{1b}[2J.yaml"),
+            "{}",
+            stderr(&output)
+        );
+
+        // The revision run reads the register with the native toml adapter.
+        if !cfg!(feature = "native-adapters") {
+            continue;
+        }
+        let output = lattice()
+            .args(["query", "diff", "--format", format, "--profile"])
+            .arg(root.join("profiles/toml.yaml"))
+            .arg("--target")
+            .arg(root.join("tests/fixtures/mini-toml"))
+            .args(["HEAD", "--", "bad\u{7}rev"])
+            .env("FORCE_COLOR", "1")
+            .output()
+            .unwrap();
+        assert_eq!(code(&output), 2, "{}", stderr(&output));
+        raw_free(&stderr(&output), "revision");
+        assert!(
+            stderr(&output).contains(r"bad\u{7}rev"),
+            "{}",
+            stderr(&output)
+        );
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Characters `serde_json` leaves raw in a string that a terminal acts on: DEL,
+/// C1, the bidi controls and the line separators.
+fn raw_terminal_char(text: &str) -> Option<char> {
+    text.chars().find(|&c| {
+        matches!(
+            c,
+            '\u{7f}'..='\u{9f}'
+                | '\u{61c}'
+                | '\u{200e}'
+                | '\u{200f}'
+                | '\u{202a}'..='\u{202e}'
+                | '\u{2066}'..='\u{2069}'
+                | '\u{2028}'
+                | '\u{2029}'
+        )
+    })
+}
+
+// Requirement: output/Untrusted text in human formats
+#[test]
+fn a_usage_error_escapes_the_argument_it_quotes() {
+    let hostile = "X\r\u{85}\u{202e}\nERROR FORGED\u{1b}]8;;x\u{7}";
+    // A value parser's own message quotes the value too, and an SGR alone
+    // (conceal) must not pass as one of clap's colours.
+    let concealed = "X\r\u{85}\u{202e}\nERROR FORGED\u{1b}[8m";
+    let filter = [
+        "query",
+        "orphans",
+        "--profile",
+        "p",
+        "--target",
+        "t",
+        "--filter",
+    ];
+    let cases: [Vec<&str>; 6] = [
+        vec!["validate", "--format", hostile],
+        vec![hostile],
+        vec!["validate", hostile],
+        vec!["help", hostile],
+        [&filter[..], &[hostile]].concat(),
+        [&filter[..], &[concealed]].concat(),
+    ];
+    for args in cases {
+        for env in [None, Some(("NO_COLOR", "1")), Some(("CLICOLOR_FORCE", "1"))] {
+            let mut command = lattice();
+            command.args(&args);
+            if let Some((name, value)) = env {
+                command.env(name, value);
+            }
+            let output = command.output().unwrap();
+            assert_eq!(code(&output), 2, "{args:?} {env:?}");
+            assert!(output.stdout.is_empty(), "{args:?} {env:?}");
+            let text = stderr(&output);
+            // The escape keeps clap's colour decision.
+            assert_eq!(
+                text.contains("\u{1b}[1m"),
+                env == Some(("CLICOLOR_FORCE", "1")),
+                "{args:?} {env:?}: {text:?}"
+            );
+            let bare = text
+                .replace("\u{1b}[0m", "")
+                .replace("\u{1b}[1m", "")
+                .replace("\u{1b}[4m", "")
+                .replace("\u{1b}[31m", "")
+                .replace("\u{1b}[32m", "")
+                .replace("\u{1b}[33m", "");
+            assert!(
+                !bare.chars().any(|c| c.is_control() && c != '\n')
+                    && raw_terminal_char(&bare).is_none(),
+                "{args:?} {env:?}: {text:?}"
+            );
+            assert!(
+                !bare.lines().any(|line| line.starts_with("ERROR FORGED")),
+                "{args:?} {env:?}: {text:?}"
+            );
+            if args[0] != "help" {
+                assert!(
+                    bare.contains(r"X\r\u{85}\u{202e}\nERROR FORGED"),
+                    "{args:?} {env:?}: {text:?}"
+                );
+            }
+        }
+    }
+}
+
+// Requirement: output/Untrusted text in human formats
+// `LATTICE_FUSE_CHILD` leaves stderr raw only for a json trace on a pipe; an
+// inherited value never unescapes a plain or rich run's notices. (The
+// terminal case needs a pty and is not exercised here.)
+#[test]
+fn hostile_profile_path_stays_escaped_under_an_inherited_fuse_child_variable() {
+    let profile = "/nonexistent/p\u{1b}]8;;x\u{7}.yaml";
+    for format in ["plain", "rich"] {
+        for value in ["1", "0", ""] {
+            let output = lattice()
+                .args([
+                    "trace",
+                    "--format",
+                    format,
+                    "--profile",
+                    profile,
+                    "--target",
+                    ".",
+                ])
+                .env("LATTICE_FUSE_CHILD", value)
+                .output()
+                .unwrap();
+            assert_eq!(code(&output), 2, "{format} {value:?}");
+            let text = stderr(&output);
+            assert!(
+                text.contains(r"p\u{1b}]8;;x\u{7}.yaml") && !text.contains('\u{1b}'),
+                "{format} {value:?}: {text:?}"
+            );
+        }
+    }
+}
+
+// Escaping the quoted argument leaves clap's color decision alone: a usage
+// error and `--help` color under CLICOLOR_FORCE and carry no escape under
+// NO_COLOR, and `--help` still exits 0 on stdout.
+#[test]
+fn clap_output_keeps_its_color_decision() {
+    for (args, stream_is_stdout, exit) in [
+        (&["validate", "--format", "bogus"][..], false, 2),
+        (&["--help"][..], true, 0),
+    ] {
+        for (env, colored) in [("CLICOLOR_FORCE", true), ("NO_COLOR", false)] {
+            let output = lattice().args(args).env(env, "1").output().unwrap();
+            assert_eq!(code(&output), exit, "{args:?} {env}");
+            let (text, other) = if stream_is_stdout {
+                (stdout(&output), stderr(&output))
+            } else {
+                (stderr(&output), stdout(&output))
+            };
+            assert!(other.is_empty(), "{args:?} {env}: {other:?}");
+            assert_eq!(
+                text.contains("\u{1b}["),
+                colored,
+                "{args:?} {env}: {text:?}"
+            );
+        }
+    }
+}
+
+// Requirement: output/Untrusted text in human formats
+#[test]
+fn show_escapes_c1_and_bidi_in_the_document() {
+    let dir = common::scratch();
+    let profile = dir.join("p.yaml");
+    std::fs::write(
+        &profile,
+        "name: \"a\\x9b\\u202e\\u2028\\x7fz\"\nprofile_version: '1.0.0'\nnode_kinds: {req: {id_pattern: '.*'}}\nedge_kinds: {}\n",
+    )
+    .unwrap();
+    let output = lattice()
+        .arg("show")
+        .arg("--profile")
+        .arg(&profile)
+        .output()
+        .unwrap();
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    let text = stdout(&output);
+    assert_eq!(raw_terminal_char(&text), None, "{text:?}");
+    assert!(text.contains(r#""a\u009b\u202e\u2028\u007fz""#), "{text}");
+    let value: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(value["name"], "a\u{9b}\u{202e}\u{2028}\u{7f}z");
+    std::fs::remove_dir_all(&dir).unwrap();
 }

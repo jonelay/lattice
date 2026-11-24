@@ -23,7 +23,7 @@ use regex::Regex;
 
 use super::git;
 use super::keymap::{self, Cmd, Layer, Section};
-use super::owner_action::{self, Refusal};
+use super::owner_action::{self, Refusal, StreamCapture};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TopView {
@@ -154,25 +154,24 @@ pub struct OutputPane {
 }
 
 impl OutputPane {
-    /// Stdout, then stderr under its own heading; a cut stream says so.
-    pub fn new(
-        title: String,
-        stdout: &str,
-        stdout_cut: bool,
-        stderr: &str,
-        stderr_cut: bool,
-    ) -> Self {
-        let cut = "[output cut at 1 MiB]".to_owned();
-        let mut lines: Vec<String> = stdout.lines().map(str::to_owned).collect();
-        if stdout_cut {
-            lines.push(cut.clone());
-        }
-        if !stderr.is_empty() || stderr_cut {
-            lines.push("── stderr ──".to_owned());
-            lines.extend(stderr.lines().map(str::to_owned));
-            if stderr_cut {
-                lines.push(cut);
+    /// Stdout, then stderr under its own heading; a cut stream says so, and so
+    /// does one whose read failed.
+    pub fn new(title: String, stdout: &StreamCapture, stderr: &StreamCapture) -> Self {
+        fn push(lines: &mut Vec<String>, name: &str, stream: &StreamCapture) {
+            let text = String::from_utf8_lossy(&stream.bytes);
+            lines.extend(text.lines().map(str::to_owned));
+            if stream.cut {
+                lines.push("[output cut at 1 MiB]".to_owned());
             }
+            if let Some(failed) = &stream.failed {
+                lines.push(format!("[{name} {failed}]"));
+            }
+        }
+        let mut lines = Vec::new();
+        push(&mut lines, "stdout", stdout);
+        if !stderr.bytes.is_empty() || stderr.cut || stderr.failed.is_some() {
+            lines.push("── stderr ──".to_owned());
+            push(&mut lines, "stderr", stderr);
         }
         if lines.is_empty() {
             lines.push("(no output)".to_owned());
@@ -538,6 +537,10 @@ pub struct App<'a> {
     pub graph_state: GraphState,
     pub graph_layout: Option<GraphLayout>,
     pub centrality_cache: HashMap<&'a str, f64>,
+    /// The graph edge-kind selection `centrality_cache` was computed under.
+    /// Centrality is global, so the selection is its only input besides the
+    /// immutable graph; a reload builds a new `App` and starts from `None`.
+    centrality_filter: Option<Vec<bool>>,
     pub preview: Option<Preview>,
     pub launcher: Option<Launcher>,
     pub confirm: Option<Confirm>,
@@ -562,6 +565,9 @@ pub struct App<'a> {
     /// True when the last fetch for `git_commit_node` expired; nothing is
     /// cached, so returning to the node fetches again.
     pub git_fetch_timed_out: bool,
+    /// Why the last fetch for `git_commit_node` produced no log, when `git`
+    /// could not run or refused; nothing is cached, as for a timeout.
+    pub git_fetch_failed: Option<String>,
     git_commit_node: Option<String>,
     /// The in-flight `git log` for `git_commit_node`. Replacing it drops the
     /// previous receiver, so a slower older fetch can never land on a newer node.
@@ -648,6 +654,7 @@ impl<'a> App<'a> {
             graph_state: GraphState::new(kind_count, profile.edge_kinds().len()),
             graph_layout: None,
             centrality_cache: HashMap::new(),
+            centrality_filter: None,
             preview: None,
             launcher: None,
             confirm: None,
@@ -661,6 +668,7 @@ impl<'a> App<'a> {
             git_commits: Vec::new(),
             git_lanes: Vec::new(),
             git_fetch_timed_out: false,
+            git_fetch_failed: None,
             git_commit_node: None,
             git_fetch: None,
             git_program: PathBuf::from("git"),
@@ -2038,6 +2046,7 @@ impl<'a> App<'a> {
             Origin::FuseProfile => "the fuse profile",
             Origin::FuseSource => "a fuse source that could not run",
             Origin::Suggestions => "the suggestion document",
+            Origin::Adapter => "the adapter's interface document",
             _ => "an input Lattice reads itself",
         };
         Some(format!(
@@ -2583,6 +2592,7 @@ impl<'a> App<'a> {
         self.git_commits.clear();
         self.git_lanes.clear();
         self.git_fetch_timed_out = false;
+        self.git_fetch_failed = None;
         if !self.git_fetch_pending() {
             self.spawn_git_fetch();
         }
@@ -2634,6 +2644,7 @@ impl<'a> App<'a> {
                             self.git_commits = commits;
                         }
                         git::LogFetch::TimedOut => self.git_fetch_timed_out = true,
+                        git::LogFetch::Failed(reason) => self.git_fetch_failed = Some(reason),
                     }
                 } else {
                     self.spawn_git_fetch();
@@ -3291,7 +3302,11 @@ impl<'a> App<'a> {
     }
 
     fn recompute_centrality_with(&mut self, index: &AdjacencyIndex<'a>) {
+        if self.centrality_filter.as_ref() == Some(&self.graph_state.edge_kind_filter) {
+            return;
+        }
         self.centrality_cache = query::betweenness_centrality(index);
+        self.centrality_filter = Some(self.graph_state.edge_kind_filter.clone());
     }
 
     pub fn visible_graph_rows(&self) -> Vec<MapRowRef<'_>> {
@@ -3700,6 +3715,30 @@ edge_kinds:
 
     fn cursor_node<'b>(app: &'b App<'_>) -> &'b str {
         app.visible_nodes()[app.node_list_state.cursor].0
+    }
+
+    #[test]
+    fn centrality_is_reused_until_the_edge_kind_selection_changes() {
+        let profile = test_profile();
+        let graph = ingest_document(test_document()).unwrap();
+        let mut app = make_app(&profile, &graph);
+        app.graph_state.center = Some("REQ-001".to_string());
+        app.rebuild_graph_and_centrality();
+        assert!(!app.centrality_cache.is_empty());
+
+        app.centrality_cache.insert("marker", 1.0);
+        app.rebuild_graph_and_centrality();
+        assert!(
+            app.centrality_cache.contains_key("marker"),
+            "an unchanged selection keeps the computed result"
+        );
+
+        app.graph_state.edge_kind_filter[0] = false;
+        app.rebuild_graph_and_centrality();
+        assert!(
+            !app.centrality_cache.contains_key("marker"),
+            "a changed selection recomputes"
+        );
     }
 
     #[test]
@@ -5700,6 +5739,44 @@ edge_kinds:
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    // Requirement: browse-provenance/Git commit display in Provenance view
+    #[test]
+    fn provenance_git_fetch_failure_names_its_reason() {
+        let dir = std::env::temp_dir().join(format!("lattice-app-git-fail-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let shim = dir.join("git");
+        crate::stub::write_stub(
+            &shim,
+            "#!/bin/sh\necho 'fatal: not a git repository (or any of the parent directories): .git' >&2\nexit 128\n",
+        );
+
+        let profile = test_profile();
+        let graph = ingest_document(test_document()).unwrap();
+        let mut app = make_app(&profile, &graph);
+        app.set_target_dir(&dir);
+        app.use_git(&shim, FETCH_BOUND_FOR_TESTS);
+        app.handle_key(KeyCode::Char('4'));
+        app.await_git_commits();
+        assert_eq!(
+            app.git_fetch_failed.as_deref(),
+            Some("fatal: not a git repository (or any of the parent directories): .git")
+        );
+        assert!(app.git_commits.is_empty(), "nothing is cached for the node");
+        assert!(!app.git_fetch_timed_out);
+
+        // Leaving the node clears the failure and fetches again.
+        app.handle_key(KeyCode::Char('1'));
+        app.handle_key(KeyCode::Char('j'));
+        app.handle_key(KeyCode::Char('4'));
+        assert_eq!(app.git_fetch_failed, None);
+        assert!(app.git_fetch_pending());
+        app.await_git_commits();
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    const FETCH_BOUND_FOR_TESTS: Duration = Duration::from_secs(10);
+
     fn commit(subject: &str) -> git::GitCommit {
         git::GitCommit {
             hash: "abc".into(),
@@ -6435,7 +6512,14 @@ edge_kinds:
                 let graph = ingest_document(test_document()).unwrap();
                 let mut app = make_app(&profile, &graph);
                 let text: String = (1..=200).map(|i| format!("line {i}\n")).collect();
-                app.output = Some(OutputPane::new("t".into(), &text, false, "", false));
+                app.output = Some(OutputPane::new(
+                    "t".into(),
+                    &StreamCapture {
+                        bytes: text.into_bytes(),
+                        ..Default::default()
+                    },
+                    &StreamCapture::default(),
+                ));
                 let scroll = |app: &App<'_>| app.output.as_ref().unwrap().scroll;
                 app.handle_key(KeyCode::Char('j'));
                 assert_eq!(scroll(&app), 1);

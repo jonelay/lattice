@@ -13,7 +13,9 @@ It SHALL reject an `adapter` or `adapter.paths` key it does not read, naming the
 key, with exit 2 — a mistyped `content_dir` would otherwise scan nothing; the
 core-owned `native` and `timeout_seconds` keys are admitted. It SHALL walk those directories under the target recursively, reading only regular
 files, and symlinks that resolve to files, whose target-relative paths match a
-configured glob. It SHALL NOT follow symlinked directories. For each matched
+configured glob. It SHALL NOT follow symlinked directories, so a link cycle cannot
+recurse; each SHALL produce one `UNFOLLOWED_LINK` issue at `info` severity naming
+its target-relative path. For each matched
 `.md` file it SHALL emit one `document` node and one `section` node per heading.
 Headings inside fenced code blocks SHALL be excluded, and so SHALL references.
 Indentation SHALL NOT mark code: a reference on a line indented four or more spaces, or
@@ -27,13 +29,20 @@ character, at least as long, at any indentation, with nothing after it but white
 A fence still open at the end of the file SHALL be a `PARSE_ERROR` at the line that
 opened it, since every heading and reference after that line went unread.
 
-Verified by: `.venv/bin/python -m pytest tests/test_adapter_prose_xref.py -k "document_nodes or section_nodes or fenced_code"`, and `cargo test -p latt-core --lib adapters::prose_xref headings_skip`, `cargo test -p latt-core --lib adapters::prose_xref fence`, `cargo test -p latt-adapter fence`, `cargo test -p latt-core --lib adapters::prose_xref indented_lines`, `.venv/bin/python -m pytest tests/test_adapter_prose_xref.py -k unclosed_fence`, and `cargo test -p latt-core --lib adapters::prose_xref unknown_adapter_keys_are_named`
+Verified by: `.venv/bin/python -m pytest tests/test_adapter_prose_xref.py -k "document_nodes or section_nodes or fenced_code or symlinked_directory"`, and `cargo test -p latt-core --lib headings_skip`, `cargo test -p latt-core --lib fence`, `cargo test -p latt-adapter fence`, `cargo test -p latt-core --lib indented_lines`, `.venv/bin/python -m pytest tests/test_adapter_prose_xref.py -k unclosed_fence`, and `cargo test -p latt-core --lib unknown_adapter_keys_are_named`
 
 #### Scenario: Files produce document and section nodes
 
 - **WHEN** the target contains `characters/alice.md` with headings
 - **THEN** the document contains a `document` node `characters/alice.md` and
   `section` nodes for each heading
+
+#### Scenario: A symlinked directory is reported
+
+- **WHEN** `ref/more` is a symlink to a directory holding `linked.md`
+- **THEN** no node comes from `linked.md`, and the adapter emits one `UNFOLLOWED_LINK`
+  issue at `info` severity, "symlinked directory 'ref/more' not followed", naming
+  `ref/more`
 
 #### Scenario: Fenced code headings are excluded
 
@@ -102,7 +111,7 @@ the target with `..` SHALL be a `PARSE_ERROR` "target outside the register: <pat
 the reference's line, and no edge: the register is the target, and a file beyond it is
 neither discovered nor read.
 
-Verified by: `.venv/bin/python -m pytest tests/test_adapter_prose_xref.py -k "invalid_utf8 or missing_content_directory or non_directory_target or severity_follows or dangling_symlink or non_utf8_path or no_matching_files or outside_the_register or climbs_and_returns"`, and `cargo test -p latt-core --lib adapters::prose_xref decode`, and `cargo test -p latt-core --lib adapters::prose_xref walk_error`, and `cargo test -p latt-core --lib adapters::prose_xref normalize_path`
+Verified by: `.venv/bin/python -m pytest tests/test_adapter_prose_xref.py -k "invalid_utf8 or missing_content_directory or non_directory_target or severity_follows or dangling_symlink or non_utf8_path or no_matching_files or outside_the_register or climbs_and_returns"`, and `cargo test -p latt-core --lib decode`, and `cargo test -p latt-core --lib walk_error`, and `cargo test -p latt-core --lib normalize_path`
 
 #### Scenario: Invalid UTF-8 file
 
@@ -160,7 +169,7 @@ reference resolved in the citing file instead — an edge to the wrong section, 
 Whitespace between the file and the `§` MAY include a non-breaking space (U+00A0,
 U+202F), as typeset prose writes one.
 
-Verified by: `.venv/bin/python -m pytest tests/test_adapter_prose_xref.py -k "cross_file_xref or self_ref_xref or markdown_link"`, and `cargo test -p latt-core --lib adapters::prose_xref backtick_delimited`, and `cargo test -p latt-core --lib adapters::prose_xref markdown_link_prefix`, and `cargo test -p latt-core --lib adapters::prose_xref non_breaking_space`
+Verified by: `.venv/bin/python -m pytest tests/test_adapter_prose_xref.py -k "cross_file_xref or self_ref_xref or markdown_link"`, and `cargo test -p latt-core --lib backtick_delimited`, and `cargo test -p latt-core --lib markdown_link_prefix`, and `cargo test -p latt-core --lib non_breaking_space`
 
 #### Scenario: Cross-file reference
 
@@ -192,7 +201,7 @@ a comma and one of those words SHALL be a reference of its own, against the same
 file as the first. Read as prose, every heading after the first was lost with no
 finding.
 
-Verified by: `.venv/bin/python -m pytest tests/test_adapter_prose_xref.py -k double_section_sign`, and `cargo test -p latt-core --lib adapters::prose_xref double_section_sign`
+Verified by: `.venv/bin/python -m pytest tests/test_adapter_prose_xref.py -k double_section_sign`, and `cargo test -p latt-core --lib double_section_sign`
 
 #### Scenario: A listed heading is a reference
 
@@ -207,7 +216,7 @@ that closes at the next backtick run of the same length, and a run with no
 such partner is literal text. Every other `§` on the line, including one
 written directly against its heading (`` §`Heading` ``), SHALL be parsed.
 
-Verified by: `cargo test -p latt-core --lib adapters::prose_xref inline_code`, and `cargo test -p latt-core --lib adapters::prose_xref double_backtick`, and `cargo test -p latt-core --lib adapters::prose_xref unmatched_backtick`, and `cargo test -p latt-core --lib adapters::prose_xref without_space`
+Verified by: `cargo test -p latt-core --lib inline_code`, and `cargo test -p latt-core --lib double_backtick`, and `cargo test -p latt-core --lib unmatched_backtick`, and `cargo test -p latt-core --lib without_space`
 
 #### Scenario: Marker in code beside a real reference
 
@@ -227,7 +236,7 @@ file target. When that preceding file did not resolve, the carried-forward
 reference SHALL inherit the failure: one `PARSE_ERROR` naming the same missing
 file, and no edge — never an edge into an earlier line's file or the current one.
 
-Verified by: `.venv/bin/python -m pytest tests/test_adapter_prose_xref.py -k carry_forward`, and `cargo test -p latt-core --lib adapters::prose_xref carry_forward`
+Verified by: `.venv/bin/python -m pytest tests/test_adapter_prose_xref.py -k carry_forward`, and `cargo test -p latt-core --lib carry_forward`
 
 #### Scenario: Bare § inherits preceding file
 
@@ -259,7 +268,7 @@ bind the reference: the edge still targets the citing file, so the core's
 `VACANCY` still reports it. Without the finding, the `VACANCY` names the citing
 file and points the reader at the heading text instead of the line break.
 
-Verified by: `.venv/bin/python -m pytest tests/test_adapter_prose_xref.py -k wrapped_reference`, and `cargo test -p latt-core --lib adapters::prose_xref wrapped_file`
+Verified by: `.venv/bin/python -m pytest tests/test_adapter_prose_xref.py -k wrapped_reference`, and `cargo test -p latt-core --lib wrapped_file`
 
 #### Scenario: Path at the end of the previous line
 
@@ -285,7 +294,7 @@ The shipped profile `profiles/prose-xref.yaml` declares this ID shape as
 different node for any nested heading. Its `section` `id_pattern` constrains
 the file half only (`^[^#]+\.md#.+$`): a heading may contain `#`.
 
-Verified by: `.venv/bin/python -m pytest tests/test_adapter_prose_xref.py -k "duplicate_headings_under_different_parents or shipped_profile or sibling_duplicate"`, and `cargo test -p latt-core --lib adapters::prose_xref path_qualified`
+Verified by: `.venv/bin/python -m pytest tests/test_adapter_prose_xref.py -k "duplicate_headings_under_different_parents or shipped_profile or sibling_duplicate"`, and `cargo test -p latt-core --lib path_qualified`
 
 #### Scenario: Duplicate headings under distinct parents produce distinct nodes
 
@@ -364,7 +373,7 @@ When `§` is followed by text without backtick delimiters, or by nothing before
 the end of the line or the next `§`, the adapter SHALL emit one `PARSE_ERROR`.
 Two adjacent signs, `§§`, are one plural marker and get at most one such finding.
 
-Verified by: `.venv/bin/python -m pytest tests/test_adapter_prose_xref.py -k bare_undelimited`, and `cargo test -p latt-core --lib adapters::prose_xref empty_section_sign`
+Verified by: `.venv/bin/python -m pytest tests/test_adapter_prose_xref.py -k bare_undelimited`, and `cargo test -p latt-core --lib empty_section_sign`
 
 #### Scenario: Undelimited § is a parse error
 

@@ -5,7 +5,7 @@
 mod adapter_issues;
 mod collect;
 mod conditions;
-mod coverage;
+pub(crate) mod coverage;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
@@ -51,6 +51,7 @@ pub(crate) enum FindingCode {
     NoteInvalid,
     NoteUnused,
     NoteExpired,
+    DeprecatedKey,
 }
 
 impl FindingCode {
@@ -84,6 +85,7 @@ impl FindingCode {
             Self::NoteInvalid => "NOTE_INVALID",
             Self::NoteUnused => "NOTE_UNUSED",
             Self::NoteExpired => "NOTE_EXPIRED",
+            Self::DeprecatedKey => "DEPRECATED_KEY",
         }
     }
 
@@ -109,11 +111,12 @@ impl FindingCode {
                 | Self::NoteInvalid
                 | Self::NoteUnused
                 | Self::NoteExpired
+                | Self::DeprecatedKey
         )
     }
 
     /// Every code, in declaration order.
-    pub(crate) const ALL: [Self; 28] = [
+    pub(crate) const ALL: [Self; 29] = [
         Self::AttrEnum,
         Self::AttrListItems,
         Self::AttrRequired,
@@ -142,6 +145,7 @@ impl FindingCode {
         Self::NoteInvalid,
         Self::NoteUnused,
         Self::NoteExpired,
+        Self::DeprecatedKey,
     ];
 }
 
@@ -322,7 +326,8 @@ pub(crate) fn default_severity(code: FindingCode) -> Severity {
         FindingCode::SuppressUnused
         | FindingCode::OverrideUnused
         | FindingCode::NoteUnused
-        | FindingCode::EmptyKind => Severity::Info,
+        | FindingCode::EmptyKind
+        | FindingCode::DeprecatedKey => Severity::Info,
         // Explicitly warning, not via the fallthrough: hint is never promotable,
         // so a hint default here would foreclose gating on deep coverage for
         // every profile permanently (coverage-query spec).
@@ -503,7 +508,8 @@ pub(crate) fn promote<'a>(issues: impl IntoIterator<Item = &'a mut Issue>, stric
 ///
 /// The service's envelope diagnostics arrive unsuppressed by the graph-service
 /// contract; a host that shows or gates on them applies this first, as the CLI
-/// does. The first entry for a code decides which nodes it selects.
+/// does. Selectors from entries with the same code are combined; an unrestricted
+/// entry selects every finding with that code.
 ///
 /// # Examples
 ///
@@ -521,11 +527,15 @@ pub(crate) fn promote<'a>(issues: impl IntoIterator<Item = &'a mut Issue>, stric
 /// #   - SUPPRESS:
 /// #       code: UNTRACED
 /// #       node_ids: [REQ-1]
+/// #   - SUPPRESS:
+/// #       code: UNTRACED
+/// #       node_ids: [REQ-2]
 /// # "#)?, "demo")?;
 /// # use latt_core::graph::LatticeGraph;
 /// # use latt_core::types::Provenance;
 /// # let mut graph = LatticeGraph::new();
 /// # graph.add_node("REQ-1", "req", serde_json::Map::new(), Provenance::new("reqs.md", 3))?;
+/// # graph.add_node("REQ-2", "req", serde_json::Map::new(), Provenance::new("reqs.md", 4))?;
 /// let mut issues = validate(&graph, &profile, false);
 /// // `validate` applies the profile's entries itself; a host that holds findings
 /// // the service left unsuppressed applies them with this call.
@@ -538,7 +548,7 @@ pub(crate) fn promote<'a>(issues: impl IntoIterator<Item = &'a mut Issue>, stric
 ///     .filter(|issue| issue.suppressed)
 ///     .map(|issue| issue.code.as_str())
 ///     .collect();
-/// assert_eq!(suppressed, ["UNTRACED"]);
+/// assert_eq!(suppressed, ["UNTRACED", "UNTRACED"]);
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub fn apply_suppressions<'a>(issues: impl IntoIterator<Item = &'a mut Issue>, profile: &Profile) {
@@ -636,7 +646,7 @@ pub(crate) fn unused_suppressions<'a>(
 
     let mut out: Vec<Issue> = Vec::new();
     for entry in entries {
-        if let Some(message) = unused_message(entry, issues.iter().copied()) {
+        if let Some(message) = unused_message(entry, issues.iter().copied().map(code_and_node)) {
             out.push(issue(
                 FindingCode::SuppressUnused,
                 message,
@@ -647,7 +657,9 @@ pub(crate) fn unused_suppressions<'a>(
         }
     }
     for entry in self_entry {
-        if let Some(message) = unused_message(entry, issues.iter().copied().chain(&out)) {
+        if let Some(message) =
+            unused_message(entry, issues.iter().copied().chain(&out).map(code_and_node))
+        {
             out.push(issue(
                 FindingCode::SuppressUnused,
                 message,
@@ -660,16 +672,22 @@ pub(crate) fn unused_suppressions<'a>(
     out
 }
 
-fn unused_message<'a>(
+fn code_and_node(issue: &Issue) -> (&str, Option<&str>) {
+    (issue.code.as_str(), issue.node_id.as_deref())
+}
+
+/// The `SUPPRESS_UNUSED` message for `entry` judged against `findings`, each a
+/// code and the node ID it names, or `None` when the entry is used.
+pub(crate) fn unused_message<'a>(
     entry: &crate::profile::SuppressConfig,
-    issues: impl IntoIterator<Item = &'a Issue>,
+    findings: impl IntoIterator<Item = (&'a str, Option<&'a str>)>,
 ) -> Option<String> {
     let code = entry.code.as_str();
     let mut carried = false;
     let mut matched: BTreeSet<&str> = BTreeSet::new();
-    for issue in issues.into_iter().filter(|i| i.code == code) {
+    for (_, id) in findings.into_iter().filter(|(c, _)| *c == code) {
         carried = true;
-        if let Some(id) = issue.node_id.as_deref() {
+        if let Some(id) = id {
             matched.insert(id);
         }
     }

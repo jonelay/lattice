@@ -53,6 +53,12 @@ vacancy (undeclared endpoint). It SHALL be computed eagerly before the
 traversal begins, using a BFS closure that admits only declared endpoints.
 A node the DFS visits but the declared-only closure does not reach is
 tainted. Taint SHALL NOT be derived lazily from visible rows.
+Every occurrence of the same node, including a reconvergence reached through
+a vacancy, SHALL carry that node's graph-wide taint result.
+
+#### Scenario: Vacancy-first and clean reconvergence
+- **WHEN** DFS first reaches B and its descendant E through a vacancy, then reaches B through a longer declared-only path
+- **THEN** every B step and E's step has `tainted: false`
 
 #### Scenario: Node reachable only through a vacancy is tainted
 - **WHEN** A → X → B, where X is undeclared

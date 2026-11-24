@@ -18,7 +18,8 @@ use serde::de::{Deserializer, Error as _, MapAccess, Visitor};
 use serde_json::{Map, Value};
 
 use super::{
-    NodeEntry, RejectedEntry, SUPPORTED_INTERFACE_VERSIONS, place_edge, place_node, report_rejected,
+    NodeEntry, RejectedEntry, SUPPORTED_INTERFACE_VERSIONS, place_edge, place_node,
+    report_deprecated_keys, report_rejected,
 };
 use crate::graph::{EdgeSpec, LatticeGraph};
 use crate::types::{Issue, Provenance, Severity};
@@ -75,10 +76,13 @@ impl<'de> Deserialize<'de> for SupportedVersion {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Document {
-    /// Under either name. Both keys at once is a repeated field here, so that
-    /// document goes to the `Value` path, which reads `interface_version`.
-    #[serde(alias = "contract_version")]
-    interface_version: SupportedVersion,
+    /// Read under either name, and at least one must be present. Beside
+    /// `interface_version`, a `contract_version` this path cannot read sends the
+    /// document to the `Value` path, which ignores it there.
+    #[serde(default, deserialize_with = "present")]
+    interface_version: Option<SupportedVersion>,
+    #[serde(default, deserialize_with = "present")]
+    contract_version: Option<SupportedVersion>,
     #[serde(default)]
     nodes: Vec<MapOnly<Node>>,
     #[serde(default)]
@@ -87,8 +91,9 @@ struct Document {
     pathways: Vec<MapOnly<Pathway>>,
     #[serde(default)]
     findings: Vec<MapOnly<Finding>>,
-    #[serde(default)]
-    issues: Vec<MapOnly<Finding>>,
+    /// `None` when absent, so a present but empty `issues` is still reported.
+    #[serde(default, deserialize_with = "present")]
+    issues: Option<Vec<MapOnly<Finding>>>,
 }
 
 #[derive(Deserialize)]
@@ -161,15 +166,22 @@ impl Document {
     /// nodes, edges, then the rejected entries. Return `None` where that path
     /// would refuse the document.
     fn ingest(self) -> Option<LatticeGraph> {
-        // The version was checked when it was read.
+        // A present version was checked when it was read.
         let Document {
-            interface_version: SupportedVersion,
+            interface_version,
+            contract_version,
             nodes,
             edges,
             pathways,
             findings,
             issues,
         } = self;
+        if interface_version.is_none() && contract_version.is_none() {
+            return None;
+        }
+        let legacy_version = contract_version.is_some();
+        let legacy_findings = issues.is_some();
+        let issues = issues.unwrap_or_default();
         let findings = match (findings.is_empty(), issues.is_empty()) {
             (_, true) => findings,
             (true, false) => issues,
@@ -187,6 +199,7 @@ impl Document {
             issue.state = finding.state;
             graph.add_issue(issue);
         }
+        report_deprecated_keys(&mut graph, legacy_version, legacy_findings);
         for MapOnly(pathway) in pathways {
             graph
                 .set_pathway(pathway.name, pathway.order, pathway.current)

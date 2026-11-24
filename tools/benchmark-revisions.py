@@ -10,6 +10,7 @@ import json
 import os
 import platform
 import re
+import resource
 import shutil
 import statistics
 import subprocess
@@ -22,11 +23,14 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parent.parent
-SCENARIO = ROOT / "benchmarks" / "e2e" / "scenario.json"
-PROFILE = ROOT / "benchmarks" / "e2e" / "profile.yaml"
+E2E = ROOT / "benchmarks" / "e2e"
+SCENARIO = E2E / "scenario.json"
+PROFILE = E2E / "profile.yaml"
+MEASURED_SUBCOMMANDS = ("validate", "trace")
 GENERATOR = ROOT / "tools" / "generate-e2e-fixture.py"
 REPORT_SCHEMA_VERSION = "1.2"
-RELEASE_CANDIDATE_PATTERN = re.compile(r"v0\.8\.0-rc\.[1-9][0-9]*")
+RELEASED_VERSION = ROOT / "contracts" / "released" / "VERSION"
+RELEASE_CANDIDATE_PATTERN = re.compile(r"v([0-9]+)\.([0-9]+)\.([0-9]+)-rc\.[1-9][0-9]*")
 
 
 def run_text(args: list[str], *, cwd: Path = ROOT) -> str:
@@ -106,16 +110,26 @@ def resolve_commit(ref: str) -> str:
     raise RuntimeError(f"cannot resolve benchmark revision {ref!r}: {'; '.join(errors)}")
 
 
-def validate_release_qualification_refs(refs: list[str]) -> None:
+def previous_release() -> str:
+    """Return the tag of the last release, the one `contracts/released/` froze."""
+    return "v" + RELEASED_VERSION.read_text().strip()
+
+
+def validate_release_qualification_refs(refs: list[str], previous: str) -> None:
     if len(refs) != 3:
         raise RuntimeError("release qualification requires exactly three refs")
     baseline, main_commit, candidate = refs
-    if baseline != "v0.7.1":
-        raise RuntimeError("0.8 release qualification baseline must be v0.7.1")
+    if baseline != previous:
+        raise RuntimeError(f"release qualification baseline must be {previous}")
     if re.fullmatch(r"[0-9a-fA-F]{40}", main_commit) is None:
         raise RuntimeError("release qualification main ref must be a full 40-character commit SHA")
-    if RELEASE_CANDIDATE_PATTERN.fullmatch(candidate) is None:
-        raise RuntimeError("release qualification candidate must be v0.8.0-rc.N")
+    match = RELEASE_CANDIDATE_PATTERN.fullmatch(candidate)
+    released = tuple(int(part) for part in previous.removeprefix("v").split("."))
+    # A reopened release line keeps its frozen contract baseline.
+    if match is None or tuple(int(part) for part in match.groups()) < released:
+        raise RuntimeError(
+            f"release qualification candidate must be vX.Y.Z-rc.N on the same or a later release line than {previous}"
+        )
     tagged_commit = run_text(
         ["git", "rev-parse", "--verify", f"refs/tags/{candidate}^{{commit}}"]
     )
@@ -197,7 +211,13 @@ def finding_summary(output: bytes) -> dict[str, Any]:
         raise RuntimeError(f"benchmark output is not valid UTF-8 JSON: {error}") from error
     if not isinstance(payload, dict) or not isinstance(payload.get("findings"), list):
         raise RuntimeError("benchmark JSON output must carry a findings array")
-    findings = payload["findings"]
+    return tallies(payload["findings"], "benchmark findings")
+
+
+def tallies(findings: Any, where: str) -> dict[str, Any]:
+    """Return the count of `findings` by code and by severity."""
+    if not isinstance(findings, list):
+        raise RuntimeError(f"{where} must be an array")
     codes: Counter[str] = Counter()
     severities: Counter[str] = Counter()
     for finding in findings:
@@ -216,28 +236,96 @@ def finding_summary(output: bytes) -> dict[str, Any]:
     }
 
 
-def measure(
-    binary: Path,
-    adapter: Path,
-    fixture: Path,
-    sample_dir: Path,
-    expected_exit_status: int,
-) -> dict[str, Any]:
+def trace_summary(output: bytes) -> tuple[dict[str, Any], dict[str, int]]:
+    """Return a trace report's finding tallies and its entry and outgoing-edge counts.
+
+    A trace attaches findings to entries and keeps the rest in `unattachable_findings`;
+    the tallies count both, so they compare with `validate`'s and the scenario's.
+    """
+    try:
+        payload = json.loads(output)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RuntimeError(f"benchmark output is not valid UTF-8 JSON: {error}") from error
+    if not isinstance(payload, dict) or not isinstance(payload.get("entries"), list):
+        raise RuntimeError("benchmark trace output must carry an entries array")
+    findings: list[Any] = []
+    edges = 0
+    for entry in payload["entries"]:
+        if not isinstance(entry, dict):
+            raise RuntimeError("benchmark trace entry must be an object")
+        entry_edges = entry.get("edges")
+        entry_findings = entry.get("findings")
+        if not isinstance(entry_edges, list) or not isinstance(entry_findings, list):
+            raise RuntimeError("benchmark trace entry must carry edges and findings arrays")
+        edges += len(entry_edges)
+        findings.extend(entry_findings)
+    unattachable = payload.get("unattachable_findings")
+    if not isinstance(unattachable, list):
+        raise RuntimeError("benchmark trace output must carry an unattachable_findings array")
+    findings.extend(unattachable)
+    counts = {"entry_count": len(payload["entries"]), "edge_count": edges}
+    return tallies(findings, "benchmark trace findings"), counts
+
+
+def ensure_trace_counts(counts: dict[str, int], ref: str, scenario: dict[str, Any]) -> None:
+    """Refuse a measured trace that holds fewer entries or edges than the scenario's graph."""
+    for invariant, declared in (("entry_count", "node_count"), ("edge_count", "edge_count")):
+        if counts[invariant] != scenario[declared]:
+            raise RuntimeError(
+                f"revision {ref} violates the {invariant} invariant: "
+                f"expected {scenario[declared]}, got {counts[invariant]}"
+            )
+
+
+def measured_command(
+    template: str, binary: Path, adapter: Path, profile: Path, fixture: Path
+) -> list[str]:
+    """Return the argv a scenario's `command` template names for one revision.
+
+    The template is the manifest's own description of the run, so a scenario cannot
+    describe one command and measure another.
+    """
+    words = template.split()
+    if not words or words[0] != "lattice":
+        raise RuntimeError(f"scenario command must start with lattice: {template}")
+    if len(words) < 2 or words[1] not in MEASURED_SUBCOMMANDS:
+        subcommand = words[1] if len(words) > 1 else "(none)"
+        raise RuntimeError(
+            f"scenario command names subcommand {subcommand}; "
+            f"expected one of {', '.join(MEASURED_SUBCOMMANDS)}"
+        )
+    values = {
+        "<profile>": str(profile),
+        "<revision-adapter-toml>": str(adapter),
+        "<fixture>": str(fixture),
+    }
+    command = [str(binary)]
+    for word in words[1:]:
+        if word.startswith("<"):
+            if word not in values:
+                raise RuntimeError(f"scenario command has unknown placeholder {word}")
+            word = values[word]
+        command.append(word)
+    return command
+
+
+def collector_peak_rss() -> int:
+    """Return this collector's own peak RSS in KiB."""
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+
+
+def measure(command: list[str], sample_dir: Path, expected_exit_status: int) -> dict[str, Any]:
+    """Run one sample and return its timing, peak RSS and output identity.
+
+    A child started from this process reports at least the collector's own peak RSS,
+    whatever it used itself, so the collector keeps no output in memory here: the output
+    is hashed in chunks and parsed by `add_output_semantics` once every sample has run.
+    A sample that does not exceed the collector's peak measured the floor and is refused.
+    """
     sample_dir.mkdir(parents=True, exist_ok=True)
     stdout_path = sample_dir / "stdout.json"
     stderr_path = sample_dir / "stderr.txt"
-    command = [
-        str(binary),
-        "validate",
-        "--profile",
-        str(PROFILE),
-        "--adapter",
-        str(adapter),
-        "--target",
-        str(fixture),
-        "--format",
-        "json",
-    ]
+    floor = collector_peak_rss()
     with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
         started = time.perf_counter_ns()
         process = subprocess.Popen(
@@ -248,7 +336,6 @@ def measure(
         _, wait_status, usage = os.wait4(process.pid, 0)
         process.returncode = os.waitstatus_to_exitcode(wait_status)
         elapsed = time.perf_counter_ns() - started
-    output = stdout_path.read_bytes()
     stderr = stderr_path.read_text(errors="replace")
     if stderr:
         raise RuntimeError(f"benchmark command wrote stderr: {stderr.strip()}")
@@ -257,15 +344,29 @@ def measure(
             "benchmark command returned "
             f"{process.returncode}, expected {expected_exit_status}"
         )
-    semantics = finding_summary(output)
+    if usage.ru_maxrss <= floor:
+        raise RuntimeError(
+            f"sample peak RSS {usage.ru_maxrss} KiB does not exceed the collector's own "
+            f"peak of {floor} KiB, which a child started from it reports as a floor"
+        )
     return {
         "wall_time_nanoseconds": elapsed,
         "peak_rss_kibibytes": usage.ru_maxrss,
         "exit_status": process.returncode,
-        "output_bytes": len(output),
-        "output_sha256": hashlib.sha256(output).hexdigest(),
-        "findings": semantics,
+        "output_bytes": stdout_path.stat().st_size,
+        "output_sha256": sha256(stdout_path),
+        "subcommand": command[1],
+        "stdout": str(stdout_path),
     }
+
+
+def add_output_semantics(sample: dict[str, Any]) -> None:
+    """Parse a measured sample's output into its finding tallies, and a trace's counts."""
+    output = Path(sample["stdout"]).read_bytes()
+    if sample["subcommand"] == "trace":
+        sample["findings"], sample["trace_counts"] = trace_summary(output)
+    else:
+        sample["findings"] = finding_summary(output)
 
 
 def tally_map(tallies: Any, where: str) -> dict[tuple[str, str], int]:
@@ -321,18 +422,19 @@ def preflight(
     ref: str,
     expected: dict[str, Any],
     expected_exit_status: int,
+    profile: Path | None = None,
 ) -> dict[str, Any]:
     """Check, untimed, that one revision ingests the scenario's graph and finds what it should.
 
     `summary --format json` reports node, edge and finding counts in every supported
-    revision, so the measured `validate` command carries no extra work. A revision whose
+    revision, so the measured command carries no extra work. A revision whose
     adapter drops rows and still exits cleanly is refused here rather than measured.
     """
     command = [
         str(binary),
         "summary",
         "--profile",
-        str(PROFILE),
+        str(profile or PROFILE),
         "--adapter",
         str(adapter),
         "--target",
@@ -464,14 +566,24 @@ def comparisons(revisions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for baseline, candidate in itertools.combinations(revisions, 2):
         base_wall = baseline["measurements"]["wall_time_nanoseconds"]["summary"]["median"]
         candidate_wall = candidate["measurements"]["wall_time_nanoseconds"]["summary"]["median"]
-        base_rss = baseline["measurements"]["peak_rss_kibibytes"]["summary"]["median"]
-        candidate_rss = candidate["measurements"]["peak_rss_kibibytes"]["summary"]["median"]
+        base_rss = baseline["measurements"]["peak_rss_kibibytes"]["summary"]
+        candidate_rss = candidate["measurements"]["peak_rss_kibibytes"]["summary"]
         records.append(
             {
                 "baseline_ref": baseline["ref"],
                 "candidate_ref": candidate["ref"],
                 "wall_time_median_percent_change": percent_change(candidate_wall, base_wall),
-                "peak_rss_median_percent_change": percent_change(candidate_rss, base_rss),
+                "peak_rss_median_percent_change": percent_change(
+                    candidate_rss["median"], base_rss["median"]
+                ),
+                # Peak RSS can sit in one of two modes per run (glibc's dynamic mmap
+                # threshold), so a median of few samples can flip between them.
+                "peak_rss_minimum_percent_change": percent_change(
+                    candidate_rss["minimum"], base_rss["minimum"]
+                ),
+                "peak_rss_maximum_percent_change": percent_change(
+                    candidate_rss["maximum"], base_rss["maximum"]
+                ),
                 "output_identical": candidate["output"] == baseline["output"],
                 "threshold_enforced": False,
             }
@@ -480,10 +592,9 @@ def comparisons(revisions: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def collect_measurements(
-    built: list[dict[str, str]],
+    built: list[dict[str, Any]],
     warmups: int,
     sample_count: int,
-    fixture: Path,
     work: Path,
     expected_exit_status: int,
 ) -> list[list[dict[str, Any]]]:
@@ -492,9 +603,7 @@ def collect_measurements(
         for revision_index in order:
             revision = built[revision_index]
             measure(
-                Path(revision["binary"]),
-                Path(revision["adapter"]),
-                fixture,
+                revision["command"],
                 work
                 / "warmups"
                 / safe_label(revision["ref"], revision_index)
@@ -508,9 +617,7 @@ def collect_measurements(
         for revision_index in order:
             revision = built[revision_index]
             sample = measure(
-                Path(revision["binary"]),
-                Path(revision["adapter"]),
-                fixture,
+                revision["command"],
                 work
                 / "samples"
                 / safe_label(revision["ref"], revision_index)
@@ -527,6 +634,8 @@ def build_report(
     sample_count: int,
     fixture_file: Path,
     revisions: list[dict[str, Any]],
+    scenario_path: Path = SCENARIO,
+    profile: Path = PROFILE,
 ) -> dict[str, Any]:
     dirty = bool(run_text(["git", "status", "--porcelain", "--untracked-files=normal"]))
     return {
@@ -552,8 +661,8 @@ def build_report(
         },
         "scenario": scenario,
         "inputs": {
-            "scenario_manifest_sha256": sha256(SCENARIO),
-            "profile_sha256": sha256(PROFILE),
+            "scenario_manifest_sha256": sha256(scenario_path),
+            "profile_sha256": sha256(profile),
             "generated_fixture_sha256": sha256(fixture_file),
             "generated_fixture_bytes": fixture_file.stat().st_size,
         },
@@ -562,26 +671,54 @@ def build_report(
     }
 
 
+def load_scenario(path: Path) -> tuple[dict[str, Any], Path]:
+    """Return a scenario manifest and the profile it runs under, `profile.yaml` by default."""
+    scenario = json.loads(path.read_text())
+    if not isinstance(scenario, dict):
+        raise RuntimeError(f"scenario {path} must be a JSON object")
+    profile = scenario.get("profile", PROFILE.name)
+    if not isinstance(profile, str) or not profile:
+        raise RuntimeError(f"scenario {path} profile must be a file name under {E2E}")
+    return scenario, E2E / profile
+
+
+def default_output_path(scenario: dict[str, Any]) -> Path:
+    """Return where a record goes without `--output`; only the default scenario's is the routine one."""
+    benchmarks = ROOT / "target" / "benchmarks"
+    if scenario.get("id") == json.loads(SCENARIO.read_text())["id"]:
+        return benchmarks / "lattice-e2e-v1.json"
+    return benchmarks / f"lattice-e2e-{scenario['id']}.json"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("refs", nargs="*", default=["v0.7.1", "main"])
+    parser.add_argument("refs", nargs="*", default=[previous_release(), "main"])
     parser.add_argument("--warmups", type=int)
     parser.add_argument("--samples", type=int)
     parser.add_argument("--output", type=Path)
     parser.add_argument(
+        "--scenario",
+        type=Path,
+        default=SCENARIO,
+        help="scenario manifest (default: benchmarks/e2e/scenario.json, the one release qualification uses)",
+    )
+    parser.add_argument(
         "--release-qualification",
         action="store_true",
-        help="require v0.7.1, an exact main SHA, and an immutable v0.8.0-rc.N tag",
+        help="require the previous release, an exact main SHA, and an immutable rc tag after it",
     )
     args = parser.parse_args()
     if len(args.refs) < 2:
         raise SystemExit("at least two Git refs are required")
     if sys.platform != "linux" or not hasattr(os, "wait4"):
         raise SystemExit("end-to-end collection requires Linux wait4 resource accounting")
+    scenario_path = args.scenario.resolve()
     if args.release_qualification:
-        validate_release_qualification_refs(args.refs)
+        if scenario_path != SCENARIO:
+            raise SystemExit("release qualification measures the default scenario only")
+        validate_release_qualification_refs(args.refs, previous_release())
 
-    scenario = json.loads(SCENARIO.read_text())
+    scenario, profile = load_scenario(scenario_path)
     warmups = args.warmups if args.warmups is not None else scenario["warmup_runs"]
     sample_count = args.samples if args.samples is not None else scenario["measurement_runs"]
     expected_exit_status = scenario["expected_exit_status"]
@@ -591,12 +728,16 @@ def main() -> None:
         raise SystemExit("scenario expected_exit_status must be an integer")
     expected = expected_invariants(scenario)
     work = Path(os.environ.get("LATTICE_E2E_WORK_DIR", ROOT / "target" / "e2e-benchmark"))
-    output_path = args.output or ROOT / "target" / "benchmarks" / "lattice-e2e-v1.json"
+    output_path = args.output or default_output_path(scenario)
     fixture = work / "fixture"
-    subprocess.run([sys.executable, str(GENERATOR), str(SCENARIO), str(fixture)], check=True)
+    # Checked before any build, which takes minutes per revision.
+    measured_command(scenario["command"], Path("latt"), Path("adapter"), profile, fixture)
+    subprocess.run([sys.executable, str(GENERATOR), str(scenario_path), str(fixture)], check=True)
     fixture_file = fixture / "register.toml"
 
-    built = [export_and_build(ref, index, work) for index, ref in enumerate(args.refs)]
+    built: list[dict[str, Any]] = [
+        export_and_build(ref, index, work) for index, ref in enumerate(args.refs)
+    ]
     for revision in built:
         revision["preflight"] = preflight(
             Path(revision["binary"]),
@@ -605,19 +746,32 @@ def main() -> None:
             revision["ref"],
             expected,
             expected_exit_status,
+            profile,
         )
-    collected = collect_measurements(
-        built, warmups, sample_count, fixture, work, expected_exit_status
-    )
+        revision["command"] = measured_command(
+            scenario["command"],
+            Path(revision["binary"]),
+            Path(revision["adapter"]),
+            profile,
+            fixture,
+        )
+    collected = collect_measurements(built, warmups, sample_count, work, expected_exit_status)
+    # Parsed only now: a parsed trace output would raise the collector's peak RSS, and with
+    # it the floor of every later sample.
     for revision, samples in zip(built, collected):
         for sample in samples:
+            add_output_semantics(sample)
             ensure_expected_findings(sample["findings"], revision["ref"], expected)
+            if "trace_counts" in sample:
+                ensure_trace_counts(sample["trace_counts"], revision["ref"], scenario)
 
     revisions = [
         summarize(revision, collected[revision_index])
         for revision_index, revision in enumerate(built)
     ]
-    report = build_report(scenario, warmups, sample_count, fixture_file, revisions)
+    report = build_report(
+        scenario, warmups, sample_count, fixture_file, revisions, scenario_path, profile
+    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(report, indent=2) + "\n")
     print(f"End-to-end comparison saved to {output_path}")

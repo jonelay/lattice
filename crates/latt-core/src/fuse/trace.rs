@@ -107,6 +107,7 @@ impl TraceFinding {
             issue,
             source: Some(source.into()),
             locations: Vec::new(),
+            stage: None,
         }
     }
 }

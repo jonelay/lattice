@@ -638,7 +638,10 @@ fn edge_count(profile: &Profile, rule: &latt_core::profile::EdgeCountConfig) -> 
     let field = match rule.direction {
         latt_core::profile::CountEnd::Out => out_field(&rule.edge_kind),
         latt_core::profile::CountEnd::In => in_field(&rule.edge_kind),
-        #[allow(unreachable_patterns)]
+        #[expect(
+            unreachable_patterns,
+            reason = "CountEnd has only Out and In today; the arm covers a future variant"
+        )]
         _ => return Translation::Skip("unknown direction".into()),
     };
     // Findings = (count < min) ∪ (count > max).

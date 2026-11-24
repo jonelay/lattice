@@ -316,7 +316,8 @@ impl Condition {
         Self::new(attr, ConditionOp::Gte(value))
     }
 
-    /// Hold when the attr is a string the regular expression `pattern` matches.
+    /// Hold when the attr's scalar text matches the regular expression `pattern`.
+    /// Strings, numbers and booleans convert to text; null and containers do not match.
     ///
     /// # Errors
     ///
@@ -807,6 +808,26 @@ impl Profile {
         self.plan.overrides()
     }
 
+    // Keep resolved filter spelling, including operators beyond CLI filters.
+    pub(crate) fn coverage_filters(
+        &self,
+        index: usize,
+    ) -> Result<(serde_json::Value, serde_json::Value), super::ProfileError> {
+        let config = self.raw["validations"]
+            .as_sequence()
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| entry.as_mapping()?.get("COVERAGE"))
+            .nth(index);
+        let filter = |key: &str| {
+            config
+                .and_then(|config| config.get(key))
+                .filter(|value| !value.is_null())
+                .map_or_else(|| Ok(serde_json::json!({})), super::to_json)
+        };
+        Ok((filter("where")?, filter("source_where")?))
+    }
+
     /// Return every validation entry as compiled at load.
     #[doc(hidden)]
     pub fn validation_plan(&self) -> &ValidationPlan {
@@ -911,7 +932,7 @@ impl Profile {
     }
 }
 
-pub(super) const DEFAULT_ADAPTER_TIMEOUT_SECONDS: u64 = 300;
+pub(crate) const DEFAULT_ADAPTER_TIMEOUT_SECONDS: u64 = 300;
 
 /// The `adapter:` keys the core validates as positive integers. The first is
 /// the core's own bound; the second passes through for adapters to read.

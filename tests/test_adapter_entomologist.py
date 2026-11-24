@@ -9,16 +9,11 @@ from pathlib import Path
 
 import pytest
 
-from conftest import git, resolve_profile, uncomment_actions
+from conftest import CORE_BIN, git, needs_core, resolve_profile, uncomment_actions
 
 REPO_ROOT = Path(__file__).parent.parent
 PROFILE_PATH = REPO_ROOT / "profiles" / "entomologist.yaml"
 ADAPTER_PATH = REPO_ROOT / "adapters" / "entomologist"
-CORE_BIN = REPO_ROOT / "target" / "debug" / "latt"
-
-needs_core = pytest.mark.skipif(
-    not CORE_BIN.exists(), reason="core not built; run: cargo build"
-)
 
 FULL = "aa" * 16
 NOSTATE = "bb" * 16

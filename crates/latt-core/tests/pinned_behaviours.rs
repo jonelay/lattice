@@ -270,3 +270,52 @@ fn parse_document_rejects_empty_and_malformed_input() {
             .starts_with("could not parse adapter output as JSON:")
     );
 }
+
+#[test]
+fn a_contract_error_says_which_way_it_failed_and_keeps_its_cause() {
+    use latt_core::document::{ContractErrorKind, ingest_document, parse_document};
+    use std::error::Error;
+
+    let empty = parse_document("  ").unwrap_err();
+    assert_eq!(empty.kind(), ContractErrorKind::EmptyOutput);
+
+    let malformed = parse_document("{").unwrap_err();
+    assert_eq!(malformed.kind(), ContractErrorKind::NotJson);
+    assert!(malformed.source().is_some(), "the parser's error is kept");
+
+    let version =
+        ingest_document(serde_json::json!({"interface_version": "9.9", "nodes": []})).unwrap_err();
+    assert_eq!(version.kind(), ContractErrorKind::UnsupportedVersion);
+
+    let shape =
+        ingest_document(serde_json::json!({"interface_version": "1.2", "node": []})).unwrap_err();
+    assert_eq!(shape.kind(), ContractErrorKind::Schema);
+}
+
+#[cfg(unix)]
+#[test]
+fn an_adapter_that_cannot_start_or_fails_is_told_apart() {
+    use latt_core::document::{ContractErrorKind, run_adapter};
+    use std::error::Error;
+    use std::path::Path;
+    use std::time::Duration;
+
+    let missing = run_adapter(
+        Path::new("/nonexistent/latt-adapter-nothing"),
+        "{}",
+        Path::new("."),
+        Duration::from_secs(5),
+    )
+    .unwrap_err();
+    assert_eq!(missing.kind(), ContractErrorKind::Launch);
+    assert!(missing.source().is_some());
+
+    let failed = run_adapter(
+        Path::new("false"),
+        "{}",
+        Path::new("."),
+        Duration::from_secs(5),
+    )
+    .unwrap_err();
+    assert_eq!(failed.kind(), ContractErrorKind::Failed);
+}

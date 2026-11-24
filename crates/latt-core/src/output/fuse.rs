@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 
 use super::sorted::SortedMap;
-use super::{PathwaysJson, RESET, color_for, render_json};
-use crate::types::{FuseFinding, FuseProvenance, FuseReport};
+use super::{PathwaysJson, RESET, color_for, render_json, sanitize_text};
+use crate::types::{FuseFinding, FuseProvenance, FuseReport, FuseStage};
 
 // Every struct below emits its fields in declaration order; see `render_json`.
 
@@ -67,6 +67,8 @@ struct FuseFindingJson<'a> {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     sources: Vec<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    stage: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     state: Option<&'a str>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     suppressed: bool,
@@ -94,6 +96,7 @@ impl<'a> From<&'a FuseFinding> for FuseFindingJson<'a> {
                 .iter()
                 .map(|p| p.source.as_str())
                 .collect(),
+            stage: finding.stage.map(FuseStage::as_str),
             state: issue.state.as_deref(),
             suppressed: issue.suppressed,
         }
@@ -152,42 +155,17 @@ pub(super) fn format_fuse_rich(report: &FuseReport) -> String {
 fn format_fuse_text(report: &FuseReport, rich: bool) -> String {
     let mut lines = vec![format!(
         "Fuse {} {}: {} nodes, {} edges, {} pathways",
-        report
-            .header
-            .get("name")
-            .map_or("<unknown>", String::as_str),
-        report.header.get("version").map_or("", String::as_str),
+        sanitize_text(
+            report
+                .header
+                .get("name")
+                .map_or("<unknown>", String::as_str)
+        ),
+        sanitize_text(report.header.get("version").map_or("", String::as_str)),
         report.nodes.len(),
         report.edges.len(),
         report.pathways.len()
     )];
-    for node in &report.nodes {
-        lines.push(format!(
-            "{} [{}] {}",
-            node.id, node.kind, node.provenance.location
-        ));
-    }
-    for edge in &report.edges {
-        lines.push(format!(
-            "{} --{}--> {}{}",
-            edge.src,
-            edge.kind,
-            edge.tgt,
-            if edge.target_kind.is_some() {
-                ""
-            } else {
-                " (unresolved)"
-            }
-        ));
-    }
-    for pathway in &report.pathways {
-        lines.push(format!(
-            "{}: {} (current: {})",
-            pathway.name,
-            pathway.order.join(" -> "),
-            pathway.current
-        ));
-    }
     let mut shown = 0;
     for finding in &report.findings {
         let issue = &finding.issue;
@@ -219,7 +197,10 @@ fn format_fuse_text(report: &FuseReport, rich: bool) -> String {
             });
         let line = format!(
             "{severity} {} [{}] {} {}",
-            issue.code, source, issue.origin, issue.message
+            sanitize_text(&issue.code),
+            sanitize_text(&source),
+            sanitize_text(&issue.origin.to_string()),
+            sanitize_text(&issue.message)
         );
         match (&issue.note, rich) {
             (Some(note), true) => {
@@ -231,6 +212,35 @@ fn format_fuse_text(report: &FuseReport, rich: bool) -> String {
     }
     if shown == 0 {
         lines.push("No findings.".into());
+    }
+    for node in &report.nodes {
+        lines.push(format!(
+            "{} [{}] {}",
+            sanitize_text(&node.id),
+            sanitize_text(&node.kind),
+            sanitize_text(&node.provenance.location.to_string())
+        ));
+    }
+    for edge in &report.edges {
+        lines.push(format!(
+            "{} --{}--> {}{}",
+            sanitize_text(&edge.src),
+            sanitize_text(&edge.kind),
+            sanitize_text(&edge.tgt),
+            if edge.target_kind.is_some() {
+                ""
+            } else {
+                " (unresolved)"
+            }
+        ));
+    }
+    for pathway in &report.pathways {
+        lines.push(format!(
+            "{}: {} (current: {})",
+            sanitize_text(&pathway.name),
+            sanitize_text(&pathway.order.join(" -> ")),
+            sanitize_text(&pathway.current)
+        ));
     }
     lines.join("\n")
 }

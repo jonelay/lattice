@@ -1,0 +1,31 @@
+[[dsn]]
+id = "D-1"
+needs_impl = true
+needs_test = true
+[[dsn]]
+id = "D-2"
+needs_impl = true
+needs_test = false
+[[dsn]]
+id = "D-3"
+needs_impl = false
+needs_test = true
+[[dsn]]
+id = "D-4"
+needs_impl = true
+needs_test = true
+[[dsn]]
+id = "D-5"
+needs_impl = false
+[[impl]]
+id = "I-1"
+implements = ["D-1", "D-2"]
+[[impl]]
+id = "I-2"
+implements = ["D-3"]
+[[test]]
+id = "T-1"
+verifies = ["D-1", "D-3"]
+[[test]]
+id = "T-2"
+verifies = ["D-2"]

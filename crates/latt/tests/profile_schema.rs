@@ -66,6 +66,20 @@ fn unknown_node_kind_key_names_the_offender() {
 }
 
 #[test]
+fn unknown_node_kind_key_lists_the_accepted_keys_sorted() {
+    let yaml = MINIMAL_PROFILE.replace("id_pattern:", "id_patern:");
+    let error = load_error(&yaml);
+    assert!(
+        error.contains(
+            "(valid: [\"actions\", \"attrs\", \"id_names\", \"id_pattern\", \"orphan_ok\", \
+             \"summary_attr\", \"text_attrs\", \"text_chunk_line_prefix\"])"
+        ),
+        "{error}"
+    );
+}
+
+// Requirement: profile-schema/Unknown keys in declarations
+#[test]
 fn unknown_attr_key_names_the_offender() {
     let error = load_error(&attr_profile("{ type: string, require: true }"));
     assert!(

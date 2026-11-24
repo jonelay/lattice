@@ -25,8 +25,8 @@ class Provenance:
 
 
 class Severity(Enum):
-    """Issue severity. Only ERROR sets a non-zero exit code; HINT is advice
-    that never affects it, and nothing promotes a finding out of it."""
+    """Issue severity. ERROR sets a non-zero exit code, and `--strict` promotes
+    WARNING to it; HINT is advice that never affects the exit code."""
 
     ERROR = "error"
     WARNING = "warning"

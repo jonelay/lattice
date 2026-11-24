@@ -12,7 +12,7 @@ mod tui;
 #[path = "../tests/common/stub.rs"]
 mod stub;
 
-use std::io::{IsTerminal, Write};
+use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::atomic::Ordering;
@@ -26,10 +26,13 @@ use latt_core::types::{Issue, Severity};
 
 #[cfg(feature = "tui")]
 use browse::run_browse;
-use console::{STDOUT_FAILED, Stream, echo, write_stdout};
+use console::{
+    JsonControlEscape, STDERR_FAILED, STDOUT_FAILED, Stream, echo, escape_json_controls,
+    print_clap_error, write_stderr, write_stdout,
+};
 use loading::{
-    adapter_label, load, overlay, refuse_unreadable, reportable, suppress_adapter_issues,
-    unreadable,
+    adapter_label, load, note_fuse_failures, note_partial_input, overlay, refuse_unreadable,
+    reportable, suppress_adapter_issues, unreadable,
 };
 use queries::{run_diff, run_query};
 
@@ -133,6 +136,9 @@ enum Command {
     Coverage {
         #[command(flatten)]
         common: Common,
+        /// Report one direct COVERAGE rule (one-based ordinal in the resolved profile).
+        #[arg(long, value_name = "N")]
+        rule: Option<usize>,
     },
     /// Orient on a register: what the profile declares, what the adapter read.
     ///
@@ -202,7 +208,7 @@ struct BrowseArgs {
     #[arg(long)]
     strict: bool,
     /// Restrict nodes by an attribute condition (repeatable).
-    #[arg(long = "filter", value_parser = Condition::parse)]
+    #[arg(long = "filter", value_parser = parse_filter_arg)]
     filters: Vec<Condition>,
     /// Glyph set: `auto` follows the locale (Unicode when it is UTF-8);
     /// `ascii` for a terminal that draws box-drawing and arrow glyphs wide.
@@ -244,7 +250,7 @@ enum QueryCommand {
         #[arg(long = "edge-kind")]
         edge_kinds: Vec<String>,
         /// Restrict returned nodes by an attribute condition (repeatable).
-        #[arg(long = "filter", value_parser = Condition::parse)]
+        #[arg(long = "filter", value_parser = parse_filter_arg)]
         filters: Vec<Condition>,
         /// Mark each node tainted when every path to it crosses an undeclared endpoint.
         #[arg(long = "check-resolved")]
@@ -260,7 +266,7 @@ enum QueryCommand {
         #[arg(long = "edge-kind")]
         edge_kinds: Vec<String>,
         /// Restrict returned nodes by an attribute condition (repeatable).
-        #[arg(long = "filter", value_parser = Condition::parse)]
+        #[arg(long = "filter", value_parser = parse_filter_arg)]
         filters: Vec<Condition>,
         /// Mark each node tainted when every path to it crosses an undeclared endpoint.
         #[arg(long = "check-resolved")]
@@ -286,7 +292,7 @@ enum QueryCommand {
         #[arg(long)]
         kind: Option<String>,
         /// Restrict returned nodes by an attribute condition (repeatable).
-        #[arg(long = "filter", value_parser = Condition::parse)]
+        #[arg(long = "filter", value_parser = parse_filter_arg)]
         filters: Vec<Condition>,
     },
     /// Per-kind node and edge tallies, declared kinds shown even at zero.
@@ -294,11 +300,11 @@ enum QueryCommand {
         #[command(flatten)]
         common: Common,
         /// Restrict counted nodes by an attribute condition (repeatable).
-        #[arg(long = "filter", value_parser = Condition::parse)]
+        #[arg(long = "filter", value_parser = parse_filter_arg)]
         filters: Vec<Condition>,
     },
     /// Register entries and findings originating at a source path. Findings
-    /// here are informational, not a verdict - the exit code stays 0.
+    /// here do not affect the exit code: 0 when answered, 2 when the command cannot run.
     At {
         #[command(flatten)]
         common: Common,
@@ -306,7 +312,7 @@ enum QueryCommand {
         /// everything beneath it.
         path: String,
         /// Restrict returned entries by a node attribute condition (repeatable).
-        #[arg(long = "filter", value_parser = Condition::parse)]
+        #[arg(long = "filter", value_parser = parse_filter_arg)]
         filters: Vec<Condition>,
     },
     /// What changed between two revisions of the target. Runs the adapter
@@ -371,6 +377,14 @@ impl Common {
     }
 }
 
+/// Parse one `--filter`, its error message escaped as `sanitize_text` writes
+/// it (newline included): clap prints the message beside its own colours, and
+/// it quotes the command-line value.
+fn parse_filter_arg(value: &str) -> Result<Condition, String> {
+    Condition::parse(value)
+        .map_err(|error| latt_core::output::sanitize_text(&error.to_string()).into_owned())
+}
+
 /// Parse `--format` against the library's spellings. The possible-values list
 /// keeps `--help` and clap's error for a bad value as they were under the
 /// `ValueEnum` derive, so `FromStr` only ever sees a valid spelling.
@@ -378,6 +392,34 @@ fn format_parser() -> impl clap::builder::TypedValueParser<Value = Format> {
     use clap::builder::TypedValueParser;
     clap::builder::PossibleValuesParser::new(Format::ALL.iter().map(|format| format.as_str()))
         .try_map(|value| value.parse::<Format>())
+}
+
+/// A writer that remembers whether its reader closed the pipe, for a writer
+/// whose errors reach the caller only as text.
+struct PipeWatch<W> {
+    inner: W,
+    closed: bool,
+}
+
+impl<W: std::io::Write> PipeWatch<W> {
+    fn watch<T>(&mut self, result: std::io::Result<T>) -> std::io::Result<T> {
+        if let Err(error) = &result {
+            self.closed |= error.kind() == std::io::ErrorKind::BrokenPipe;
+        }
+        result
+    }
+}
+
+impl<W: std::io::Write> std::io::Write for PipeWatch<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let result = self.inner.write(buf);
+        self.watch(result)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        let result = self.inner.flush();
+        self.watch(result)
+    }
 }
 
 /// `rich` for a human at a terminal, `plain` for whatever is reading the pipe.
@@ -402,13 +444,65 @@ fn describe(error: &dyn std::error::Error) -> String {
     text
 }
 
+/// The error and every cause beneath it on one line, each once, joined by `: `,
+/// for a finding message, which is printed on one line.
+fn describe_on_one_line(error: &dyn std::error::Error) -> String {
+    let mut parts = vec![error.to_string()];
+    let mut cause = error.source();
+    while let Some(next) = cause {
+        parts.push(next.to_string());
+        cause = next.source();
+    }
+    parts
+        .iter()
+        .flat_map(|part| part.lines())
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(": ")
+}
+
+/// Where a fuse error points: the file that could not be read or parsed, at the
+/// parser's line when it has one; else the manifest. The manifest is shown as
+/// given, the fuse profile by the resolved path the error holds.
+fn fuse_error_provenance(
+    error: &latt_core::fuse::FuseError,
+    manifest: &std::path::Path,
+) -> latt_core::types::Provenance {
+    use latt_core::fuse::FuseError;
+    use latt_core::types::Provenance;
+    let shown = |path: &std::path::Path| {
+        if std::fs::canonicalize(manifest).is_ok_and(|resolved| resolved == path) {
+            manifest.display().to_string()
+        } else {
+            path.display().to_string()
+        }
+    };
+    match error {
+        FuseError::Read { path, .. } => Provenance::new_file(shown(path)),
+        FuseError::Yaml { path, source, .. } => {
+            let line = source
+                .location()
+                .and_then(|location| u32::try_from(location.line()).ok())
+                .unwrap_or(0);
+            Provenance::new(shown(path), line)
+        }
+        _ => Provenance::new_file(manifest.display().to_string()),
+    }
+}
+
 fn exit_for(has_errors: bool) -> ExitCode {
     Outcome::gating(has_errors).into()
 }
 
+/// Run a command, mapping a panic that unwinds to here to "could not run".
+fn guarded(command: impl FnOnce() -> ExitCode + std::panic::UnwindSafe) -> ExitCode {
+    std::panic::catch_unwind(command).unwrap_or_else(|_| Outcome::CouldNotRun.into())
+}
+
 fn main() -> ExitCode {
-    let code = run();
-    if STDOUT_FAILED.load(Ordering::Relaxed) {
+    let code = guarded(run);
+    if STDOUT_FAILED.load(Ordering::Relaxed) || STDERR_FAILED.load(Ordering::Relaxed) {
         Outcome::CouldNotRun.into()
     } else {
         code
@@ -416,7 +510,19 @@ fn main() -> ExitCode {
 }
 
 fn run() -> ExitCode {
-    let cli = Cli::parse();
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(error) => {
+            let exit_code = error.exit_code();
+            if let Err(write_error) = print_clap_error(error) {
+                if write_error.kind() != std::io::ErrorKind::BrokenPipe {
+                    write_stderr(&format!("Error: could not write output: {write_error}"));
+                }
+                return Outcome::CouldNotRun.into();
+            }
+            return ExitCode::from(exit_code as u8);
+        }
+    };
     if cli.version {
         write_stdout(&format!("latt, version {VERSION}"));
         return Outcome::Clean.into();
@@ -424,7 +530,7 @@ fn run() -> ExitCode {
     let Some(command) = cli.command else {
         // clap prints help for a bare invocation; reaching here means `--version`
         // was not passed and no subcommand was named.
-        let _ = writeln!(std::io::stderr(), "Error: missing command");
+        write_stderr("Error: missing command");
         return Outcome::CouldNotRun.into();
     };
 
@@ -444,13 +550,14 @@ fn run() -> ExitCode {
         return match loaded {
             // Printed verbatim rather than through `output_result`: this is the
             // adapter handoff document, whose shape the profile-schema spec owns,
-            // not a report with three renderings.
+            // not a report with three renderings. What serde_json leaves raw
+            // that a terminal acts on goes out as a JSON escape.
             Ok(document) => {
-                write_stdout(&document);
+                write_stdout(&escape_json_controls(&document));
                 Outcome::Clean.into()
             }
             Err(e) => {
-                let _ = writeln!(std::io::stderr(), "Error: Profile error: {}", describe(&e));
+                write_stderr(&format!("Error: Profile error: {}", describe(&e)));
                 Outcome::CouldNotRun.into()
             }
         };
@@ -463,11 +570,19 @@ fn run() -> ExitCode {
         target,
     } = &command
     {
-        let mut out = std::io::BufWriter::new(std::io::stdout().lock());
-        return match latt_core::document::write_native_document(name, profile, target, &mut out) {
+        // As for `show`: C1, bidi and separator characters go out as JSON escapes.
+        let mut out = std::io::BufWriter::new(JsonControlEscape::new(PipeWatch {
+            inner: std::io::stdout().lock(),
+            closed: false,
+        }));
+        let result = latt_core::document::write_native_document(name, profile, target, &mut out);
+        // A closed pipe is the reader's choice, quiet as `write_stdout` keeps it.
+        let closed = out.get_ref().inner.closed;
+        return match result {
             Ok(()) => Outcome::Clean.into(),
+            Err(_) if closed => Outcome::CouldNotRun.into(),
             Err(message) => {
-                let _ = writeln!(std::io::stderr(), "Error: {message}");
+                write_stderr(&format!("Error: {message}"));
                 Outcome::CouldNotRun.into()
             }
         };
@@ -481,20 +596,38 @@ fn run() -> ExitCode {
     {
         let format = format.unwrap_or_else(auto_format);
         let result = std::env::current_exe()
-            .map_err(|e| e.to_string())
+            .map_err(|e| {
+                let shown = manifest.display().to_string();
+                (
+                    e.to_string(),
+                    latt_core::types::Provenance::new_file(shown),
+                    latt_core::types::FuseStage::SourceRun,
+                )
+            })
             .and_then(|binary| {
-                latt_core::fuse::fuse(manifest, &binary, *strict).map_err(|e| describe(&e))
+                latt_core::fuse::fuse(manifest, &binary, *strict).map_err(|e| {
+                    (
+                        describe_on_one_line(&e),
+                        fuse_error_provenance(&e, manifest),
+                        e.stage(manifest),
+                    )
+                })
             });
-        let report = result.unwrap_or_else(|message| {
-            latt_core::types::FuseReport::failed(Issue::new(
-                Severity::Error,
-                latt_core::fuse::FUSE_ERROR,
-                message,
-                latt_core::types::Provenance::new_file(manifest.display().to_string()),
-                None,
-            ))
+        let report = result.unwrap_or_else(|(message, provenance, stage)| {
+            latt_core::types::FuseReport::failed_at(
+                Issue::new(
+                    Severity::Error,
+                    latt_core::fuse::FUSE_ERROR,
+                    message,
+                    provenance,
+                    None,
+                ),
+                stage,
+            )
         });
         echo(&output_result(&report, format), format, Stream::Stdout);
+        note_fuse_failures(&report, format);
+        note_partial_input(report.findings.iter().map(|f| &f.issue), format);
         return ExitCode::from(report.exit_code());
     }
 
@@ -506,7 +639,7 @@ fn run() -> ExitCode {
     let common = match &command {
         Command::Validate { common, .. }
         | Command::Summary { common }
-        | Command::Coverage { common }
+        | Command::Coverage { common, .. }
         | Command::Describe { common }
         | Command::Trace { common, .. } => common,
         Command::Query(query) => query.common(),
@@ -517,6 +650,20 @@ fn run() -> ExitCode {
         Command::Browse(_) => unreachable!("handled above"),
     };
     let format = common.format();
+    // Set by `fuse` on the trace it runs per source (latt-core `FUSE_CHILD_ENV`),
+    // which quotes this stderr in json and escapes it in its own plain and rich.
+    // Trust: fuse always captures the child's stderr through a pipe, so the
+    // variable unescapes only a json trace's stderr notices and only off a
+    // terminal; a value inherited by a run whose stderr is a terminal, and any
+    // plain or rich run, keeps the escape.
+    if raw_stderr(
+        matches!(command, Command::Trace { .. }),
+        format,
+        std::env::var_os("LATTICE_FUSE_CHILD").is_some(),
+        std::io::stderr().is_terminal(),
+    ) {
+        console::RAW_STDERR.store(true, Ordering::Relaxed);
+    }
 
     // Diff runs the adapter at two materialized revisions, not the working
     // target, so it branches off before the shared load.
@@ -532,7 +679,7 @@ fn run() -> ExitCode {
     let (profile, graph) = match load(common) {
         Ok(loaded) => loaded,
         Err(message) => {
-            let _ = writeln!(std::io::stderr(), "Error: {message}");
+            write_stderr(&format!("Error: {message}"));
             return Outcome::CouldNotRun.into();
         }
     };
@@ -541,33 +688,61 @@ fn run() -> ExitCode {
         let adapter = match adapter_label(common, &profile) {
             Ok(label) => label,
             Err(message) => {
-                let _ = writeln!(std::io::stderr(), "Error: {message}");
+                write_stderr(&format!("Error: {message}"));
                 return Outcome::CouldNotRun.into();
             }
         };
         let report = match latt_core::describe::build_describe_report(&profile, &graph, adapter) {
             Ok(report) => report,
             Err(e) => {
-                let _ = writeln!(std::io::stderr(), "Profile error: {}", describe(&e));
+                write_stderr(&format!("Profile error: {}", describe(&e)));
                 return Outcome::CouldNotRun.into();
             }
         };
         echo(&output_result(&report, format), format, Stream::Stdout);
+        note_partial_input(&report.findings, format);
         // An orientation view, not an audit: the adapter's findings are shown,
         // and gate nothing.
         return Outcome::Clean.into();
     }
 
+    // Trace consumes the graph so the report takes ownership of the attributes.
+    if let Command::Trace { strict, .. } = &command {
+        let context = InputContext::default();
+        let response = match service::execute_trace_owned(graph, &profile, &context, *strict) {
+            Ok(response) => response,
+            Err(failure) => {
+                let (error, graph) = *failure;
+                return loading::report_service_error(error, &profile, &graph, format);
+            }
+        };
+        let report = response.payload;
+        let findings = || {
+            report
+                .entries
+                .iter()
+                .flat_map(|entry| &entry.findings)
+                .chain(&report.unattachable_findings)
+        };
+        let has_errors = findings().any(Issue::gates);
+        echo(&output_result(&report, format), format, Stream::Stdout);
+        note_partial_input(findings(), format);
+        return exit_for(has_errors);
+    }
+
     let request = match &command {
         Command::Validate { strict, .. } => Request::Validate { strict: *strict },
         Command::Summary { .. } => Request::Summary,
-        Command::Trace { strict, .. } => Request::Trace { strict: *strict },
-        Command::Coverage { .. } => Request::Coverage,
+        Command::Coverage {
+            rule: Some(rule), ..
+        } => Request::RuleCoverage { rule: *rule },
+        Command::Coverage { rule: None, .. } => Request::Coverage,
         Command::Query(command) => return run_query(command, &profile, &graph, format),
         Command::Show { .. }
         | Command::Fuse { .. }
         | Command::Adapter { .. }
-        | Command::Describe { .. } => {
+        | Command::Describe { .. }
+        | Command::Trace { .. } => {
             unreachable!("handled above")
         }
         #[cfg(feature = "tui")]
@@ -584,8 +759,7 @@ fn run() -> ExitCode {
     ) {
         Ok(response) => response,
         Err(error) => {
-            let _ = writeln!(std::io::stderr(), "Error: {}", describe(&error));
-            return Outcome::CouldNotRun.into();
+            return loading::report_service_error(error, &profile, &graph, format);
         }
     };
     match command {
@@ -597,7 +771,7 @@ fn run() -> ExitCode {
             match overlay(&suggestions, &graph) {
                 Ok(hints) => report.findings.extend(hints),
                 Err(message) => {
-                    let _ = writeln!(std::io::stderr(), "Error: {message}");
+                    write_stderr(&format!("Error: {message}"));
                     return Outcome::CouldNotRun.into();
                 }
             }
@@ -610,26 +784,22 @@ fn run() -> ExitCode {
             if format != Format::Json {
                 echo(&scope_line(&report.scope), format, Stream::Stderr);
             }
+            note_partial_input(&report.findings, format);
             exit_for(report.findings.iter().any(Issue::gates))
-        }
-        Command::Trace { .. } => {
-            let Report::Trace(report) = response.payload else {
-                unreachable!("trace response")
-            };
-            let has_errors = report
-                .entries
-                .iter()
-                .flat_map(|entry| &entry.findings)
-                .chain(&report.unattachable_findings)
-                .any(Issue::gates);
-            echo(&output_result(&report, format), format, Stream::Stdout);
-            exit_for(has_errors)
         }
         Command::Summary { .. } | Command::Coverage { .. } => {
             let mut adapter_issues: Vec<_> =
                 response.diagnostics.into_iter().map(|d| d.issue).collect();
             if matches!(command, Command::Coverage { .. }) && unreadable(&graph, &adapter_issues) {
                 return refuse_unreadable(&adapter_issues, format);
+            }
+            if matches!(command, Command::Coverage { rule: Some(_), .. }) {
+                echo(
+                    &output_result(&response.payload, format),
+                    format,
+                    Stream::Stdout,
+                );
+                return exit_for(false);
             }
             suppress_adapter_issues(&mut adapter_issues, &profile, &graph);
             echo(
@@ -644,6 +814,7 @@ fn run() -> ExitCode {
                     Stream::Stderr,
                 );
             }
+            note_partial_input(&adapter_issues, format);
             // Summary gates on the adapter issues the profile left unsuppressed,
             // as validate does; coverage is a query.
             exit_for(
@@ -652,6 +823,34 @@ fn run() -> ExitCode {
             )
         }
         _ => unreachable!("handled above"),
+    }
+}
+
+/// Whether this run writes its stderr notices unescaped: only a json `trace`
+/// that `fuse` runs (the variable set) with stderr on a pipe.
+fn raw_stderr(trace: bool, format: Format, fuse_child: bool, stderr_is_terminal: bool) -> bool {
+    trace && format == Format::Json && fuse_child && !stderr_is_terminal
+}
+
+#[cfg(test)]
+mod raw_stderr_decision {
+    use super::{Format, raw_stderr};
+
+    #[test]
+    fn only_a_json_trace_under_fuse_off_a_terminal_is_raw() {
+        assert!(raw_stderr(true, Format::Json, true, false));
+        // Each condition alone keeps the escape.
+        assert!(
+            !raw_stderr(true, Format::Json, true, true),
+            "stderr is a terminal"
+        );
+        assert!(
+            !raw_stderr(true, Format::Json, false, false),
+            "not run by fuse"
+        );
+        assert!(!raw_stderr(false, Format::Json, true, false), "not trace");
+        assert!(!raw_stderr(true, Format::Plain, true, false), "plain");
+        assert!(!raw_stderr(true, Format::Rich, true, false), "rich");
     }
 }
 
@@ -808,6 +1007,31 @@ mod glyph_flag_tests {
         let text = error.to_string();
         for value in ["auto", "unicode", "ascii"] {
             assert!(text.contains(value), "{text}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod panic_boundary {
+    use std::process::ExitCode;
+
+    use super::{Outcome, guarded};
+
+    fn same(a: ExitCode, b: ExitCode) -> bool {
+        format!("{a:?}") == format!("{b:?}")
+    }
+
+    #[test]
+    fn a_panic_in_the_command_exits_two() {
+        let code = guarded(|| panic!("internal failure"));
+        assert!(same(code, Outcome::CouldNotRun.into()), "{code:?}");
+    }
+
+    #[test]
+    fn a_command_that_returns_keeps_its_code() {
+        for outcome in [Outcome::Clean, Outcome::Findings, Outcome::CouldNotRun] {
+            let code = guarded(move || outcome.into());
+            assert!(same(code, outcome.into()), "{outcome:?} gave {code:?}");
         }
     }
 }

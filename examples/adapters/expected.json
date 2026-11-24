@@ -1,0 +1,156 @@
+{
+  "interface_version": "1.4",
+  "nodes": [
+    {
+      "id": "REQ-1",
+      "kind": "requirement",
+      "attrs": {
+        "text": "The pump stops on overpressure"
+      },
+      "provenance": {
+        "file": "register/requirements.reg",
+        "line": 2
+      }
+    },
+    {
+      "id": "REQ-2",
+      "kind": "requirement",
+      "attrs": {
+        "text": "The relay opens within 50 ms"
+      },
+      "provenance": {
+        "file": "register/requirements.reg",
+        "line": 3
+      }
+    },
+    {
+      "id": "REQ-3",
+      "kind": "requirement",
+      "attrs": {
+        "text": "Every stop is logged"
+      },
+      "provenance": {
+        "file": "register/requirements.reg",
+        "line": 5
+      }
+    },
+    {
+      "id": "T-1",
+      "kind": "test",
+      "attrs": {
+        "text": "Overpressure trips the relay"
+      },
+      "provenance": {
+        "file": "register/tests.reg",
+        "line": 2
+      }
+    },
+    {
+      "id": "T-2",
+      "kind": "test",
+      "attrs": {
+        "text": "Relay opens"
+      },
+      "provenance": {
+        "file": "register/tests.reg",
+        "line": 4
+      }
+    },
+    {
+      "id": "T-5",
+      "kind": "test",
+      "attrs": {
+        "text": "Stop entry has a timestamp"
+      },
+      "provenance": {
+        "file": "register/tests.reg",
+        "line": 7
+      }
+    }
+  ],
+  "edges": [
+    {
+      "src": "T-1",
+      "tgt": "REQ-1",
+      "kind": "verifies",
+      "provenance": {
+        "file": "register/tests.reg",
+        "line": 2
+      },
+      "declared_by": 3
+    },
+    {
+      "src": "T-2",
+      "tgt": "REQ-2",
+      "kind": "verifies",
+      "provenance": {
+        "file": "register/tests.reg",
+        "line": 4
+      },
+      "declared_by": 4
+    },
+    {
+      "src": "T-2",
+      "tgt": "REQ-9",
+      "kind": "verifies",
+      "provenance": {
+        "file": "register/tests.reg",
+        "line": 4
+      },
+      "declared_by": 4
+    },
+    {
+      "src": "T-5",
+      "tgt": "REQ-3",
+      "kind": "verifies",
+      "provenance": {
+        "file": "register/tests.reg",
+        "line": 7
+      },
+      "declared_by": 5
+    }
+  ],
+  "pathways": [],
+  "findings": [
+    {
+      "severity": "error",
+      "code": "PARSE_ERROR",
+      "message": "not a regular file, so it was not read",
+      "provenance": {
+        "file": "register/drafts.reg",
+        "line": 0
+      },
+      "node_id": null
+    },
+    {
+      "severity": "error",
+      "code": "PARSE_ERROR",
+      "message": "line is not a declaration \"<kind> <id> [<edge-kind> <target-id>]... : <text>\", so it was not read",
+      "provenance": {
+        "file": "register/tests.reg",
+        "line": 3
+      },
+      "node_id": null
+    },
+    {
+      "severity": "error",
+      "code": "PARSE_ERROR",
+      "message": "line is not valid UTF-8 at byte 48, so it was not read",
+      "provenance": {
+        "file": "register/tests.reg",
+        "line": 5
+      },
+      "node_id": null
+    },
+    {
+      "severity": "error",
+      "code": "PARSE_ERROR",
+      "message": "line is not a declaration \"<kind> <id> [<edge-kind> <target-id>]... : <text>\", so it was not read",
+      "provenance": {
+        "file": "register/tests.reg",
+        "line": 8
+      },
+      "node_id": null
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+[package]
+name = "lines-adapter"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT OR Apache-2.0"
+description = "Template Lattice adapter: reads line registers and prints an interface document"
+publish = false
+
+[dependencies]
+# Inside the Lattice repository. In a copy, depend on the release tag instead:
+# latt-adapter = { git = "https://github.com/jonelay/lattice", tag = "v0.8.1" }
+latt-adapter = { path = "../../../crates/latt-adapter" }
+serde_json = "1"
+
+[lints.clippy]
+# The Lattice repository's clippy.toml bans serde_json::Value for latt-core's output
+# ordering; the workspace allows it everywhere else, and so does this crate.
+disallowed_types = "allow"

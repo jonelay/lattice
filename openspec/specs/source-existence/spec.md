@@ -111,7 +111,7 @@ prefix or a test marker; that is the kind's `id_pattern`'s job.
   top-level `class`, and `name` within it as a `def` or `async def` directly in its
   body. A definition inside an `if`, `try`, function or nested class does not count,
   matching `adapters/_python_tests.py`. Decorators do not affect counting.
-- **`rust`** (`.rs`): a chain is `mod::…::name`, any depth. Each `mod` counts as an
+- **`rust`** (`.rs`): a chain is `mod::…::name`, with no inline-module depth limit. Each `mod` counts as an
   inline `mod <name> { … }` item in the file or in the enclosing inline module, and
   `name` counts as a `fn` item at that module level, whatever its qualifiers (`pub`,
   `async`, `const`, `unsafe`, `extern`) or attributes. An `fn` inside a function body,
@@ -125,6 +125,9 @@ A chain that does not resolve SHALL report the shortest prefix of it the file la
 joined by the separator. A missing container reads `'<path>' defines no <noun>
 '<prefix>'`, where the noun is `module` for rust and `class` for python (go has no containers), and a missing
 final name reads `'<path>' defines no '<prefix>'`.
+Python symbol names SHALL use Unicode identifier continuation and NFKC
+normalization as Python does; a name truncated before a combining mark SHALL
+not resolve to the longer definition.
 
 Verified by: `cargo test -p latt-adapter --locked source`, and
 `.venv/bin/python -m pytest tests/test_adapter_md.py -k "sources or differential"`
@@ -134,6 +137,10 @@ Verified by: `cargo test -p latt-adapter --locked source`, and
   defines `test_new` but not `test_old`
 - **THEN** `SOURCE_MISSING` reads
   `'tests/test_a.py::test_old' does not resolve: 'tests/test_a.py' defines no 'test_old'`
+
+#### Scenario: Combining mark in a Python definition
+- **WHEN** a file defines `test_cafe\u0301` and a row names `test_café`
+- **THEN** the normalized name resolves, while a row naming `test_cafe` receives `SOURCE_MISSING`
 
 #### Scenario: Missing class reports the class
 - **WHEN** node `tests/test_a.py::TestGone::test_b` is declared and no top-level class `TestGone` exists
@@ -217,7 +224,8 @@ A file SHALL be read at most once per run, however many nodes name it. That inde
 SHALL NOT outlive the run.
 
 Every language SHALL accept a leading byte order mark (encoding, not content) and CRLF
-line endings. Python SHALL handle string prefixes (`r`, `b`, `u`, `f` and their
+line endings. Python SHALL also accept CR-only line endings with the same
+definition scope and provenance lines as LF. Python SHALL handle string prefixes (`r`, `b`, `u`, `f` and their
 combinations, either case), single- and triple-quoted strings, comments, backslash
 continuation, implicit continuation inside brackets, tab or space indentation, a
 trailing comment after a class header's `:`, and f-string replacement fields that reuse
@@ -228,6 +236,14 @@ with any number of `#`, char literals as distinct from lifetimes, and attributes
 and rune literals.
 
 Verified by: `cargo test -p latt-adapter --locked source`
+
+#### Scenario: Python CR-only source lines
+- **WHEN** a Python file defines two functions separated by CR-only line endings
+- **THEN** both names resolve, and error locations count CR as a line ending
+
+#### Scenario: Deep Rust inline-module nesting
+- **WHEN** a Rust source nests 30,000 inline modules around a cited function
+- **THEN** the citation resolves and the scan completes without overflowing the process stack
 
 #### Scenario: Unterminated Python string
 - **WHEN** `tests/test_bad.py` opens a triple-quoted string at line 3 that never closes,
@@ -262,4 +278,3 @@ Verified by: `cargo test -p latt-adapter --locked source`
 #### Scenario: Lifetime is not a char literal
 - **WHEN** `fn helper<'a>(x: &'a str) {}` is followed by a top-level `fn real() {}`
 - **THEN** `<path>::real` resolves
-

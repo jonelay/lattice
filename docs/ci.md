@@ -1,9 +1,7 @@
 # Running Lattice in CI and hooks
 
 Recipes for running `latt` in your own repository's pre-commit hook and CI jobs,
-from a release install with `latt` on PATH. This repository's tests run every recipe
-below against a clean register, one with a warning, one with an error and one whose
-profile cannot load, and check the outcome each recipe states.
+from a release install with `latt` on PATH.
 
 The examples assume a profile at `lattice.yaml` in the repository root and the built-in
 `md` adapter. Substitute your own `--profile`, `--adapter` and `--target`.
@@ -142,17 +140,6 @@ if [ "$status" -gt 1 ]; then exit "$status"; fi
 printf '%s' "$out" | python3 -c 'import json, sys; got = sorted(f["code"] + " " + (f.get("node_id") or "-") for f in json.load(sys.stdin)["findings"]); want = open("expected-findings.txt").read().split("\n"); new = [g for g in got if g not in want]; gone = [w for w in want if w and w not in got]; [print("new:", g) for g in new]; [print("gone:", w) for w in gone]; sys.exit(1 if new or gone else 0)'
 ```
 
-## Beside cargo-semver-checks
-
-A Rust project often runs Lattice next to `cargo semver-checks`. Their exit codes do not
-line up: Lattice exits 0 clean, 1 on error-severity findings, 2 when it could not run;
-cargo-semver-checks exits 0 on pass, 100 on a lint failure, 101 when it could not
-complete. Map each tool's "could not run" to a stopped job separately rather than
-through one shared threshold. The severity words differ too. A cargo-semver-checks
-`warn` lint never stops its run, while a Lattice `warning` stops a `--strict` run. A
-profile that mirrors a `warn` level with `severity: warning` therefore gates under
-`--strict` where the lint would not.
-
 ## Merge-request report
 
 What the change does to the register: nodes and edges added, removed and changed between
@@ -170,8 +157,41 @@ the gate; the diff shows only the edge.
 latt query diff "$CI_MERGE_REQUEST_DIFF_BASE_SHA" HEAD --profile lattice.yaml --adapter md --target .
 ```
 
-## Python
+## Empty-read gate
 
-The `--format json` recipe and the Python programs (the `openspec` adapter and the
-`latt-suggest` sidecar) need Python 3.12 or later. They use the standard library only
-and run with `python3` from PATH.
+`--strict` passes a run that read nothing: an empty target gives `NO_MATCHING_FILES` and
+`EMPTY_KIND` at info, and info does not fail a run. Raise `NO_MATCHING_FILES` in the
+profile to fail it. The entries extend the profile's own `validations:` list; a second
+`validations:` key is a load error and exits 2.
+
+<!-- recipe: none -->
+```yaml
+validations:
+  - NO_MATCHING_FILES: { severity: error }
+  # - EMPTY_KIND: { severity: error }   # opt-in: also fails any kind that holds no node or edge
+```
+
+`NO_MATCHING_FILES` catches a wrong `--target` or `adapter.paths.files`, but a target
+that is wrong passes by default: only the raised severity makes it fail. It does not
+prove the register complete, because a matched file with zero records still passes.
+`EMPTY_KIND` catches that case, and it also fires on any kind the register legitimately
+does not populate yet, so add it only when every kind must hold something. The
+`scope:` line of a run (see [cli.md](cli.md)) states the contributing files and the
+node and edge counts; check it in the logs beside a zero-finding result. Exit codes are in
+[cli.md](cli.md).
+
+## Coverage report and gate
+
+`latt coverage --rule N` reports the denominator, the covered count and the missing IDs
+of one `COVERAGE` rule, and exits 0 when links are missing. It reports and does not gate.
+To fail the job on a gap, run `validate` with the rule at `severity: error`, or with
+`--strict` when the rule is a warning. `validate` at the default warning severity also
+exits 0 with the same gap.
+
+<!-- recipe: coverage-report posture=report kind=sh clean=0 warning=0 broken=0 unloadable=2 -->
+```sh
+latt coverage --rule 1 --profile lattice.yaml --adapter md --target . --format json
+```
+
+The JSON holds `total`, `covered`, `missing` and, under `uncertainty`, `source_total`
+and `unattributed`. A `missing` entry with state `unknown` has no evidence either way.

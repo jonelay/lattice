@@ -1,18 +1,18 @@
 //! The `query` and `diff` commands.
 
-use std::io::Write;
 use std::process::ExitCode;
 
 use latt_core::document::{resolve_adapter, run_adapter_spec_for_profile};
 use latt_core::graph::LatticeGraph;
-use latt_core::output::{Format, output_result};
+use latt_core::output::{Format, output_result, sanitize_text};
 use latt_core::profile::{Condition, Profile, resolved_document};
 use latt_core::query::{self, Direction};
 use latt_core::service::{self, InputContext, InputSide, Request, View};
 
-use super::console::{Stream, echo};
+use super::console::{Stream, echo, write_stderr};
 use super::loading::{
-    load_profile_from, refuse_unreadable, reportable, suppress_adapter_issues, unreadable,
+    load_profile_from, note_partial_input, partial_input_notice, refuse_unreadable,
+    report_service_error, reportable, suppress_adapter_issues, unreadable,
 };
 use super::{Common, Outcome, QueryCommand, describe};
 
@@ -25,10 +25,7 @@ fn report_absent_filter_attrs(filters: &[Condition], graph: &LatticeGraph) {
     let attrs: std::collections::BTreeSet<&str> = filters.iter().map(Condition::attr).collect();
     for attr in attrs {
         if !graph.iter_nodes().any(|node| node.attrs.contains_key(attr)) {
-            let _ = writeln!(
-                std::io::stderr(),
-                "Warning: filter attr '{attr}' appears on no node"
-            );
+            write_stderr(&format!("Warning: filter attr '{attr}' appears on no node"));
         }
     }
 }
@@ -129,13 +126,11 @@ pub(super) fn run_query(
                     Stream::Stderr,
                 );
             }
+            note_partial_input(&adapter_issues, format);
             report_absent_filter_attrs(command.filters(), graph);
             Outcome::Clean.into()
         }
-        Err(error) => {
-            let _ = writeln!(std::io::stderr(), "Error: {}", describe(&error));
-            Outcome::CouldNotRun.into()
-        }
+        Err(error) => report_service_error(error, profile, graph, format),
     }
 }
 
@@ -176,7 +171,7 @@ pub(super) fn run_diff(common: &Common, rev_a: &str, rev_b: &str, format: Format
     let (profile, graph_a, graph_b) = match loaded {
         Ok(loaded) => loaded,
         Err(message) => {
-            let _ = writeln!(std::io::stderr(), "Error: {message}");
+            write_stderr(&format!("Error: {message}"));
             return Outcome::CouldNotRun.into();
         }
     };
@@ -198,7 +193,30 @@ pub(super) fn run_diff(common: &Common, rev_a: &str, rev_b: &str, format: Format
     ) {
         Ok(response) => response,
         Err(error) => {
-            let _ = writeln!(std::io::stderr(), "Error: {}", describe(&error));
+            for (rev, graph, side) in [
+                (rev_a, &graph_a, InputSide::Before),
+                (rev_b, &graph_b, InputSide::After),
+            ] {
+                let mut issues: Vec<_> = error
+                    .diagnostics
+                    .iter()
+                    .filter(|diagnostic| diagnostic.side == side)
+                    .map(|diagnostic| diagnostic.issue.clone())
+                    .collect();
+                suppress_adapter_issues(&mut issues, &profile, graph);
+                if reportable(&issues, format) {
+                    echo(
+                        &format!("{}:", sanitize_text(rev)),
+                        Format::Plain,
+                        Stream::Stderr,
+                    );
+                    echo(&output_result(&issues, format), format, Stream::Stderr);
+                }
+                if let Some(notice) = partial_input_notice(&issues, format) {
+                    write_stderr(&format!("{rev}: {notice}"));
+                }
+            }
+            write_stderr(&format!("Error: {}", describe(&error)));
             return Outcome::CouldNotRun.into();
         }
     };
@@ -225,23 +243,29 @@ pub(super) fn run_diff(common: &Common, rev_a: &str, rev_b: &str, format: Format
     }
     for (rev, _, adapter_issues) in &sides {
         if reportable(adapter_issues, format) {
-            echo(&format!("{rev}:"), Format::Plain, Stream::Stderr);
+            echo(
+                &format!("{}:", sanitize_text(rev)),
+                Format::Plain,
+                Stream::Stderr,
+            );
             echo(
                 &output_result(adapter_issues, format),
                 format,
                 Stream::Stderr,
             );
         }
+        if let Some(notice) = partial_input_notice(adapter_issues, format) {
+            write_stderr(&format!("{rev}: {notice}"));
+        }
     }
     if !refused {
         return Outcome::Clean.into();
     }
     for (rev, _, _) in sides.iter().filter(|(_, unreadable, _)| *unreadable) {
-        let _ = writeln!(
-            std::io::stderr(),
+        write_stderr(&format!(
             "Error: no node could be read from the register at revision '{rev}', \
              so the diff was not answered"
-        );
+        ));
     }
     Outcome::CouldNotRun.into()
 }

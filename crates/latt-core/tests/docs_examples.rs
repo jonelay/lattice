@@ -197,6 +197,9 @@ const OPENSPEC_KINDS: &str = "node_kinds:\n  requirement: { id_pattern: \".\" }\
 
 /// How one documented block is checked.
 enum Check {
+    /// A complete profile, loaded as written and stored nowhere, so a second
+    /// complete example cannot become the `extends` parent.
+    Profile,
     /// A complete profile, loaded as written; the file's later `Extends`
     /// block names it as parent.
     Complete,
@@ -254,6 +257,7 @@ fn claims(file: &str) -> Option<Vec<(&'static str, Check)>> {
         "docs/profiles.md" => vec![
             ("name: md\n", Check::Shipped("profiles/md.yaml")),
             ("name: decisions\n", Check::Complete),
+            ("name: obligations\n", Check::Profile),
             ("node_kinds:\n  req:", Check::Fragment),
             ("node_kinds:\n  issue:", Check::Fragment),
             ("attrs:\n  text:", Check::Fragment),
@@ -350,7 +354,10 @@ fn claims(file: &str) -> Option<Vec<(&'static str, Check)>> {
                 },
             ),
         ],
-        "docs/ci.md" => vec![("allow_failure:", Check::CiJob)],
+        "docs/ci.md" => vec![
+            ("allow_failure:", Check::CiJob),
+            ("- NO_MATCHING_FILES:", Check::Fragment),
+        ],
         "docs/json.md" => vec![("\"findings\": [", Check::ValidateOutput)],
         "docs/fuse.md" => vec![
             ("manifest_version:", Check::Manifest),
@@ -366,7 +373,14 @@ fn claim_for<'t>(
     table: &'t [(&'static str, Check)],
     body: &str,
 ) -> &'t (&'static str, Check) {
-    let matches: Vec<&(&str, Check)> = table.iter().filter(|(m, _)| body.contains(m)).collect();
+    let named = body.starts_with("name:")
+        && table
+            .iter()
+            .any(|(m, _)| m.starts_with("name:") && body.contains(m));
+    let matches: Vec<&(&str, Check)> = table
+        .iter()
+        .filter(|(m, _)| (!named || m.starts_with("name:")) && body.contains(m))
+        .collect();
     match matches.as_slice() {
         [one] => one,
         [] => panic!("{where_}: no test path claims this example"),
@@ -439,6 +453,9 @@ impl FileRun {
                     Err(invalid.join("; "))
                 }
             }
+            Check::Profile => load_profile_value(parse_yaml(where_, body), where_)
+                .map(drop)
+                .map_err(|e| e.to_string()),
             Check::Fragment => {
                 let value = overlay(where_, parse_yaml(where_, body));
                 load_profile_value(value, where_)

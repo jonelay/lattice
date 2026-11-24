@@ -474,7 +474,8 @@ on the notes file at the line of that entry, or with no line when the entry has 
 SHALL first show the entry to add (`- finding: {code: <code>, node: <node>}` and
 `note:`) on the status line; pressing `A` again, with nothing pressed between, SHALL open
 `$EDITOR` on the notes file at its last line. When the editor exits, browse SHALL reload
-the profile and the register as `R` does. `A` SHALL instead leave browse up and
+the profile and the register as `R` does, and an editor that could not start or exited
+non-zero SHALL be named on the status line after the reload, as for `e`. `A` SHALL instead leave browse up and
 say why on the status line when the profile declares no `annotations`, when the notes
 file does not exist (naming the resolved path), when the finding has no node, and when
 `$EDITOR` is unset. `A` acts on the selected finding in the findings list and on a
@@ -626,10 +627,11 @@ against the target directory, is not a file in the working tree (a path on a git
 branch, an API locator), and when the selected finding is about an input as a whole
 (its origin is the profile, a fuse profile or source, or a suggestion document), naming
 the finding and the input. Browse SHALL never hand the editor a path that does not
-exist.
+exist. When the editor cannot start, exits non-zero or is ended by a signal, the status
+line SHALL say so when browse resumes, naming the editor; a clean exit says nothing.
 
 Verified by: demonstration, and `cargo test -p latt --locked`
-(`jump_to_source` unit tests, `e_runs_a_declared_edit_action`,
+(`jump_to_source` unit tests, `editor_tests`, `e_runs_a_declared_edit_action`,
 `e_without_an_edit_action_keeps_the_editor`,
 `jump_and_preview_on_a_profile_finding_say_it_has_no_file`).
 
@@ -641,6 +643,12 @@ Verified by: demonstration, and `cargo test -p latt --locked`
 #### Scenario: No editor configured
 - **WHEN** `$EDITOR` is unset and the user presses `e`
 - **THEN** the TUI stays up and the status line says to set `$EDITOR`
+
+#### Scenario: The editor fails
+- **WHEN** `$EDITOR` names a program that does not exist, or one that exits 3, and the
+  user presses `e`
+- **THEN** browse resumes with the status line saying `<editor> could not start: <why>`,
+  or `<editor> exited 3`
 
 #### Scenario: Provenance is not a work-tree file
 - **WHEN** the user presses `e` on a node whose provenance is `entomologist-data:5a3f`

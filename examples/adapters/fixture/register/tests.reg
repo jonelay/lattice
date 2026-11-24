@@ -1,0 +1,8 @@
+# Tests, and the requirements each verifies
+test T-1 verifies REQ-1: Overpressure trips the relay
+test T-3 verifies
+test T-2 verifies REQ-2 verifies REQ-9: Relay opens
+test T-4 verifies REQ-3: Log line names the café sensor
+    # an indented comment
+test T-5   verifies REQ-3 :   Stop entry has a timestamp   
+test T-6 verifies REQ-1 REQ-2: Two targets for one edge kind

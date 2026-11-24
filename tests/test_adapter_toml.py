@@ -8,20 +8,14 @@ from pathlib import Path
 
 import pytest
 
-from conftest import resolve_profile
+from conftest import CORE_BIN, needs_core, resolve_profile
 
 REPO_ROOT = Path(__file__).parent.parent
 PROFILE_PATH = REPO_ROOT / "profiles" / "toml.yaml"
 DIRECTORY_PROFILE_PATH = REPO_ROOT / "profiles" / "toml-directory.yaml"
 ADAPTER_PATH = REPO_ROOT / "adapters" / "toml"
-CORE_BIN = REPO_ROOT / "target" / "debug" / "latt"
 FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "mini-toml"
 DIRECTORY_FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "mini-toml-directory"
-
-needs_core = pytest.mark.skipif(
-    not CORE_BIN.exists(), reason="core not built; run: cargo build"
-)
-
 
 def _run_adapter(target: Path, tmp_path: Path) -> dict:
     resolved = resolve_profile(PROFILE_PATH, tmp_path)

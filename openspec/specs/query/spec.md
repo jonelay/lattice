@@ -79,6 +79,9 @@ Adapter issues SHALL be reported on stderr after the answer regardless of
 severity (an answer computed from partially unreadable input must say so), and
 SHALL NOT otherwise affect the exit code. `query` and `coverage` are the commands where
 error-severity adapter issues leave the exit code at 0.
+When a service query fails after loading a register, the CLI SHALL report its
+retained adapter diagnostics on stderr before the operational error, applying the
+same profile suppression and output-format policy as for a successful query.
 
 A register that could not be read at all — the adapter declared no node and
 reported an unsuppressed error-severity issue — cannot be asked a question: an
@@ -114,6 +117,10 @@ Verified by: `cargo test --test query exit`, and
 #### Scenario: Unknown node ID argument
 - **WHEN** `latt query reaches REQ-NOPE` names an ID not in the graph
 - **THEN** lattice exits 2 with an error naming the ID, not an empty answer
+
+#### Scenario: Unknown node with partially unreadable input
+- **WHEN** `query reaches` or `query path` names an unknown node and the adapter reported `PARSE_ERROR` for another file
+- **THEN** lattice prints the `PARSE_ERROR` and the unknown-node error on stderr, prints no answer, and exits 2
 
 #### Scenario: Diff with an unreadable revision
 - **WHEN** `latt query diff A B` runs and at `B` the register's only file is
@@ -409,23 +416,155 @@ Verified by: `cargo test --test query json`
 
 ### Requirement: Diff materialization is bounded
 `latt query diff` SHALL wait no longer than the profile's `adapter.timeout_seconds`
-(default 300 seconds) for the `git archive` and `tar` pair that materializes one
-revision. When the bound expires lattice SHALL terminate both processes, remove the
-partial materialization, and exit 2 with a message naming the revision and the bound,
+(default 300 seconds) for the `git --version` probe, the `git rev-parse`, `git ls-tree` and
+`git cat-file` runs that materialize one revision, one bound for all four. A probe that
+expires is not remembered: the next run asks again. When the bound expires lattice SHALL terminate the
+running process, remove the partial materialization, and exit 2 with a message naming
+the revision and the bound,
 exactly as it exits 2 for an unknown revision. The bound is the adapter run's bound
 rather than a separate key because the materialization is a step of the same load the
 profile governs, and a fixed bound could not be exercised by a hermetic test.
 
 Before extracting a revision, lattice SHALL clear the earlier one; when it cannot, it
 SHALL exit 2 naming the directory rather than extract over it, since a revision read
-over a partly cleared tree mixes two trees. A failed `tar` SHALL be reported with
-`tar`'s own stderr.
+over a partly cleared tree mixes two trees. A `git ls-tree` or `git cat-file` that exits
+non-zero SHALL be reported with its own stderr, also when a write failure ended the read
+(the SIGPIPE it then dies of is the consequence); a blob that cannot be written SHALL be
+reported by its path, and no partial tree is ever a success: the directory is emptied.
+
+Before any git command runs, the `git --version` probe included, lattice SHALL refuse an
+empty revision, one that starts with `-`, or one holding NUL, and SHALL resolve the rest to an object id
+with `git rev-parse --verify` (`--end-of-options` where git has it). The id, never the
+user's text, goes to every later git command. A refusal exits 2 with `'<rev>' is not a revision in
+<target>` and git's one-line reason, without git's usage text. The scratch directory
+SHALL be created exclusively (an existing path is never adopted) with mode 0700 and an
+unpredictable name; the second revision is extracted into the same directory after its
+contents are removed, and dropping the guard removes only a real directory it created.
+A scratch path that is no longer that directory (renamed and replaced, on Unix by device
+and inode) when checked SHALL be neither cleared, written nor removed; the extraction exits 2.
+The check precedes the clearing and each write and is not atomic with them: a process
+running as the same user that can rename entries in the directory holding the scratch
+directory (`TMPDIR`) while extraction runs is outside what it defends against.
 
 Verified by: `cargo test --test query diff_materialization_exceeding_its_bound_exits_two`,
+`cargo test --test query diff_materialization_reports_a_failed_blob_read_with_gits_stderr`,
+`cargo test -p latt-core --lib a_blob_that_cannot_be_written_is_an_error_and_leaves_no_tree`,
+`cargo test --test query diff_refuses_a_revision_that_looks_like_an_option`,
+`cargo test --test query diff_refuses_an_option_revision_without_running_git`,
+`cargo test --test query diff_bounds_a_git_version_probe_that_stalls`,
+`cargo test --test query diff_bound_holds_when_a_git_descendant_keeps_the_pipe_open`,
+`cargo test -p latt-core --lib the_directory_is_exclusive_private_and_owned`,
+`cargo test -p latt-core --lib a_second_materialization_keeps_the_directory_and_its_mode`,
+`cargo test -p latt-core --lib a_revision_resolves_to_an_object_id_with_or_without_end_of_options`,
+`cargo test -p latt-core --lib a_ref_git_cannot_read_is_bounded_by_the_timeout`,
+`cargo test -p latt-core --lib a_directory_renamed_and_replaced_is_neither_cleared_nor_removed`,
 and `cargo test -p latt-core --lib a_tree_that_cannot_be_cleared_is_an_error_not_a_merge`.
 
-#### Scenario: git archive does not answer
+#### Scenario: git cat-file fails while a revision is read
+- **WHEN** the `git` on `PATH` writes `No space left on device` to stderr and exits 128
+  for `cat-file`
+- **THEN** `latt query diff` exits 2 with a message naming `git cat-file` and the
+  revision and carrying `No space left on device`
+
+#### Scenario: A blob cannot be written
+- **WHEN** the scratch directory is not writable while a revision is extracted
+- **THEN** the extraction fails naming the first path (`cannot materialize 'a.txt' at
+  'HEAD': ...`) and the directory holds no partial tree
+
+#### Scenario: git does not answer
 - **WHEN** the profile declares `adapter: { timeout_seconds: 1 }` and the `git` on
-  `PATH` does not exit within one second for `archive`
+  `PATH` does not exit within one second for `cat-file`
 - **THEN** `latt query diff` exits 2 naming the revision and `1` second, and leaves
   no partial materialization behind
+
+#### Scenario: A process git started keeps the blob pipe open
+- **WHEN** the profile declares `adapter: { timeout_seconds: 1 }` and a process the
+  `git cat-file` run started keeps `cat-file`'s output open after git is killed
+- **THEN** `latt query diff` exits 2 within the bound with a message naming `exceeded`;
+  the reader does not wait for that process to exit, and no partial materialization is left
+
+#### Scenario: A stalled git version probe is bounded
+- **WHEN** the profile declares `adapter: { timeout_seconds: 1 }` and the `git` on
+  `PATH` does not answer `--version`
+- **THEN** `latt query diff` exits 2 within the bound with a message naming `1` second
+
+#### Scenario: An option revision starts no git process
+- **WHEN** `latt query diff -- -x <rev>` runs
+- **THEN** it exits 2 with `cannot start with '-'` and no `git` process was started
+
+#### Scenario: A ref git cannot read is bounded
+- **WHEN** a revision names a ref that is a FIFO under `.git/refs/heads` and the bound is
+  one second
+- **THEN** resolving it fails within the bound with a message naming `1 s`
+
+#### Scenario: A replaced scratch directory is left alone
+- **WHEN** the scratch directory is renamed and a new directory holding a file is created
+  at its path before a revision is extracted
+- **THEN** the extraction exits 2 saying the path is no longer the directory lattice
+  created, and the file survives both the extraction and the guard's drop
+
+### Requirement: Diff materialization is faithful
+`latt query diff` SHALL materialize each revision from its committed blobs: the bytes of
+every tree entry as stored, read with `git ls-tree -r -z` and one `git cat-file
+--batch`. Attributes (`export-ignore`, `export-subst`, `text`, `eol`, `filter`) SHALL
+NOT apply and no smudge filter SHALL run, so the adapter reads what the repository
+holds and a register file marked `export-ignore` is read. A tree scoped by running from
+a target subdirectory SHALL materialize that subdirectory's content only. Mode `100644`
+becomes a file of mode 0644, `100755` of 0755, `120000` a symlink whose target is the
+blob text, `160000` (a submodule) an empty directory; any other mode SHALL be refused.
+Directories and regular files are created first (a file never replaces an existing path)
+and symlinks last, so nothing is written through a link.
+
+Every git command runs in the target's own repository on the objects as stored. The
+repository-selecting environment variables git lists as local (`GIT_DIR`,
+`GIT_WORK_TREE`, `GIT_OBJECT_DIRECTORY`, `GIT_ALTERNATE_OBJECT_DIRECTORIES`,
+`GIT_INDEX_FILE`, `GIT_COMMON_DIR` and the rest of `git rev-parse --local-env-vars`) and
+`GIT_NAMESPACE` SHALL NOT apply, and replacement objects (`refs/replace/*`) SHALL NOT
+substitute any blob or tree. Grafts (`.git/info/grafts`) are not covered.
+
+A tree entry whose path is empty, absolute, or has a component that is empty, `.`, `..`
+or `.git` (in any letter case), or off Unix a component holding `\` or `:`, SHALL be refused with exit 2 and `cannot materialize
+'<path>' at '<rev>': <reason>`, naming the first such path and counting the others;
+no entry is skipped in silence.
+
+Verified by: `cargo test --test query diff_reads_a_register_file_marked_export_ignore`,
+`cargo test --test query diff_reads_a_register_file_marked_export_ignore_on_the_older_revision`,
+`cargo test --test query diff_ignores_export_subst_eol_and_filter_attributes`,
+`cargo test --test query diff_of_a_large_tree`,
+`cargo test --test query diff_reads_the_target_repository_not_an_inherited_git_dir`,
+`cargo test --test query diff_reads_stored_blobs_not_replacement_objects`,
+`cargo test --test query diff_from_a_target_subdirectory_scopes_like_archive`,
+`cargo test -p latt-core --lib modes_symlinks_and_gitlinks_are_materialized`,
+and `cargo test -p latt-core --lib a_path_that_escapes_is_refused`.
+
+#### Scenario: A register file marked export-ignore is read
+- **WHEN** a revision commits `.gitattributes` with `doc.json export-ignore` and the
+  adapter reads `doc.json` from the materialized target
+- **THEN** the adapter finds the file and the diff reports its nodes
+
+#### Scenario: Attributes and filters do not change the bytes
+- **WHEN** a revision's `.gitattributes` sets `text eol=crlf`, `export-subst` and a
+  `filter` whose smudge command creates a marker file
+- **THEN** the adapter reads the committed LF bytes and the literal `$Format:%H$`, and
+  the marker file is never created
+
+#### Scenario: An inherited repository variable does not apply
+- **WHEN** `latt query diff` runs with `GIT_DIR` set to another repository's `.git`
+  (as inside a git hook or `git rebase --exec`)
+- **THEN** the diff reports the target repository's changes and none of the other
+  repository's
+
+#### Scenario: Replacement objects do not apply
+- **WHEN** the target holds a `refs/replace/*` ref that replaces a register blob of
+  revision B with revision A's
+- **THEN** the diff is the one a repository without the replacement gives
+
+#### Scenario: Modes, symlinks and submodules
+- **WHEN** a tree holds a `100755` file, a `120000` link to `../x` and a `160000` entry
+- **THEN** the file is executable, the link reads `../x`, and the submodule is an empty
+  directory
+
+#### Scenario: A path that escapes is refused
+- **WHEN** a tree holds an entry named `../up` or `.git/hooks`
+- **THEN** `latt query diff` exits 2 with `cannot materialize '../up' at '<rev>'` and
+  nothing is written outside the scratch directory

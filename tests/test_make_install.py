@@ -14,14 +14,10 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).parent.parent
+from conftest import CORE_BIN, REPO_ROOT, needs_core
+
 SCRIPT = REPO_ROOT / "tools" / "make-install.sh"
-DEBUG = REPO_ROOT / "target" / "debug"
-
-needs_core = pytest.mark.skipif(
-    not (DEBUG / "latt").exists(), reason="core not built; run: cargo build"
-)
-
+DEBUG = CORE_BIN.parent
 
 def manifest() -> list[str]:
     lines = (REPO_ROOT / "tools" / "install-files").read_text().splitlines()

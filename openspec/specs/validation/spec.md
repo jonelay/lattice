@@ -99,6 +99,8 @@ applies to it by code string like any other.
 - `WRAPPED_REF`: a reference a line break split from the file it names
 - `NO_MATCHING_FILES`: the target is readable but no path matches the configured
   globs (`latt-adapter`, at info)
+- `UNFOLLOWED_LINK`: a symlinked directory beneath the target that the walk does not
+  enter (`latt-adapter`, at info)
 - `PATHWAY_INVALID`: a register declares an ordering pathway that does not hold — a current
   position absent from its order, either value of the wrong shape, one of the pair
   declared without the other, or repeated positions in the order. `latt-adapter`, which the Rust
@@ -1204,7 +1206,8 @@ severity or suppress it like any built-in code; at the default `info`, `--strict
 it alone, and a profile that promotes it to `warning` gates on it under `--strict`.
 
 A clean exit over a register whose adapter read no tests, or built no edges, then
-carries the reason on its own output.
+carries the reason on its own output. Under `fuse` the population counted is the
+whole composed one (program-composition, "Standard validators on the composed graph").
 
 Verified by: `cargo test -p latt-core --locked empty_kind`.
 

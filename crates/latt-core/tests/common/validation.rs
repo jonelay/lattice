@@ -3,6 +3,7 @@
 use latt_core::profile::Profile;
 use latt_core::types::Issue;
 use serde_json::{Value, json};
+use std::fmt::Write as _;
 
 use latt_core::graph::LatticeGraph;
 use std::path::Path;
@@ -103,9 +104,10 @@ pub fn constraint_profile(constraint_yaml: &str) -> String {
 pub fn coverage_profile(edge_kinds: &[&str]) -> String {
     let mut yaml = format!("{KINDS_PROFILE}validations:\n");
     for edge_kind in edge_kinds {
-        yaml.push_str(&format!(
+        let _ = write!(
+            yaml,
             "  - COVERAGE:\n      target_kind: req\n      edge_kind: {edge_kind}\n"
-        ));
+        );
     }
     yaml
 }

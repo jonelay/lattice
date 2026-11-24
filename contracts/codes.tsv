@@ -10,6 +10,7 @@ COVERAGE	core	warning	yes
 COVERAGE_DEEP	core	warning	yes
 COVERAGE_UNKNOWN	core	hint	no
 CROSS_SOURCE_DUPLICATE_ID	fuse	error	yes
+DEPRECATED_KEY	core	info	no
 EDGE_CONSTRAINT	core	error	yes
 EDGE_COUNT	core	warning	yes
 EDGE_WHERE	core	warning	yes
@@ -32,6 +33,7 @@ SUGGESTED_EDGE	core	hint	yes
 SUGGESTION_UNRANKED	core	hint	no
 SUGGESTION_UNRESOLVED	core	hint	no
 SUPPRESS_UNUSED	core	info	no
+UNFOLLOWED_LINK	adapter	-	no
 UNKNOWN_KIND	core	error	yes
 UNREAD_ENTRIES	adapter	-	no
 UNREFERENCED	core	warning	yes

@@ -92,7 +92,9 @@ def test_three_revisions_report_every_pair() -> None:
             "output": {"sha256": "same"},
             "measurements": {
                 "wall_time_nanoseconds": {"summary": {"median": wall}},
-                "peak_rss_kibibytes": {"summary": {"median": rss}},
+                "peak_rss_kibibytes": {
+                    "summary": {"minimum": rss, "median": rss, "maximum": rss}
+                },
             },
         }
 
@@ -111,6 +113,30 @@ def test_three_revisions_report_every_pair() -> None:
     ]
 
 
+def test_comparison_reports_peak_rss_movement_per_mode() -> None:
+    """A median that flips between two RSS modes is read beside the extremes' movement."""
+
+    def revision(ref: str, low: int, median: int, high: int) -> dict[str, object]:
+        return {
+            "ref": ref,
+            "output": {"sha256": "same"},
+            "measurements": {
+                "wall_time_nanoseconds": {"summary": {"median": 100}},
+                "peak_rss_kibibytes": {
+                    "summary": {"minimum": low, "median": median, "maximum": high}
+                },
+            },
+        }
+
+    [record] = collector.comparisons(
+        [revision("v0.8.0", 100, 100, 120), revision("main", 100, 120, 120)]
+    )
+
+    assert record["peak_rss_median_percent_change"] == pytest.approx(20.0)
+    assert record["peak_rss_minimum_percent_change"] == pytest.approx(0.0)
+    assert record["peak_rss_maximum_percent_change"] == pytest.approx(0.0)
+
+
 def test_release_qualification_requires_exact_main_and_candidate_tag(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -119,16 +145,54 @@ def test_release_qualification_requires_exact_main_and_candidate_tag(
     monkeypatch.setattr(collector, "resolve_commit", lambda _ref: "b" * 40)
 
     collector.validate_release_qualification_refs(
-        ["v0.7.1", main_commit, "v0.8.0-rc.1"]
+        ["v0.8.0", main_commit, "v0.8.1-rc.1"], "v0.8.0"
     )
+    collector.validate_release_qualification_refs(
+        ["v0.8.0", main_commit, "v0.9.0-rc.2"], "v0.8.0"
+    )
+    with pytest.raises(RuntimeError, match="baseline must be v0.8.0"):
+        collector.validate_release_qualification_refs(
+            ["v0.7.1", main_commit, "v0.8.1-rc.1"], "v0.8.0"
+        )
     with pytest.raises(RuntimeError, match="full 40-character commit SHA"):
         collector.validate_release_qualification_refs(
-            ["v0.7.1", "main", "v0.8.0-rc.1"]
+            ["v0.8.0", "main", "v0.8.1-rc.1"], "v0.8.0"
         )
-    with pytest.raises(RuntimeError, match="must be v0.8.0-rc.N"):
+    for candidate in ("release-candidate", "v0.7.9-rc.1", "v0.8.1", "v0.8.1-rc.0"):
+        with pytest.raises(RuntimeError, match=r"must be vX\.Y\.Z-rc\.N on the same or a later release line than v0\.8\.0"):
+            collector.validate_release_qualification_refs(
+                ["v0.8.0", main_commit, candidate], "v0.8.0"
+            )
+
+
+def test_release_qualification_accepts_reopened_release_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A new RC may qualify against the frozen release on its own version line."""
+    candidate = "v0.8.1-rc.6"
+    calls = []
+
+    def tag_commit(args: list[str]) -> str:
+        calls.append(args)
+        return "b" * 40
+
+    monkeypatch.setattr(collector, "run_text", tag_commit)
+    monkeypatch.setattr(collector, "resolve_commit", lambda _ref: "b" * 40)
+    collector.validate_release_qualification_refs(
+        ["v0.8.1", "a" * 40, candidate], "v0.8.1"
+    )
+    assert calls == [["git", "rev-parse", "--verify", f"refs/tags/{candidate}^{{commit}}"]]
+
+    monkeypatch.setattr(collector, "resolve_commit", lambda _ref: "c" * 40)
+    with pytest.raises(RuntimeError, match="not the matching tag"):
         collector.validate_release_qualification_refs(
-            ["v0.7.1", main_commit, "release-candidate"]
+            ["v0.8.1", "a" * 40, candidate], "v0.8.1"
         )
+
+
+def test_previous_release_is_the_frozen_contract_version() -> None:
+    version = (collector.ROOT / "contracts" / "released" / "VERSION").read_text().strip()
+    assert collector.previous_release() == f"v{version}"
 
 
 def test_alias_refs_keep_independent_sample_buckets(
@@ -140,30 +204,28 @@ def test_alias_refs_keep_independent_sample_buckets(
             "commit": "same",
             "binary": str(tmp_path / "main"),
             "adapter": str(tmp_path / "main-adapter"),
+            "command": [str(tmp_path / "main"), "validate"],
         },
         {
             "ref": "v0.8.0-rc.1",
             "commit": "same",
             "binary": str(tmp_path / "candidate"),
             "adapter": str(tmp_path / "candidate-adapter"),
+            "command": [str(tmp_path / "candidate"), "validate"],
         },
     ]
 
     sample_dirs: list[Path] = []
 
     def fake_measure(
-        binary: Path,
-        _adapter: Path,
-        _fixture: Path,
-        scratch: Path,
-        expected_exit_status: int,
+        command: list[str], scratch: Path, expected_exit_status: int
     ) -> dict[str, str]:
         assert expected_exit_status == 0
         sample_dirs.append(scratch)
-        return {"binary": binary.name}
+        return {"binary": Path(command[0]).name}
 
     monkeypatch.setattr(collector, "measure", fake_measure)
-    samples = collector.collect_measurements(built, 0, 2, tmp_path, tmp_path, 0)
+    samples = collector.collect_measurements(built, 0, 2, tmp_path, 0)
 
     assert samples == [
         [{"binary": "main"}, {"binary": "main"}],
@@ -194,7 +256,6 @@ def test_measure_uses_wait4_without_an_external_time_program(
 ) -> None:
     profile = tmp_path / "profile.yaml"
     profile.write_text("profile")
-    monkeypatch.setattr(collector, "PROFILE", profile)
     fixture = tmp_path / "fixture"
     fixture.mkdir()
     output = json.dumps({"findings": []}) + "\n"
@@ -205,11 +266,30 @@ def test_measure_uses_wait4_without_an_external_time_program(
     adapter.write_text("#!/bin/sh\nexit 0\n")
     adapter.chmod(0o755)
 
-    sample = collector.measure(binary, adapter, fixture, tmp_path / "sample", 0)
+    command = collector.measured_command(
+        E2E_SCENARIO["command"], binary, adapter, profile, fixture
+    )
+    # A shell stub uses less memory than pytest; the floor guard has its own test.
+    monkeypatch.setattr(collector, "collector_peak_rss", lambda: 0)
+    sample = collector.measure(command, tmp_path / "sample", 0)
+    collector.add_output_semantics(sample)
 
     assert sample["exit_status"] == 0
     assert sample["peak_rss_kibibytes"] > 0
     assert sample["findings"]["finding_count"] == 0
+
+
+def test_measure_refuses_a_sample_at_the_collector_floor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    binary = tmp_path / "latt"
+    binary.write_text("#!/bin/sh\nprintf '{\"findings\": []}\\n'\n")
+    binary.chmod(0o755)
+    template = "lattice validate --target <fixture> --format json"
+    command = collector.measured_command(template, binary, tmp_path, tmp_path, tmp_path)
+    monkeypatch.setattr(collector, "collector_peak_rss", lambda: 10**9)
+    with pytest.raises(RuntimeError, match="does not exceed the collector's own peak"):
+        collector.measure(command, tmp_path / "sample", 0)
 
 
 def test_measure_rejects_an_unexpected_exit_status(
@@ -217,7 +297,6 @@ def test_measure_rejects_an_unexpected_exit_status(
 ) -> None:
     profile = tmp_path / "profile.yaml"
     profile.write_text("profile")
-    monkeypatch.setattr(collector, "PROFILE", profile)
     fixture = tmp_path / "fixture"
     fixture.mkdir()
     binary = tmp_path / "latt"
@@ -228,7 +307,10 @@ def test_measure_rejects_an_unexpected_exit_status(
     adapter.chmod(0o755)
 
     with pytest.raises(RuntimeError, match="returned 2, expected 0"):
-        collector.measure(binary, adapter, fixture, tmp_path / "sample", 0)
+        command = collector.measured_command(
+            E2E_SCENARIO["command"], binary, adapter, profile, fixture
+        )
+        collector.measure(command, tmp_path / "sample", 0)
 
 
 def test_generated_report_matches_the_versioned_schema(
@@ -869,3 +951,169 @@ def test_a_schema_1_2_record_requires_the_preflight() -> None:
         {**revision, "preflight": E2E_PREFLIGHT} for revision in record["revisions"]
     ]
     validator.validate(record)
+
+
+E2E_DIR = ROOT / "benchmarks" / "e2e"
+TRACE_SCENARIOS = [E2E_DIR / "trace-large-text-v1.json", E2E_DIR / "trace-sparse-non-ascii-v1.json"]
+
+
+def test_the_default_template_builds_the_validate_command(tmp_path: Path) -> None:
+    binary, adapter, profile, fixture = (tmp_path / name for name in ("latt", "a", "p", "f"))
+    assert collector.measured_command(
+        E2E_SCENARIO["command"], binary, adapter, profile, fixture
+    ) == [
+        str(binary), "validate", "--profile", str(profile), "--adapter", str(adapter),
+        "--target", str(fixture), "--format", "json",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("template", "message"),
+    [
+        ("lattice validate --target <register>", "unknown placeholder <register>"),
+        ("lattice query counts --target <fixture>", "subcommand query"),
+        ("latt validate --target <fixture>", "must start with lattice"),
+    ],
+)
+def test_an_unsupported_template_is_refused(template: str, message: str, tmp_path: Path) -> None:
+    with pytest.raises(RuntimeError, match=message):
+        collector.measured_command(template, tmp_path, tmp_path, tmp_path, tmp_path)
+
+
+def test_a_scenario_names_its_profile_or_takes_the_default(tmp_path: Path) -> None:
+    named = tmp_path / "named.json"
+    named.write_text(json.dumps({**E2E_SCENARIO, "profile": "profile-text.yaml"}))
+    assert collector.load_scenario(collector.SCENARIO) == (E2E_SCENARIO, collector.PROFILE)
+    assert collector.load_scenario(named)[1] == E2E_DIR / "profile-text.yaml"
+
+
+def generate(tmp_path: Path, manifest: dict[str, object]) -> subprocess.CompletedProcess[str]:
+    path = tmp_path / "scenario.json"
+    path.write_text(json.dumps(manifest))
+    return subprocess.run(
+        [sys.executable, GENERATOR_PATH, path, tmp_path / "fixture"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+@pytest.mark.parametrize("replace", [None, "é"])
+def test_generator_writes_text_of_the_declared_size(tmp_path: Path, replace: str | None) -> None:
+    text: dict[str, object] = {"bytes": 64}
+    if replace is not None:
+        text["replace"] = replace
+    chain = {"generator": "deterministic-forward-chain-v1", "node_count": 3, "edge_count": 2}
+    assert generate(tmp_path, {**chain, "text": text}).returncode == 0
+    register = (tmp_path / "fixture" / "register.toml").read_text(encoding="utf-8")
+    texts = re.findall(r'^text = "(.*)"$', register, flags=re.MULTILINE)
+    assert len(texts) == 3 and len(set(texts)) == 3
+    for value in texts:
+        assert len(value.encode("utf-8")) == 64
+        assert value.isascii() == (replace is None)
+        if replace is not None:
+            assert value.startswith(replace) and value[1:].isascii()
+
+
+def test_generator_refuses_a_replacement_the_text_cannot_hold(tmp_path: Path) -> None:
+    chain = {"generator": "deterministic-forward-chain-v1", "node_count": 2, "edge_count": 1}
+    result = generate(tmp_path, {**chain, "text": {"bytes": 1, "replace": "é"}})
+    assert result.returncode != 0
+    assert "replace" in result.stderr
+
+
+def trace_output(entries: int, edges: int, unattachable: int) -> bytes:
+    finding = {"code": "UNTRACED", "severity": "info"}
+    payload = {
+        "entries": [
+            {
+                "id": f"n{index:05d}",
+                "edges": [{"kind": "references"}] if index < edges else [],
+                "findings": [finding] if index == 0 else [],
+            }
+            for index in range(entries)
+        ],
+        "unattachable_findings": [{"code": "UNREFERENCED", "severity": "info"}] * unattachable,
+    }
+    return json.dumps(payload).encode()
+
+
+def test_trace_output_counts_entry_and_unattachable_findings() -> None:
+    findings, counts = collector.trace_summary(trace_output(3, 2, 1))
+    assert findings == {
+        "finding_count": 2,
+        "by_code": {"UNREFERENCED": 1, "UNTRACED": 1},
+        "by_severity": {"info": 2},
+    }
+    assert counts == {"entry_count": 3, "edge_count": 2}
+    with pytest.raises(RuntimeError, match="entries array"):
+        collector.trace_summary(b'{"findings": []}')
+
+
+@pytest.mark.parametrize(
+    ("entries", "edges", "invariant"), [(2, 1, "entry_count"), (3, 1, "edge_count")]
+)
+def test_a_trace_output_that_drops_an_entry_or_edge_is_refused(
+    entries: int, edges: int, invariant: str
+) -> None:
+    scenario = {**E2E_SCENARIO, "node_count": 3, "edge_count": 2}
+    _findings, counts = collector.trace_summary(trace_output(entries, edges, 0))
+    with pytest.raises(RuntimeError, match=f"revision main violates the {invariant} invariant"):
+        collector.ensure_trace_counts(counts, "main", scenario)
+    _findings, whole = collector.trace_summary(trace_output(3, 2, 0))
+    collector.ensure_trace_counts(whole, "main", scenario)
+
+
+def test_measure_reads_a_trace_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = tmp_path / "trace.json"
+    payload.write_bytes(trace_output(3, 2, 1))
+    binary = tmp_path / "latt"
+    binary.write_text(f"#!/bin/sh\ncat '{payload}'\n")
+    binary.chmod(0o755)
+    template = "lattice trace --target <fixture> --format json"
+    command = collector.measured_command(template, binary, tmp_path, tmp_path, tmp_path)
+    monkeypatch.setattr(collector, "collector_peak_rss", lambda: 0)
+    sample = collector.measure(command, tmp_path / "sample", 0)
+    collector.add_output_semantics(sample)
+    assert sample["findings"]["finding_count"] == 2
+    assert sample["trace_counts"] == {"entry_count": 3, "edge_count": 2}
+
+
+def test_only_the_default_scenario_writes_the_routine_record() -> None:
+    benchmarks = ROOT / "target" / "benchmarks"
+    assert collector.default_output_path(E2E_SCENARIO) == benchmarks / "lattice-e2e-v1.json"
+    trace = json.loads(TRACE_SCENARIOS[0].read_text())
+    assert collector.default_output_path(trace) == (
+        benchmarks / "lattice-e2e-trace-large-text-v1.json"
+    )
+
+
+@pytest.mark.parametrize("path", TRACE_SCENARIOS, ids=lambda path: path.stem)
+def test_trace_scenarios_declare_the_s185_workloads(path: Path) -> None:
+    scenario, profile = collector.load_scenario(path)
+    assert profile.is_file()
+    collector.expected_invariants(scenario)
+    assert scenario["id"] == path.stem
+    assert scenario["generator"] == "deterministic-forward-chain-v1"
+    assert (scenario["node_count"], scenario["edge_count"]) == (16384, 16383)
+    assert scenario["text"]["bytes"] == 1024
+    assert collector.measured_command(
+        scenario["command"], Path("b"), Path("a"), profile, Path("f")
+    )[1] == "trace"
+    schema = json.loads(REPORT_SCHEMA_PATH.read_text())
+    scenario_schema = {**schema["properties"]["scenario"], "$defs": schema["$defs"]}
+    Draft202012Validator(scenario_schema).validate(scenario)
+
+
+def test_release_qualification_refuses_another_scenario() -> None:
+    result = subprocess.run(
+        [
+            sys.executable, COLLECTOR_PATH, "--release-qualification",
+            "--scenario", TRACE_SCENARIOS[0], "v0.8.0", "a" * 40, "v0.8.1-rc.1",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "default scenario only" in result.stderr

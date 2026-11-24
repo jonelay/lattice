@@ -129,12 +129,17 @@ pub(super) fn key_name(key: &Value) -> String {
 }
 
 /// Name every key of `mapping` outside `allowed`, so a typo is a load error
-/// rather than a setting that silently does nothing. `allowed` must be sorted.
+/// rather than a setting that silently does nothing. The error lists `allowed`
+/// as given, so it is kept sorted.
 pub(super) fn reject_unknown_keys(
     mapping: &serde_norway::Mapping,
     allowed: &[&str],
     where_: &str,
 ) -> Result<(), ProfileError> {
+    debug_assert!(
+        allowed.is_sorted(),
+        "{where_}: allowed keys unsorted: {allowed:?}"
+    );
     let mut unknown: Vec<String> = mapping
         .keys()
         .map(key_name)
@@ -218,63 +223,77 @@ fn merge_values(parent: Value, child: Value) -> Value {
     }
 }
 
-/// Parse one YAML file and, if it declares `extends`, recurse into the parent
-/// and merge. Returns the merged raw value with `extends` stripped.
+/// Parse a YAML profile and merge its ancestors from oldest to newest.
+/// Return the merged raw value with `extends` stripped.
 pub(super) fn load_raw(
     path: &Path,
     visited: &mut Vec<std::path::PathBuf>,
 ) -> Result<Value, ProfileError> {
-    let io = |source: std::io::Error| {
-        if source.kind() == std::io::ErrorKind::NotFound {
-            return ProfileError::NotFound {
-                path: path.to_owned(),
-                candidates: super::profile_candidates(path),
-            };
-        }
-        ProfileError::Io {
-            path: path.to_owned(),
-            source,
-        }
-    };
-    let canonical = path.canonicalize().map_err(io)?;
-    if visited.contains(&canonical) {
-        return err(format!(
-            "profile inheritance cycle: {} was already visited",
-            path.display()
-        ));
-    }
-    visited.push(canonical);
-
-    let text = std::fs::read_to_string(path).map_err(io)?;
-    let mut raw: Value = serde_norway::from_str(&text).map_err(|source| ProfileError::Yaml {
-        path: path.to_owned(),
-        source,
-    })?;
-
-    let annotations_key = Value::String("annotations".into());
-    if let Value::Mapping(ref mut top) = raw
-        && let Some(declared) = top.get_mut(&annotations_key)
-    {
-        let Value::String(relative) = declared else {
-            return err(format!(
-                "profile {}: 'annotations' must be a string path, got {}",
-                path.display(),
-                name(declared)
-            ));
+    let mut current = path.to_owned();
+    let mut children: Vec<(PathBuf, Value)> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    loop {
+        let io = |source: std::io::Error| {
+            if source.kind() == std::io::ErrorKind::NotFound {
+                ProfileError::NotFound {
+                    path: current.clone(),
+                    candidates: super::profile_candidates(&current),
+                }
+            } else {
+                ProfileError::Io {
+                    path: current.clone(),
+                    source,
+                }
+            }
         };
-        let base_dir = path.parent().unwrap_or(Path::new("."));
-        let resolved = std::path::absolute(base_dir.join(&*relative)).map_err(io)?;
-        *declared = Value::String(resolved.to_string_lossy().into_owned());
-    }
-
-    let extends_key = Value::String("extends".into());
-    if let Value::Mapping(ref mut top) = raw
-        && let Some(extends_val) = top.shift_remove(&extends_key)
-    {
-        let Value::String(ref parent_path_str) = extends_val else {
+        let canonical = current.canonicalize().map_err(io)?;
+        if !seen.insert(canonical.clone()) {
+            return err(format!(
+                "profile inheritance cycle: {} was already visited",
+                current.display()
+            ));
+        }
+        visited.push(canonical);
+        let text = std::fs::read_to_string(&current).map_err(io)?;
+        let mut raw: Value =
+            serde_norway::from_str(&text).map_err(|source| ProfileError::Yaml {
+                path: current.clone(),
+                source,
+            })?;
+        if let Value::Mapping(ref mut top) = raw
+            && let Some(declared) = top.get_mut(Value::String("annotations".into()))
+        {
+            let Value::String(relative) = declared else {
+                return err(format!(
+                    "profile {}: 'annotations' must be a string path, got {}",
+                    current.display(),
+                    name(declared)
+                ));
+            };
+            let base_dir = current.parent().unwrap_or(Path::new("."));
+            let resolved = std::path::absolute(base_dir.join(&*relative)).map_err(io)?;
+            *declared = Value::String(resolved.to_string_lossy().into_owned());
+        }
+        let Value::Mapping(ref mut top) = raw else {
+            if let Some((child, _)) = children.last() {
+                return err(format!(
+                    "profile {}: parent '{}' is not a YAML mapping",
+                    child.display(),
+                    current.display()
+                ));
+            }
+            return Ok(raw);
+        };
+        let Some(extends_val) = top.shift_remove(Value::String("extends".into())) else {
+            for (_, child) in children.into_iter().rev() {
+                raw = merge_values(raw, child);
+            }
+            return Ok(raw);
+        };
+        let Value::String(parent_path_str) = extends_val else {
             return err(format!(
                 "profile {}: 'extends' must be a string, got {}",
-                path.display(),
+                current.display(),
                 name(&extends_val)
             ));
         };
@@ -282,23 +301,14 @@ pub(super) fn load_raw(
             return err(format!(
                 "profile {}: child must declare its own 'profile_version' \
                  (inheriting it from a parent is not allowed)",
-                path.display()
+                current.display()
             ));
         }
-        let base_dir = path.parent().unwrap_or(Path::new("."));
-        let parent_path = base_dir.join(parent_path_str);
-        let parent_raw = load_raw(&parent_path, visited)?;
-        if !matches!(parent_raw, Value::Mapping(_)) {
-            return err(format!(
-                "profile {}: parent '{}' is not a YAML mapping",
-                path.display(),
-                parent_path.display()
-            ));
-        }
-        raw = merge_values(parent_raw, raw);
+        let base_dir = current.parent().unwrap_or(Path::new("."));
+        let parent = base_dir.join(parent_path_str);
+        children.push((current, raw));
+        current = parent;
     }
-
-    Ok(raw)
 }
 
 /// Read a notes file: a missing file is recorded rather than refused, because

@@ -14,6 +14,7 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
+use unicode_normalization::UnicodeNormalization;
 
 use crate::{Document, Issue, Provenance, Severity};
 
@@ -96,6 +97,15 @@ enum Form {
 struct Scope {
     names: BTreeSet<String>,
     children: BTreeMap<String, Scope>,
+}
+
+impl Drop for Scope {
+    fn drop(&mut self) {
+        let mut pending: Vec<_> = std::mem::take(&mut self.children).into_values().collect();
+        while let Some(mut child) = pending.pop() {
+            pending.extend(std::mem::take(&mut child.children).into_values());
+        }
+    }
 }
 
 /// Why a scanner could not read a file, and the line where it stopped.
@@ -447,7 +457,13 @@ impl Resolver {
         let Indexed::Scope(scope) = indexed else {
             return first_failure.map_or(Outcome::Unchecked, Outcome::Unreadable);
         };
-        match missing_prefix(scope, &chain) {
+        let normalized: Vec<String> = if *language == Language::Python {
+            chain.iter().map(|name| name.nfkc().collect()).collect()
+        } else {
+            chain.iter().map(|name| (*name).to_owned()).collect()
+        };
+        let names: Vec<&str> = normalized.iter().map(String::as_str).collect();
+        match missing_prefix(scope, &names) {
             None => Outcome::Resolved,
             Some((depth, true)) => Outcome::Missing(format!(
                 "'{path}' defines no {} '{}'",
@@ -547,15 +563,11 @@ fn missing_prefix(scope: &Scope, chain: &[&str]) -> Option<(usize, bool)> {
 
 fn read_scope(real: &Path, language: Language) -> Result<Scope, (u32, String)> {
     let bytes = std::fs::read(real).map_err(|error| (0, error.to_string()))?;
-    if let Some(refusal) = beyond_lines(bytes.iter().filter(|byte| **byte == b'\n').count() + 1) {
+    if let Some(refusal) = beyond_lines(source_lines(&bytes, language)) {
         return Err((0, refusal));
     }
     let text = crate::decode_utf8(&bytes).map_err(|error| {
-        let line = bytes[..error.valid_up_to()]
-            .iter()
-            .filter(|byte| **byte == b'\n')
-            .count()
-            + 1;
+        let line = source_lines(&bytes[..error.valid_up_to()], language);
         (
             u32::try_from(line).unwrap_or(u32::MAX),
             "invalid UTF-8".to_owned(),
@@ -564,6 +576,20 @@ fn read_scope(real: &Path, language: Language) -> Result<Scope, (u32, String)> {
     language
         .scan(text)
         .map_err(|error| (error.line, error.reason))
+}
+
+fn source_lines(bytes: &[u8], language: Language) -> usize {
+    bytes
+        .iter()
+        .enumerate()
+        .filter(|(index, byte)| {
+            **byte == b'\n'
+                || (language == Language::Python
+                    && **byte == b'\r'
+                    && bytes.get(index + 1) != Some(&b'\n'))
+        })
+        .count()
+        + 1
 }
 
 /// The refusal for a file of `line_count` lines, if it has more than fit `u32`.

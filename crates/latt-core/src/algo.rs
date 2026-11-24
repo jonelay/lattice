@@ -167,6 +167,7 @@ pub fn betweenness_centrality<G: Neighbors>(graph: &G) -> HashMap<G::NodeId, f64
     let mut stack = Vec::new();
     let mut queue = VecDeque::new();
     for source in 0..sources {
+        let mut log_counts = false;
         dist[source] = 0;
         sigma[source] = 1.0;
         queue.push_back(source);
@@ -176,10 +177,29 @@ pub fn betweenness_centrality<G: Neighbors>(graph: &G) -> HashMap<G::NodeId, f64
             for &w in &successors[v] {
                 if dist[w] == usize::MAX {
                     dist[w] = d_v + 1;
+                    if log_counts {
+                        sigma[w] = f64::NEG_INFINITY;
+                    }
                     queue.push_back(w);
                 }
                 if dist[w] == d_v + 1 {
-                    sigma[w] += sigma_v;
+                    if !log_counts && !(sigma[w] + sigma_v).is_finite() {
+                        // Switch only when path counts would overflow. Small graphs
+                        // keep their existing arithmetic and exact score bits.
+                        for count in &mut sigma {
+                            *count = if *count > 0.0 {
+                                count.ln()
+                            } else {
+                                f64::NEG_INFINITY
+                            };
+                        }
+                        log_counts = true;
+                    }
+                    if log_counts {
+                        sigma[w] = log_add_exp(sigma[w], sigma[v]);
+                    } else {
+                        sigma[w] += sigma_v;
+                    }
                     predecessors[w].push(v);
                 }
             }
@@ -189,9 +209,15 @@ pub fn betweenness_centrality<G: Neighbors>(graph: &G) -> HashMap<G::NodeId, f64
         while let Some(w) = stack.pop() {
             if w != source {
                 let delta_w = delta[w];
-                let coeff = (1.0 + delta_w) / sigma[w];
-                for &v in &predecessors[w] {
-                    delta[v] += sigma[v] * coeff;
+                if log_counts {
+                    for &v in &predecessors[w] {
+                        delta[v] += (sigma[v] - sigma[w]).exp() * (1.0 + delta_w);
+                    }
+                } else {
+                    let coeff = (1.0 + delta_w) / sigma[w];
+                    for &v in &predecessors[w] {
+                        delta[v] += sigma[v] * coeff;
+                    }
                 }
                 centrality[w] += delta_w;
             }
@@ -199,6 +225,9 @@ pub fn betweenness_centrality<G: Neighbors>(graph: &G) -> HashMap<G::NodeId, f64
             sigma[w] = 0.0;
             delta[w] = 0.0;
             predecessors[w].clear();
+        }
+        if log_counts {
+            sigma.fill(0.0);
         }
     }
 
@@ -209,6 +238,17 @@ pub fn betweenness_centrality<G: Neighbors>(graph: &G) -> HashMap<G::NodeId, f64
         }
     }
     ids.into_iter().zip(centrality).collect()
+}
+
+fn log_add_exp(left: f64, right: f64) -> f64 {
+    if left == f64::NEG_INFINITY {
+        return right;
+    }
+    if right == f64::NEG_INFINITY {
+        return left;
+    }
+    let larger = left.max(right);
+    larger + (-(left - right).abs()).exp().ln_1p()
 }
 
 /// Strongly connected components over `admit`, by iterative Kosaraju.
@@ -357,6 +397,38 @@ mod tests {
         assert_eq!(c[&1], 0.0);
         assert_eq!(c[&4], 0.0);
         assert!(betweenness_centrality(&Digraph::new(&[])).is_empty());
+    }
+
+    #[test]
+    fn deep_diamond_centrality_is_finite_bounded_and_symmetric() {
+        let mut edges = Vec::new();
+        for layer in 0..1026_u32 {
+            for from in 0..2 {
+                for to in 0..2 {
+                    edges.push((2 * layer + from, 2 * (layer + 1) + to));
+                }
+            }
+        }
+        edges.extend([(2054, 2055), (2055, 2056)]);
+        let scores = betweenness_centrality(&Digraph::new(&edges));
+        assert_eq!(scores.len(), 2057);
+        for layer in 0..1027_u32 {
+            let left = scores[&(2 * layer)];
+            let right = scores[&(2 * layer + 1)];
+            assert!(
+                left.is_finite() && (0.0..=1.0).contains(&left),
+                "{layer}: {left}"
+            );
+            assert!(
+                right.is_finite() && (0.0..=1.0).contains(&right),
+                "{layer}: {right}"
+            );
+            assert!((left - right).abs() < 1e-9, "{layer}: {left} != {right}");
+        }
+        assert!(
+            scores[&2055] > 0.0,
+            "later components still accumulate paths"
+        );
     }
 
     #[test]

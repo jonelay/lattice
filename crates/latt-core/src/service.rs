@@ -6,18 +6,18 @@
 use std::path::Path;
 
 #[doc(hidden)]
-pub use crate::document::ContractError;
+pub use crate::document::{ContractError, ContractErrorKind};
 #[doc(hidden)]
 pub use crate::graph::LatticeGraph;
 #[doc(hidden)]
 pub use crate::profile::{Comparable, Condition, ConditionOp, Profile, ProfileError};
 pub use crate::query::Direction;
 pub use crate::types::{
-    AtReport, CivilDate, CountsReport, CoverageReport, DiffReport, EdgeChangedRef, EdgeRef,
-    FindingTally, Issue, KindCoverage, NodeChangedRef, NodeRef, Note, Origin, OrphanEntry,
-    OrphansReport, PathReport, PathwayEntry, Provenance, ReachReport, Severity, StatusRollup,
-    StructuralSummary, SummaryReport, TraceEdge, TraceEntry, TraceReport, Until, ValidateReport,
-    ValidateScope,
+    AtReport, CivilDate, CountsReport, CoverageGap, CoverageReport, DiffReport, EdgeChangedRef,
+    EdgeRef, FindingTally, GapState, Issue, KindCoverage, NodeChangedRef, NodeRef, Note, Origin,
+    OrphanEntry, OrphansReport, PathReport, PathwayEntry, Provenance, ReachReport,
+    RuleCoverageReport, Severity, StatusRollup, StructuralSummary, SummaryReport, TraceEdge,
+    TraceEntry, TraceReport, Until, ValidateReport, ValidateScope,
 };
 use crate::{profile, query, summary, trace, validate};
 
@@ -243,6 +243,11 @@ pub enum Request<'a> {
         /// Whether warnings are promoted within trace payload findings.
         strict: bool,
     },
+    /// Report one direct `COVERAGE` rule, retaining uncertainty in its payload.
+    RuleCoverage {
+        /// One-based ordinal among resolved `COVERAGE` entries.
+        rule: usize,
+    },
 }
 
 /// Owned payload returned by [`execute`].
@@ -267,6 +272,8 @@ pub enum Report {
     Summary(SummaryReport),
     /// Full trace report.
     Trace(TraceReport),
+    /// Direct rule coverage with missing links and input uncertainty.
+    RuleCoverage(RuleCoverageReport),
 }
 
 /// Machine-readable category of a service failure.
@@ -502,6 +509,12 @@ pub fn execute(view: View<'_>, request: Request<'_>) -> Result<Response<Report>,
                 Ok(Report::Counts(query::counts(graph, profile, filters)))
             }
             Request::Coverage => Ok(Report::Coverage(query::coverage(graph, profile))),
+            Request::RuleCoverage { rule } => {
+                let mut report =
+                    query::rule_coverage(graph, profile, rule).map_err(request_error)?;
+                report.input_partial |= view.context.input_status == InputStatus::Partial;
+                Ok(Report::RuleCoverage(report))
+            }
             Request::At {
                 target,
                 path,
@@ -548,6 +561,48 @@ pub fn execute(view: View<'_>, request: Request<'_>) -> Result<Response<Report>,
             diagnostics,
         }),
     }
+}
+
+/// Run a trace request that consumes the graph: node and edge attributes move
+/// into the report, so peak memory holds the register once rather than twice.
+///
+/// Otherwise the same as [`execute`] with [`Request::Trace`], answering with the
+/// [`TraceReport`] that [`Report::Trace`] would hold.
+///
+/// # Errors
+///
+/// As [`execute`]. The graph comes back beside the error, unconsumed, so the
+/// caller can still report against it.
+pub fn execute_trace_owned(
+    graph: LatticeGraph,
+    profile: &Profile,
+    context: &InputContext,
+    strict: bool,
+) -> Result<Response<TraceReport>, Box<(ServiceError, LatticeGraph)>> {
+    let view = View {
+        graph: &graph,
+        profile,
+        context,
+    };
+    let (inputs, diagnostics) = input_state(&[(InputSide::Current, view)]);
+    if let Err((kind, message)) = check_context(&inputs) {
+        let error = ServiceError {
+            kind,
+            message,
+            inputs,
+            diagnostics,
+        };
+        return Err(Box::new((error, graph)));
+    }
+    let today = context.today.unwrap_or_else(CivilDate::today_utc);
+    let issues = validate::validate_on(&graph, profile, strict, today);
+    let report = trace::build_trace_report_owned(profile, graph, issues, env!("CARGO_PKG_VERSION"));
+    Ok(Response {
+        payload: report,
+        inputs,
+        diagnostics,
+        execution: ExecutionStatus::Complete,
+    })
 }
 
 /// Diff two supplied views; labels are opaque and never materialized as Git

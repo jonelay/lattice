@@ -1,0 +1,5 @@
+error ATTR_REQUIRED D-5: node 'D-5': missing required attr 'needs_test'
+error COVERAGE D-4: D-4 needs an implementation and has none
+error COVERAGE D-4: node 'D-4' (kind 'dsn') has no incoming 'verifies' edge
+error EDGE_WHERE I-2: I-2 implements a design that asks for no implementation
+error EDGE_WHERE T-2: T-2 verifies a design that asks for no test

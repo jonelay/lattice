@@ -20,7 +20,11 @@ use std::path::{Path, PathBuf};
 use serde_json::{Value, json};
 
 fn corpus() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/rejected-profiles")
+    std::env::var_os("LATT_TEST_REJECTED_CORPUS")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/rejected-profiles")
+        })
 }
 
 /// Run one case through the binary: `(exit, stdout, stderr)` with every path
@@ -70,6 +74,49 @@ fn run_case(dir: &Path) -> (i32, String, String) {
     )
 }
 
+fn assert_refused(exit: i32, stdout: &str, fuse: bool) {
+    assert_eq!(
+        exit, 2,
+        "rejected profile must exit 2 before pinning its output"
+    );
+    if fuse {
+        assert!(
+            stdout.contains("ERROR FUSE_ERROR"),
+            "fuse refusal must carry FUSE_ERROR"
+        );
+    } else {
+        assert!(stdout.is_empty(), "rejected profile must write no stdout");
+    }
+}
+
+#[test]
+fn accepted_or_stdout_writing_profiles_cannot_be_pinned_as_refusals() {
+    assert!(std::panic::catch_unwind(|| assert_refused(0, "", false)).is_err());
+    assert!(std::panic::catch_unwind(|| assert_refused(2, "accepted document", false)).is_err());
+    assert!(std::panic::catch_unwind(|| assert_refused(2, "", false)).is_ok());
+}
+
+#[test]
+fn accepted_case_is_refused_before_regeneration_writes_a_baseline() {
+    let root = common::scratch();
+    let case = root.join("accepted");
+    fs::create_dir(&case).unwrap();
+    fs::write(case.join("profile.yaml"), common::MINIMAL_PROFILE).unwrap();
+    fs::write(case.join("expected.json"), "sentinel").unwrap();
+    let output = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "every_case_refuses_as_pinned"])
+        .env("LATT_TEST_REJECTED_CORPUS", &root)
+        .env("LATTICE_REGEN_BASELINES", "1")
+        .env_remove("CI")
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "{output:?}");
+    assert_eq!(
+        fs::read_to_string(case.join("expected.json")).unwrap(),
+        "sentinel"
+    );
+}
+
 // Requirement: development-verification/Profile load refusals are pinned by a corpus
 #[test]
 fn every_case_refuses_as_pinned() {
@@ -86,6 +133,7 @@ fn every_case_refuses_as_pinned() {
     for dir in &cases {
         let name = dir.file_name().unwrap().to_string_lossy().into_owned();
         let (exit, stdout, stderr) = run_case(dir);
+        assert_refused(exit, &stdout, dir.join("fuse.yaml").is_file());
         let actual = json!({"exit": exit, "stdout": stdout, "stderr": stderr});
         let expected_path = dir.join("expected.json");
         if regen {

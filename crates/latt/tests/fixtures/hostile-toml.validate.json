@@ -1,0 +1,264 @@
+{
+  "findings": [
+    {
+      "code": "UNREFERENCED",
+      "file": "registers/alpha.toml",
+      "line": 19,
+      "message": "node 'alpha/two' has no incoming edges",
+      "node_id": "alpha/two",
+      "severity": "info"
+    },
+    {
+      "code": "ID_FORMAT",
+      "file": "registers/alpha.toml",
+      "line": 29,
+      "message": "node 'alpha/bad\u001b]8;;http://evil/\u0007link\u001b]8;;\u0007\nERROR FORGED X.1 forged line\r\u202etxt' does not match pattern '^[a-z0-9-]+/[A-Za-z0-9._-]+$' for kind 'item'",
+      "node_id": "alpha/bad\u001b]8;;http://evil/\u0007link\u001b]8;;\u0007\nERROR FORGED X.1 forged line\r\u202etxt",
+      "severity": "error"
+    },
+    {
+      "code": "UNREFERENCED",
+      "file": "registers/alpha.toml",
+      "line": 29,
+      "message": "node 'alpha/bad\u001b]8;;http://evil/\u0007link\u001b]8;;\u0007\nERROR FORGED X.1 forged line\r\u202etxt' has no incoming edges",
+      "node_id": "alpha/bad\u001b]8;;http://evil/\u0007link\u001b]8;;\u0007\nERROR FORGED X.1 forged line\r\u202etxt",
+      "severity": "info"
+    },
+    {
+      "code": "UNREFERENCED",
+      "file": "registers/baditem.toml",
+      "line": 4,
+      "message": "node 'baditem' has no incoming edges",
+      "node_id": "baditem",
+      "severity": "info"
+    },
+    {
+      "code": "UNREFERENCED",
+      "file": "registers/baditem.toml",
+      "line": 9,
+      "message": "node 'baditem/has_an_id' has no incoming edges",
+      "node_id": "baditem/has_an_id",
+      "severity": "info"
+    },
+    {
+      "code": "UNTRACED",
+      "file": "registers/baditem.toml",
+      "line": 9,
+      "message": "node 'baditem/has_an_id' has no outgoing edges",
+      "node_id": "baditem/has_an_id",
+      "severity": "info"
+    },
+    {
+      "code": "PARSE_ERROR",
+      "file": "registers/baditem.toml",
+      "line": 13,
+      "message": "registers/baditem.toml: item row 1 declares no string 'id' ID key",
+      "node_id": null,
+      "severity": "error"
+    },
+    {
+      "code": "UNREFERENCED",
+      "file": "registers/beta.toml",
+      "line": 9,
+      "message": "node 'beta/one' has no incoming edges",
+      "node_id": "beta/one",
+      "severity": "info"
+    },
+    {
+      "code": "UNTRACED",
+      "file": "registers/beta.toml",
+      "line": 9,
+      "message": "node 'beta/one' has no outgoing edges",
+      "node_id": "beta/one",
+      "severity": "info"
+    },
+    {
+      "code": "PARSE_ERROR",
+      "file": "registers/broken.toml",
+      "line": 5,
+      "message": "registers/broken.toml: could not parse TOML: TOML parse error at line 5, column 6\n  |\n5 | id = = \"reg.broken\"\n  |      ^\ninvalid string\nexpected `\"`, `'`\n",
+      "node_id": null,
+      "severity": "error"
+    },
+    {
+      "code": "UNREFERENCED",
+      "file": "registers/dangling.toml",
+      "line": 9,
+      "message": "node 'dangling' has no incoming edges",
+      "node_id": "dangling",
+      "severity": "info"
+    },
+    {
+      "code": "UNREFERENCED",
+      "file": "registers/dangling.toml",
+      "line": 14,
+      "message": "node 'dangling/overdue' has no incoming edges",
+      "node_id": "dangling/overdue",
+      "severity": "info"
+    },
+    {
+      "code": "VACANCY",
+      "file": "registers/dangling.toml",
+      "line": 17,
+      "message": "edge 'dangling/overdue'->'alpha/absent' (kind 'references'): target 'alpha/absent' does not exist",
+      "node_id": "dangling/overdue",
+      "severity": "error"
+    },
+    {
+      "code": "UNREFERENCED",
+      "file": "registers/dangling.toml",
+      "line": 19,
+      "message": "node 'dangling/not_yet' has no incoming edges",
+      "node_id": "dangling/not_yet",
+      "severity": "info"
+    },
+    {
+      "code": "VACANCY",
+      "file": "registers/dangling.toml",
+      "line": 22,
+      "message": "edge 'dangling/not_yet'->'beta/absent' (kind 'references'): target 'beta/absent' does not exist",
+      "node_id": "dangling/not_yet",
+      "severity": "info"
+    },
+    {
+      "code": "UNREFERENCED",
+      "file": "registers/dangling.toml",
+      "line": 24,
+      "message": "node 'dangling/points_nowhere' has no incoming edges",
+      "node_id": "dangling/points_nowhere",
+      "severity": "info"
+    },
+    {
+      "code": "VACANCY",
+      "file": "registers/dangling.toml",
+      "line": 27,
+      "message": "edge 'dangling/points_nowhere'->'nonexistent' (kind 'belongs_to'): target 'nonexistent' does not exist",
+      "node_id": "dangling/points_nowhere",
+      "severity": "error"
+    },
+    {
+      "code": "UNREFERENCED",
+      "file": "registers/index.toml",
+      "line": 4,
+      "message": "node 'index' has no incoming edges",
+      "node_id": "index",
+      "severity": "info"
+    },
+    {
+      "code": "UNREFERENCED",
+      "file": "registers/index.toml",
+      "line": 11,
+      "message": "node 'index/root' has no incoming edges",
+      "node_id": "index/root",
+      "severity": "info"
+    },
+    {
+      "code": "PARSE_ERROR",
+      "file": "registers/noregister.toml",
+      "line": 0,
+      "message": "registers/noregister.toml: no [register] header table",
+      "node_id": null,
+      "severity": "error"
+    },
+    {
+      "code": "UNREFERENCED",
+      "file": "registers/noregister.toml",
+      "line": 4,
+      "message": "node 'noregister/unreachable' has no incoming edges",
+      "node_id": "noregister/unreachable",
+      "severity": "info"
+    },
+    {
+      "code": "UNTRACED",
+      "file": "registers/noregister.toml",
+      "line": 4,
+      "message": "node 'noregister/unreachable' has no outgoing edges",
+      "node_id": "noregister/unreachable",
+      "severity": "info"
+    },
+    {
+      "code": "UNREFERENCED",
+      "file": "registers/unread.toml",
+      "line": 4,
+      "message": "node 'unread' has no incoming edges",
+      "node_id": "unread",
+      "severity": "info"
+    },
+    {
+      "code": "UNREFERENCED",
+      "file": "registers/unread.toml",
+      "line": 9,
+      "message": "node 'unread/known' has no incoming edges",
+      "node_id": "unread/known",
+      "severity": "info"
+    },
+    {
+      "code": "UNTRACED",
+      "file": "registers/unread.toml",
+      "line": 9,
+      "message": "node 'unread/known' has no outgoing edges",
+      "node_id": "unread/known",
+      "severity": "info"
+    },
+    {
+      "code": "PARSE_ERROR",
+      "file": "registers/unread.toml",
+      "line": 13,
+      "message": "registers/unread.toml: no reader for array-of-tables 'note' (1 rows not read)",
+      "node_id": null,
+      "severity": "error"
+    },
+    {
+      "code": "UNREFERENCED",
+      "file": "registers/wrongshape.toml",
+      "line": 4,
+      "message": "node 'wrongshape' has no incoming edges",
+      "node_id": "wrongshape",
+      "severity": "info"
+    },
+    {
+      "code": "UNREFERENCED",
+      "file": "registers/wrongshape.toml",
+      "line": 9,
+      "message": "node 'wrongshape/string_refs' has no incoming edges",
+      "node_id": "wrongshape/string_refs",
+      "severity": "info"
+    },
+    {
+      "code": "UNREFERENCED",
+      "file": "registers/wrongshape.toml",
+      "line": 15,
+      "message": "node 'wrongshape/numeric_register' has no incoming edges",
+      "node_id": "wrongshape/numeric_register",
+      "severity": "info"
+    },
+    {
+      "code": "UNTRACED",
+      "file": "registers/wrongshape.toml",
+      "line": 15,
+      "message": "node 'wrongshape/numeric_register' has no outgoing edges",
+      "node_id": "wrongshape/numeric_register",
+      "severity": "info"
+    },
+    {
+      "code": "PARSE_ERROR",
+      "file": "registers/wrongshape.toml",
+      "line": 18,
+      "message": "registers/wrongshape.toml: item 'wrongshape/numeric_register' has edge key 'register' of type integer, expected a target string or an array of strings",
+      "node_id": "wrongshape/numeric_register",
+      "severity": "error"
+    }
+  ],
+  "scope": {
+    "edges": {
+      "belongs_to": 5,
+      "references": 6
+    },
+    "files": 8,
+    "nodes": {
+      "item": 14,
+      "memo": 1,
+      "register": 7
+    }
+  }
+}

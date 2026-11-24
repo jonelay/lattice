@@ -276,7 +276,10 @@ pub fn at(
 }
 
 // Retain lexical selection in the core; only the caller may probe a filesystem.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "every argument is a distinct input of the view; a struct would only rename them"
+)]
 pub(crate) fn at_in_view(
     graph: &LatticeGraph,
     profile: &Profile,

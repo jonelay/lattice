@@ -9,16 +9,12 @@ import pytest
 
 from adapters import openspec
 from adapters._types import Severity
+from conftest import CORE_BIN, needs_core
 from conftest import load_yaml_profile as load_profile
 
 REPO_ROOT = Path(__file__).parent.parent
 PROFILE_PATH = REPO_ROOT / "profiles" / "openspec.yaml"
 ADAPTER_PATH = REPO_ROOT / "adapters" / "openspec"
-CORE_BIN = REPO_ROOT / "target" / "debug" / "latt"
-
-needs_core = pytest.mark.skipif(
-    not CORE_BIN.exists(), reason="core not built; run: cargo build"
-)
 
 
 @pytest.fixture(scope="module")

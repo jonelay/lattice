@@ -322,7 +322,16 @@ fn source_findings_retain_attribution_and_are_promoted_after_collection() {
     z["unattachable_findings"] = json!([finding]);
     let report = report(&dir, z, trace(json!([])), "edge_kinds: {}", true);
     assert_eq!(report.exit_code(), 1);
-    assert_eq!(report.findings.len(), 2);
+    // Source `a` declares `item` and has none: the fuse's own finding.
+    let messages: Vec<&str> = report
+        .findings
+        .iter()
+        .map(|f| f.issue.message.as_str())
+        .collect();
+    assert_eq!(
+        messages,
+        ["check", "check", "node kind 'a:item' has no node"]
+    );
     assert_eq!(report.findings[0].source.as_deref(), Some("z"));
     assert_eq!(report.findings[0].issue.node_id.as_deref(), Some("z:Z"));
     assert_eq!(report.findings[1].issue.node_id, None);
@@ -359,6 +368,22 @@ fn source_profile_that_cannot_load_is_a_source_failure() {
         .find(|f| f.issue.code == "SOURCE_FAILURE")
         .expect("a SOURCE_FAILURE");
     assert_eq!(failure.source.as_deref(), Some("z"));
+    assert_eq!(
+        failure.stage,
+        Some(latt_core::types::FuseStage::SourceProfile)
+    );
+    let json: Value = serde_json::from_str(&output_result(&report, Format::Json)).unwrap();
+    let staged: Vec<_> = json["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| (f["code"].clone(), f.get("stage").cloned()))
+        .collect();
+    assert!(
+        staged.contains(&(json!("SOURCE_FAILURE"), Some(json!("source_profile"))))
+            && staged.contains(&(json!("LOCAL"), None)),
+        "{staged:?}"
+    );
     assert_eq!(failure.issue.severity, latt_core::types::Severity::Error);
     assert!(
         failure.issue.message.contains("z.yaml"),
@@ -373,6 +398,44 @@ fn source_profile_that_cannot_load_is_a_source_failure() {
             .iter()
             .any(|f| f.issue.code == "LOCAL" && f.source.as_deref() == Some("a"))
     );
+}
+
+// Requirement: program-composition/Tri-format output
+#[test]
+fn fuse_errors_past_loading_are_staged_by_their_cause() {
+    let dir = Scratch::new();
+    for name in ["z.yaml", "a.yaml"] {
+        dir.write(name, SOURCE_PROFILE);
+    }
+    let path = manifest(&dir);
+    let manifest = load_manifest(&path).unwrap();
+    let profile = load_fuse_profile(&dir.write(
+        "profile.yaml",
+        "edge_kinds: {}\nvalidations:\n  - VACANCY: {bogus: 1}\n",
+    ))
+    .unwrap();
+    let z = trace(json!([entry("Z", json!([]))]));
+    let a = trace(json!([entry("A", json!([]))]));
+    let error = assemble(
+        &manifest,
+        &profile,
+        vec![
+            parse_trace(&z.to_string(), "z").unwrap(),
+            parse_trace(&a.to_string(), "a").unwrap(),
+        ],
+        false,
+    )
+    .unwrap_err();
+    use latt_core::types::FuseStage;
+    // A fuse profile entry only the composed profile's loader refuses.
+    assert!(
+        matches!(error, latt_core::fuse::FuseError::Profile(_)),
+        "{error:?}"
+    );
+    assert_eq!(error.stage(&path), FuseStage::FuseProfile);
+    // A trace that cannot be read: `source_output`, as `fuse` stages it.
+    let unreadable = parse_trace("not json", "z").unwrap_err();
+    assert_eq!(unreadable.stage(&path), FuseStage::SourceOutput);
 }
 
 // Requirement: program-composition/Standard validators on the composed graph
@@ -675,8 +738,439 @@ fn cli_fuse_that_cannot_start_reports_one_unsourced_fuse_error() {
         value,
         json!({"edges": [], "header": {"fuse_version": "1"}, "nodes": [], "pathways": [], "findings": [{
             "code": "FUSE_ERROR", "file": missing.display().to_string(), "line": 0,
-            "message": message, "node_id": null, "severity": "error"}]})
+            "message": message, "node_id": null, "severity": "error", "stage": "manifest"}]})
     );
+}
+
+// Requirement: program-composition/Tri-format output
+#[test]
+fn json_failure_findings_carry_stage() {
+    let dir = Scratch::new();
+    let stages = |path: &Path| -> Vec<(String, String)> {
+        let output = cli(path, "json");
+        assert_eq!(output.status.code(), Some(2));
+        let value: Value = serde_json::from_slice(&output.stdout).unwrap();
+        value["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| {
+                (
+                    f["code"].as_str().unwrap().to_owned(),
+                    f["stage"].as_str().unwrap_or("<none>").to_owned(),
+                )
+            })
+            .collect()
+    };
+    let one = |code: &str, stage: &str| vec![(code.to_owned(), stage.to_owned())];
+    assert_eq!(
+        stages(&dir.0.join("missing.yaml")),
+        one("FUSE_ERROR", "manifest")
+    );
+    let manifest_text = |profile: &str| {
+        format!(
+            "manifest_version: '1.0.0'\nname: sample\nversion: '2.0.0'\nfuse_profile: {profile}\nsources:\n  - {{name: z, profile: z.yaml, adapter: z, target: .}}\n"
+        )
+    };
+    let absent = dir.write("absent.fuse.yaml", &manifest_text("absent.yaml"));
+    assert_eq!(stages(&absent), one("FUSE_ERROR", "fuse_profile"));
+    dir.write(
+        "endpoint.yaml",
+        "edge_kinds:\n  links:\n    allowed:\n      - ['ghost:item', 'z:item']\n",
+    );
+    let endpoint = dir.write("endpoint.fuse.yaml", &manifest_text("endpoint.yaml"));
+    assert_eq!(stages(&endpoint), one("FUSE_ERROR", "fuse_profile"));
+    dir.write("profile.yaml", "edge_kinds: {}");
+    let failing = dir.write("failing.fuse.yaml", &manifest_text("profile.yaml"));
+    assert_eq!(stages(&failing), one("SOURCE_FAILURE", "source_run"));
+    // Unparseable YAML is the manifest's or the fuse profile's by which file.
+    let bad_manifest = dir.write("bad.fuse.yaml", "sources: [\n");
+    assert_eq!(stages(&bad_manifest), one("FUSE_ERROR", "manifest"));
+    dir.write("bad-profile.yaml", "edge_kinds: [\n");
+    let bad_profile = dir.write("bad-profile.fuse.yaml", &manifest_text("bad-profile.yaml"));
+    assert_eq!(stages(&bad_profile), one("FUSE_ERROR", "fuse_profile"));
+}
+
+/// A manifest with two sources whose adapters are the stubs `z` and `a` in
+/// `dir`, both writing an empty interface document after running `before`.
+#[cfg(unix)]
+fn stub_sources(dir: &Scratch, profile: &str, before: &str) -> PathBuf {
+    let path = manifest(dir);
+    dir.write("profile.yaml", profile);
+    dir.write("z.yaml", SOURCE_PROFILE);
+    dir.write("a.yaml", SOURCE_PROFILE);
+    let document = json!({"interface_version": "1.2", "nodes": [], "edges": [], "pathways": [], "findings": []});
+    let script = format!("#!/bin/sh\n{before}\ncat <<'PAYLOAD'\n{document}\nPAYLOAD\n");
+    executable(dir, "z", &script);
+    executable(dir, "a", &script);
+    path
+}
+
+// Requirement: program-composition/Tri-format output
+#[cfg(unix)]
+#[test]
+fn json_stage_names_a_composed_profile_refusal_and_a_source_profile_load() {
+    let staged = |path: &Path| -> Vec<(Value, Value, Value)> {
+        let output = cli(path, "json");
+        assert_eq!(output.status.code(), Some(2));
+        let value: Value = serde_json::from_slice(&output.stdout).unwrap();
+        value["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| (f["code"].clone(), f["stage"].clone(), f["source"].clone()))
+            .collect()
+    };
+    // Each source profile loads alone; only the composed profile refuses the
+    // fuse profile's entry.
+    let dir = Scratch::new();
+    let refused = stub_sources(
+        &dir,
+        "edge_kinds: {}\nvalidations:\n  - VACANCY: {bogus: 1}\n",
+        "",
+    );
+    assert_eq!(
+        staged(&refused),
+        vec![(json!("FUSE_ERROR"), json!("fuse_profile"), Value::Null)]
+    );
+    let plain = cli(&refused, "plain");
+    let stderr = String::from_utf8_lossy(&plain.stderr);
+    assert!(
+        stderr.starts_with("fuse: fuse_profile failed: the composed fuse profile was refused")
+            && stderr.ends_with(&format!(". Next: {FIX_THE_FILE}\n")),
+        "{stderr}"
+    );
+    // The trace run read `z.yaml`; the adapter then breaks it, so only fuse's
+    // own load of that profile fails.
+    let dir = Scratch::new();
+    let corrupt = format!(
+        "echo 'node_kinds: [' > '{}'",
+        dir.0.join("z.yaml").display()
+    );
+    let broken = stub_sources(&dir, "edge_kinds: {}", &corrupt);
+    assert_eq!(
+        staged(&broken),
+        vec![
+            (json!("EMPTY_KIND"), Value::Null, json!("a")),
+            (json!("SOURCE_FAILURE"), json!("source_profile"), json!("z"))
+        ]
+    );
+}
+
+// Requirement: program-composition/Tri-format output
+// The fixture's shims run `latt adapter <name>`, which a build without native
+// adapters does not have.
+#[cfg(feature = "native-adapters")]
+#[test]
+fn json_non_failure_findings_have_no_stage() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures/mini-fuse/fuse-native.yaml");
+    let output = cli(&path, "json");
+    assert_eq!(output.status.code(), Some(1));
+    let value: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let findings = value["findings"].as_array().unwrap();
+    assert!(!findings.is_empty());
+    assert!(findings.iter().all(|f| f.get("stage").is_none()), "{value}");
+}
+
+/// The `fuse:` lines on stderr.
+fn stderr_causes(output: &std::process::Output) -> Vec<String> {
+    String::from_utf8_lossy(&output.stderr)
+        .lines()
+        .filter(|line| line.starts_with("fuse: "))
+        .map(str::to_owned)
+        .collect()
+}
+
+/// The one object a `json` run writes on stderr, as `validate` shapes findings.
+fn stderr_object(output: &std::process::Output) -> Value {
+    serde_json::from_slice(&output.stderr).unwrap_or_else(|e| {
+        panic!(
+            "stderr is not one JSON value ({e}): {}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+    })
+}
+
+// Requirement: program-composition/Fuse exit codes
+#[test]
+fn fuse_source_failure_names_the_source_on_stderr() {
+    let dir = Scratch::new();
+    let path = dir.write("fuse.yaml", "manifest_version: '1.0.0'\nname: sample\nversion: '2.0.0'\nfuse_profile: profile.yaml\nsources:\n  - {name: specs, profile: specs.yaml, adapter: z, target: .}\n");
+    dir.write("profile.yaml", "edge_kinds: {}");
+    for format in ["plain", "rich"] {
+        let output = cli(&path, format);
+        assert_eq!(output.status.code(), Some(2));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(stderr.lines().count(), 1, "{format}: {stderr}");
+        let line = stderr.lines().next().unwrap();
+        assert!(
+            line.starts_with("fuse: source 'specs' failed at source_run: trace exited")
+                && line.ends_with(&format!(". Next: {RUN_TRACE_ALONE}")),
+            "{format}: {line}"
+        );
+    }
+    let output = cli(&path, "json");
+    assert_eq!(output.status.code(), Some(2));
+    let findings = stderr_object(&output)["findings"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert_eq!(findings[0]["code"], "SOURCE_FAILURE");
+    let message = findings[0]["message"].as_str().unwrap();
+    assert!(
+        message.starts_with("source 'specs' failed at source_run: trace exited"),
+        "{message}"
+    );
+    assert!(findings[0].get("stage").is_none(), "{findings:?}");
+}
+
+/// The `Next:` action for a source that failed to run or to be read.
+const RUN_TRACE_ALONE: &str = "run `latt trace` with that source's profile, adapter and target from the manifest and read its stderr";
+/// The `Next:` action for a manifest, fuse profile or composition failure.
+const FIX_THE_FILE: &str = "fix the file or entry the message names";
+
+// Requirement: program-composition/Fuse exit codes
+#[test]
+fn a_control_character_in_a_source_name_stays_off_the_stderr_line() {
+    let dir = Scratch::new();
+    let path = dir.write("fuse.yaml", "manifest_version: '1.0.0'\nname: sample\nversion: '2.0.0'\nfuse_profile: profile.yaml\nsources:\n  - {name: \"evil\\nFORGED\\e[31m\", profile: specs.yaml, adapter: z, target: .}\n");
+    dir.write("profile.yaml", "edge_kinds: {}");
+    let control_free = |bytes: &[u8], format: &str| {
+        let text = String::from_utf8_lossy(bytes);
+        assert!(
+            !text.chars().any(|c| c.is_control() && c != '\n'),
+            "{format}: {text:?}"
+        );
+    };
+    for format in ["plain", "rich"] {
+        let output = cli(&path, format);
+        assert_eq!(output.status.code(), Some(2), "{format}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(stderr.lines().count(), 1, "{format}: {stderr:?}");
+        assert!(
+            stderr.starts_with(r"fuse: source 'evil\nFORGED\u{1b}[31m' failed at source_run: "),
+            "{format}: {stderr:?}"
+        );
+        control_free(&output.stderr, format);
+    }
+    let output = cli(&path, "json");
+    assert_eq!(output.status.code(), Some(2));
+    control_free(&output.stderr, "json");
+    let findings = stderr_object(&output)["findings"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    let message = findings[0]["message"].as_str().unwrap();
+    assert!(!message.chars().any(char::is_control), "{message:?}");
+    assert!(
+        message.starts_with(r"source 'evil\nFORGED\u{1b}[31m' failed at source_run: "),
+        "{message:?}"
+    );
+}
+
+// Requirement: program-composition/Fuse exit codes
+#[test]
+fn fuse_cannot_start_prints_one_stderr_cause() {
+    let dir = Scratch::new();
+    let no_profile = dir.write("fuse.yaml", "manifest_version: '1.0.0'\nname: sample\nversion: '2.0.0'\nfuse_profile: absent.yaml\nsources:\n  - {name: z, profile: z.yaml, adapter: z, target: .}\n");
+    for (path, stage) in [
+        (dir.0.join("missing.yaml"), "manifest"),
+        (no_profile, "fuse_profile"),
+    ] {
+        let json_run = cli(&path, "json");
+        assert_eq!(json_run.status.code(), Some(2));
+        let stdout: Value = serde_json::from_slice(&json_run.stdout).unwrap();
+        let message = stdout["findings"][0]["message"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        assert_eq!(stdout["findings"][0]["code"], "FUSE_ERROR");
+        let stderr = stderr_object(&json_run);
+        let findings = stderr["findings"].as_array().unwrap();
+        assert_eq!(findings.len(), 1, "{stderr}");
+        assert_eq!(findings[0]["code"], "FUSE_ERROR");
+        let cause = format!("{stage} failed: {message}. Next: {FIX_THE_FILE}");
+        assert_eq!(findings[0]["message"], cause.as_str());
+        for format in ["plain", "rich"] {
+            let output = cli(&path, format);
+            assert_eq!(output.status.code(), Some(2));
+            assert_eq!(
+                String::from_utf8_lossy(&output.stderr),
+                format!("fuse: {cause}\n"),
+                "{format}"
+            );
+        }
+    }
+}
+
+// Requirement: program-composition/Fuse exit codes
+#[test]
+fn two_failing_sources_report_two_stderr_causes_once_each() {
+    let dir = Scratch::new();
+    let path = manifest(&dir);
+    dir.write("profile.yaml", "edge_kinds: {}");
+    for format in ["plain", "rich"] {
+        let causes = stderr_causes(&cli(&path, format));
+        assert_eq!(causes.len(), 2, "{format}: {causes:?}");
+        assert!(
+            causes[0].starts_with("fuse: source 'z' failed at source_run: "),
+            "{causes:?}"
+        );
+        assert!(
+            causes[1].starts_with("fuse: source 'a' failed at source_run: "),
+            "{causes:?}"
+        );
+    }
+    let stderr = stderr_object(&cli(&path, "json"));
+    // The validate shape orders findings by its own sort key, not manifest order.
+    let mut messages: Vec<_> = stderr["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["message"].as_str().unwrap().to_owned())
+        .collect();
+    messages.sort();
+    assert_eq!(messages.len(), 2, "{messages:?}");
+    assert!(
+        messages[0].starts_with("source 'a' failed at source_run: "),
+        "{messages:?}"
+    );
+    assert!(
+        messages[1].starts_with("source 'z' failed at source_run: "),
+        "{messages:?}"
+    );
+}
+
+// Requirement: program-composition/Fuse exit codes
+// Golden stdout as rc.3 wrote it, json gaining only `stage`: the stderr cause
+// adds nothing to stdout.
+#[test]
+fn fuse_stdout_is_unchanged_by_the_stderr_cause() {
+    let dir = Scratch::new();
+    let path = manifest(&dir);
+    dir.write("profile.yaml", "edge_kinds: {}");
+    let root = dir.0.display();
+    let failure = |name: &str| {
+        format!(
+            "trace exited 2: Error: Profile error: failed to read profile {root}/{name}.yaml: no such file; no profile found in '{root}'"
+        )
+    };
+    let text = format!(
+        "Fuse sample 2.0.0: 0 nodes, 0 edges, 0 pathways\nERROR SOURCE_FAILURE [z] <source>:0 {}\nERROR SOURCE_FAILURE [a] <source>:0 {}\n",
+        failure("z"),
+        failure("a")
+    );
+    for format in ["plain", "rich"] {
+        assert_eq!(
+            String::from_utf8_lossy(&cli(&path, format).stdout),
+            text,
+            "{format}"
+        );
+    }
+    let finding = |name: &str| {
+        json!({"code": "SOURCE_FAILURE", "file": "<source>", "line": 0, "message": failure(name),
+            "node_id": null, "severity": "error", "source": name, "stage": "source_run"})
+    };
+    let value: Value = serde_json::from_slice(&cli(&path, "json").stdout).unwrap();
+    assert_eq!(
+        value,
+        json!({"edges": [], "findings": [finding("z"), finding("a")],
+            "header": {"fuse_version": "1", "manifest_version": "1.0.0", "name": "sample", "version": "2.0.0"},
+            "nodes": [], "pathways": []})
+    );
+    let missing = dir.0.join("missing.yaml");
+    let shown = missing.display();
+    let text = format!(
+        "Fuse <unknown> : 0 nodes, 0 edges, 0 pathways\nERROR FUSE_ERROR [] {shown}:0 manifest '{shown}': No such file or directory (os error 2)\n"
+    );
+    for format in ["plain", "rich"] {
+        assert_eq!(
+            String::from_utf8_lossy(&cli(&missing, format).stdout),
+            text,
+            "{format}"
+        );
+    }
+}
+
+// Requirement: output/Untrusted text in human formats
+// json is the lossless channel: a source's stderr reaches `findings[].message`
+// as it came, controls JSON-escaped, while plain and rich escape them visibly.
+#[cfg(unix)]
+#[test]
+fn a_failing_source_stderr_keeps_its_bytes_in_fuse_json() {
+    let dir = Scratch::new();
+    let adapter = executable(
+        &dir,
+        "adapter",
+        "#!/bin/sh\nprintf 'bad\\033]8;;x\\007\\n' >&2\nexit 1\n",
+    );
+    let path = dir.write(
+        "fuse.yaml",
+        "manifest_version: '1.0.0'\nname: sample\nversion: '2.0.0'\nfuse_profile: profile.yaml\nsources:\n  - {name: s, profile: s.yaml, adapter: adapter, target: .}\n",
+    );
+    dir.write("profile.yaml", "edge_kinds: {}");
+    dir.write("s.yaml", SOURCE_PROFILE);
+    let output = cli(&path, "json");
+    assert_eq!(output.status.code(), Some(2));
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let golden = format!(
+        "{{\n  \"edges\": [],\n  \"findings\": [\n    {{\n      \"code\": \"SOURCE_FAILURE\",\n      \"file\": \"<source>\",\n      \"line\": 0,\n      \"message\": \"trace exited 2: Error: adapter '{}' exited 1: bad\\u001b]8;;x\\u0007\",\n      \"node_id\": null,\n      \"severity\": \"error\",\n      \"source\": \"s\",\n      \"stage\": \"source_run\"\n    }}\n  ],\n  \"header\": {{\n    \"fuse_version\": \"1\",\n    \"manifest_version\": \"1.0.0\",\n    \"name\": \"sample\",\n    \"version\": \"2.0.0\"\n  }},\n  \"nodes\": [],\n  \"pathways\": []\n}}\n",
+        adapter.display()
+    );
+    assert_eq!(stdout, golden);
+    for format in ["plain", "rich"] {
+        let output = cli(&path, format);
+        assert_eq!(output.status.code(), Some(2), "{format}");
+        for bytes in [&output.stdout, &output.stderr] {
+            let text = String::from_utf8_lossy(bytes);
+            assert!(
+                !text.chars().any(|c| c.is_control() && c != '\n'),
+                "{format}: {text:?}"
+            );
+            assert!(text.contains(r"bad\u{1b}]8;;x\u{7}"), "{format}: {text:?}");
+        }
+    }
+    // Run directly, the same trace escapes its stderr in every format.
+    for format in ["plain", "json"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_latt"))
+            .current_dir(&dir.0)
+            .args(["trace", "--profile", "s.yaml", "--adapter"])
+            .arg(&adapter)
+            .args(["--target", ".", "--format", format])
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2), "{format}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains(r"bad\u{1b}]8;;x\u{7}") && !stderr.contains('\u{1b}'),
+            "{format}: {stderr:?}"
+        );
+    }
+}
+
+// Requirement: program-composition/Fuse exit codes
+// The fixture's shims run `latt adapter <name>`, which a build without native
+// adapters does not have.
+#[cfg(feature = "native-adapters")]
+#[test]
+fn a_clean_or_findings_only_fuse_run_writes_nothing_to_stderr() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures/mini-fuse/fuse-native.yaml");
+    for format in ["plain", "json", "rich"] {
+        let output = cli(&path, format);
+        assert_eq!(output.status.code(), Some(1), "{format}");
+        assert!(stderr_causes(&output).is_empty(), "{format}");
+        if format == "json" {
+            assert!(
+                output.stderr.is_empty(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+    }
 }
 // Requirement: program-composition/Source-qualified merge with colon separator
 // The fixture's shims run `latt adapter <name>`, which a build without native
@@ -1402,6 +1896,114 @@ fn suppress_a_source_entry_with_node_ids_matches_raw_ids() {
     );
 }
 
+/// [`self_named_report`] where the `z` run, which saw no orphan, also reported
+/// its `SUPPRESS` entry unused, as a real run of that profile does.
+fn self_named_report_with_unused(
+    dir: &Scratch,
+    ids: &[&str],
+    suppress: &str,
+    unused: &str,
+) -> latt_core::types::FuseReport {
+    dir.write(
+        "z.yaml",
+        &format!(
+            "{}validations:\n  - SUPPRESS: {suppress}\n",
+            orphan_profile(None)
+        ),
+    );
+    let mut z = trace(ids.iter().map(|id| entry(id, json!([edge(id)]))).collect());
+    z["entries"][0]["findings"] = json!([{
+        "code": "SUPPRESS_UNUSED", "severity": "info", "file": "<profile>", "line": 0,
+        "node_id": null, "message": unused
+    }]);
+    let a = trace(ids.iter().map(|id| entry(id, json!([]))).collect());
+    let profile = format!("{PROFILE}  - SUPPRESS: {{code: CROSS_SOURCE_DUPLICATE_ID}}\n");
+    report(dir, z, a, &profile, false)
+}
+
+fn unused_messages(report: &latt_core::types::FuseReport) -> Vec<(Option<String>, String)> {
+    report
+        .findings
+        .iter()
+        .filter(|f| f.issue.code == "SUPPRESS_UNUSED")
+        .map(|f| (f.source.clone(), f.issue.message.clone()))
+        .collect()
+}
+
+// Requirement: program-composition/Suppression in program composition
+#[test]
+fn suppress_a_source_entry_the_composed_graph_uses_is_not_reported_unused() {
+    let dir = Scratch::new();
+    let report = self_named_report_with_unused(
+        &dir,
+        &["X"],
+        "{code: UNREFERENCED}",
+        "SUPPRESS entry for 'UNREFERENCED' matched no finding: 'UNREFERENCED' is a built-in \
+         code; no finding carried it this run",
+    );
+    assert_eq!(
+        orphan_findings(&report, "UNREFERENCED"),
+        [(
+            "z:X".to_string(),
+            "z".to_string(),
+            "warning".to_string(),
+            true
+        )]
+    );
+    assert_eq!(unused_messages(&report), []);
+}
+
+// Requirement: program-composition/Suppression in program composition
+#[test]
+fn suppress_a_source_entry_names_only_the_node_ids_the_composed_graph_left_unmatched() {
+    let dir = Scratch::new();
+    let report = self_named_report_with_unused(
+        &dir,
+        &["X"],
+        "{code: UNREFERENCED, node_ids: [X, W]}",
+        "SUPPRESS entry for 'UNREFERENCED' matched no finding for node_ids [\"X\", \"W\"]: \
+         'UNREFERENCED' is a built-in code; no finding carried it this run",
+    );
+    assert_eq!(
+        unused_messages(&report),
+        [(
+            Some("z".to_string()),
+            "SUPPRESS entry for 'UNREFERENCED' matched no finding for node_ids [\"W\"]: \
+             'UNREFERENCED' is a built-in code; findings carried it this run, but none for \
+             those node_ids"
+                .to_string()
+        )]
+    );
+}
+
+// Requirement: program-composition/Suppression in program composition
+#[test]
+fn suppress_a_source_entry_the_composed_graph_leaves_unmatched_is_reported_unused() {
+    let dir = Scratch::new();
+    dir.write(
+        "a.yaml",
+        &format!(
+            "{}validations:\n  - SUPPRESS: {{code: UNREFERENCED, node_ids: [A]}}\n",
+            orphan_profile(None)
+        ),
+    );
+    let z = trace(json!([entry("Z", json!([edge("A")]))]));
+    let mut a = trace(json!([entry("A", json!([]))]));
+    a["entries"][0]["findings"] = json!([orphan("UNREFERENCED", "A", true)]);
+    let report = report(&dir, z, a, PROFILE, false);
+    assert_eq!(orphan_findings(&report, "UNREFERENCED"), []);
+    assert_eq!(
+        unused_messages(&report),
+        [(
+            Some("a".to_string()),
+            "SUPPRESS entry for 'UNREFERENCED' matched no finding for node_ids [\"A\"]: \
+             'UNREFERENCED' is a built-in code; no finding carried it this run"
+                .to_string()
+        )]
+    );
+    assert_eq!(report.exit_code(), 0);
+}
+
 #[test]
 fn suppress_fuse_level_entry_hides_cross_source_vacancies() {
     let dir = Scratch::new();
@@ -1669,4 +2271,1084 @@ fn trace_line_at_the_32_bit_maximum_is_kept() {
             .map(u32::from),
         Some(u32::MAX)
     );
+}
+
+/// Write source `name` over the native TOML adapter: `register` is its
+/// `reg.toml`, `kinds` the rest of its profile, `notes` its annotations file
+/// (none when empty).
+#[cfg(feature = "native-adapters")]
+fn toml_source(dir: &Scratch, name: &str, register: &str, kinds: &str, notes: &str) {
+    fs::create_dir(dir.0.join(name)).unwrap();
+    dir.write(&format!("{name}/reg.toml"), register);
+    let annotations = if notes.is_empty() {
+        String::new()
+    } else {
+        dir.write(&format!("{name}-notes.yaml"), notes);
+        format!("annotations: {name}-notes.yaml\n")
+    };
+    dir.write(
+        &format!("{name}.yaml"),
+        &format!(
+            "name: {name}\nprofile_version: '1.0.0'\n{annotations}adapter:\n  native: toml\n  paths: {{files: [reg.toml]}}\n  tables:\n    req: {{kind: req, id_key: id, edge_keys: {{controls: controls}}}}\n    haz: {{kind: haz, id_key: id}}\n{kinds}"
+        ),
+    );
+}
+
+/// Run `latt <args>` in `dir`; return its exit code and stdout.
+#[cfg(feature = "native-adapters")]
+fn run_in(dir: &Scratch, args: &[&str]) -> (Option<i32>, String) {
+    let output = Command::new(env!("CARGO_BIN_EXE_latt"))
+        .args(args)
+        .current_dir(&dir.0)
+        .output()
+        .unwrap();
+    (
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout).into_owned(),
+    )
+}
+
+/// Run `latt <args> --format json` in `dir`; return its exit code and document.
+#[cfg(feature = "native-adapters")]
+fn run_json(dir: &Scratch, args: &[&str]) -> (Option<i32>, Value) {
+    let (code, stdout) = run_in(dir, &[args, &["--format", "json"]].concat());
+    let value = serde_json::from_str(&stdout).unwrap_or_else(|error| panic!("{error}: {stdout}"));
+    (code, value)
+}
+
+/// Write a manifest fusing `sources` (each written by `toml_source`) under
+/// `fuse_profile`.
+#[cfg(feature = "native-adapters")]
+fn write_fuse(dir: &Scratch, sources: &[&str], fuse_profile: &str) {
+    dir.write("fuse-profile.yaml", fuse_profile);
+    let entries: String = sources
+        .iter()
+        .map(|name| {
+            format!("  - {{name: {name}, profile: {name}.yaml, adapter: toml, target: {name}}}\n")
+        })
+        .collect();
+    dir.write(
+        "manifest.yaml",
+        &format!("manifest_version: '1.0.0'\nname: t\nversion: '1.0.0'\nfuse_profile: fuse-profile.yaml\nsources:\n{entries}"),
+    );
+}
+
+#[cfg(feature = "native-adapters")]
+fn toml_fuse(dir: &Scratch, sources: &[&str], fuse_profile: &str) -> (Option<i32>, Value) {
+    write_fuse(dir, sources, fuse_profile);
+    run_json(dir, &["fuse", "--manifest", "manifest.yaml"])
+}
+
+#[cfg(feature = "native-adapters")]
+fn with_code<'a>(document: &'a Value, code: &str) -> Vec<&'a Value> {
+    document["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|finding| finding["code"] == code)
+        .collect()
+}
+
+#[cfg(feature = "native-adapters")]
+fn at<'a>(document: &'a Value, code: &str, node: &str) -> Vec<&'a Value> {
+    with_code(document, code)
+        .into_iter()
+        .filter(|finding| finding["node_id"] == node)
+        .collect()
+}
+
+/// Return the one finding with `code` on `node`, failing on none or several.
+#[cfg(feature = "native-adapters")]
+fn one<'a>(document: &'a Value, code: &str, node: &str) -> &'a Value {
+    let found = at(document, code, node);
+    assert_eq!(found.len(), 1, "{code} on {node}: {document}");
+    found[0]
+}
+
+/// Return the `EMPTY_KIND` messages, sorted, after checking each is a nodeless
+/// profile finding at the default severity.
+#[cfg(feature = "native-adapters")]
+fn empty_kind_messages(document: &Value) -> Vec<&str> {
+    let mut messages: Vec<&str> = with_code(document, "EMPTY_KIND")
+        .iter()
+        .map(|finding| {
+            assert_eq!(finding["node_id"], Value::Null, "{finding}");
+            assert_eq!(finding["severity"], "info", "{finding}");
+            assert_eq!(finding["file"], "<profile>", "{finding}");
+            assert_eq!(finding["line"], 0, "{finding}");
+            finding["message"].as_str().unwrap()
+        })
+        .collect();
+    messages.sort_unstable();
+    messages
+}
+
+#[cfg(feature = "native-adapters")]
+const REQ_HAZ: &str = "node_kinds:\n  req: {id_pattern: '^R-[0-9]+$'}\n  haz: {id_pattern: '^H-[0-9]+$'}\nedge_kinds:\n  controls: {allowed: [[req, haz]]}\n";
+#[cfg(feature = "native-adapters")]
+const DECLARES_CONTROLS: &str = "edge_kinds:\n  controls: {allowed: [[a:req, a:haz]]}\n";
+
+// Requirement: validation/EMPTY_KIND built-in code
+// Requirement: program-composition/Standard validators on the composed graph
+
+/// Edges whose targets no source declares are still edges of their kind: the
+/// fuse lists them, so it must not also call their kind empty.
+#[cfg(feature = "native-adapters")]
+#[test]
+fn a_kind_whose_every_edge_dangles_is_not_empty() {
+    let dir = Scratch::new();
+    toml_source(
+        &dir,
+        "a",
+        "[[req]]\nid = 'R-1'\ncontrols = ['H-1']\n[[req]]\nid = 'R-2'\ncontrols = ['H-2']\n",
+        "node_kinds:\n  req: {id_pattern: '^R-[0-9]+$', orphan_ok: true}\nedge_kinds:\n  controls: {cross_source: true, allowed: []}\n",
+        "",
+    );
+    let (code, fused) = toml_fuse(
+        &dir,
+        &["a"],
+        "edge_kinds: {}\nvalidations:\n  - VACANCY: {}\n",
+    );
+    assert_eq!(code, Some(0), "{fused}");
+    let edges = fused["edges"].as_array().unwrap();
+    assert_eq!(edges.len(), 2, "{fused}");
+    assert!(
+        edges
+            .iter()
+            .all(|edge| edge["kind"] == "controls" && edge["target_kind"].is_null()),
+        "{fused}"
+    );
+    let vacancies = with_code(&fused, "VACANCY");
+    assert_eq!(vacancies.len(), 2, "{fused}");
+    assert!(
+        vacancies
+            .iter()
+            .all(|finding| finding["severity"] == "hint")
+    );
+    assert_eq!(empty_kind_messages(&fused), Vec::<&str>::new(), "{fused}");
+}
+
+// Requirement: validation/EMPTY_KIND built-in code
+
+/// Resolved and dangling edges both populate their kind; a kind with neither is
+/// still reported.
+#[cfg(feature = "native-adapters")]
+#[test]
+fn only_kinds_with_no_instance_are_empty_beside_resolved_and_dangling_edges() {
+    let dir = Scratch::new();
+    toml_source(
+        &dir,
+        "a",
+        "[[req]]\nid = 'R-1'\ncontrols = ['H-1']\n[[req]]\nid = 'R-2'\ncontrols = ['H-404']\n[[haz]]\nid = 'H-1'\n",
+        "node_kinds:\n  req: {id_pattern: '^R-[0-9]+$'}\n  haz: {id_pattern: '^H-[0-9]+$'}\n  doc: {id_pattern: '^D-[0-9]+$'}\nedge_kinds:\n  controls: {allowed: [[req, haz]]}\n  cites: {allowed: [[req, doc]]}\n",
+        "",
+    );
+    let (_, fused) = toml_fuse(&dir, &["a"], DECLARES_CONTROLS);
+    let resolved: Vec<bool> = fused["edges"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|edge| !edge["target_kind"].is_null())
+        .collect();
+    assert_eq!(resolved.len(), 2, "{fused}");
+    assert!(
+        resolved.contains(&true) && resolved.contains(&false),
+        "{fused}"
+    );
+    assert_eq!(
+        empty_kind_messages(&fused),
+        [
+            "edge kind 'cites' has no edge",
+            "node kind 'a:doc' has no node",
+        ],
+        "{fused}"
+    );
+}
+
+// Requirement: validation/EMPTY_KIND built-in code
+// Requirement: program-composition/Source-qualified merge with colon separator
+
+/// A source's empty kinds and the composed run's are one population: each
+/// empty kind is reported once, a node kind under its qualified name, and a kind
+/// no edge pair mentions is still among them.
+#[cfg(feature = "native-adapters")]
+#[test]
+fn each_empty_kind_is_reported_once_under_its_composed_name() {
+    let dir = Scratch::new();
+    toml_source(
+        &dir,
+        "a",
+        "[[req]]\nid = 'R-1'\n",
+        &REQ_HAZ.replace(
+            "edge_kinds:",
+            "  doc: {id_pattern: '^D-[0-9]+$'}\nedge_kinds:",
+        ),
+        "",
+    );
+    let (code, fused) = toml_fuse(&dir, &["a"], "edge_kinds: {}\n");
+    assert_eq!(code, Some(0), "{fused}");
+    assert_eq!(
+        empty_kind_messages(&fused),
+        [
+            "edge kind 'controls' has no edge",
+            "node kind 'a:doc' has no node",
+            "node kind 'a:haz' has no node",
+        ],
+        "{fused}"
+    );
+}
+
+// Requirement: validation/EMPTY_KIND built-in code
+
+/// An edge kind is shared by name across sources: one source with no edge of it
+/// does not make it empty when another source has one.
+#[cfg(feature = "native-adapters")]
+#[test]
+fn an_edge_kind_populated_in_one_source_is_not_empty_in_the_fuse() {
+    let dir = Scratch::new();
+    toml_source(
+        &dir,
+        "a",
+        "[[req]]\nid = 'R-1'\ncontrols = ['H-1']\n[[haz]]\nid = 'H-1'\n",
+        REQ_HAZ,
+        "",
+    );
+    toml_source(
+        &dir,
+        "b",
+        "[[req]]\nid = 'R-2'\n[[haz]]\nid = 'H-2'\n",
+        REQ_HAZ,
+        "",
+    );
+    let (code, fused) = toml_fuse(&dir, &["a", "b"], "edge_kinds: {}\n");
+    assert_eq!(code, Some(0), "{fused}");
+    assert_eq!(fused["edges"].as_array().unwrap().len(), 1, "{fused}");
+    assert!(
+        with_code(&fused, "CROSS_SOURCE_DUPLICATE_ID").is_empty(),
+        "{fused}"
+    );
+    assert_eq!(empty_kind_messages(&fused), Vec::<&str>::new(), "{fused}");
+}
+
+// Requirement: validation/EMPTY_KIND built-in code
+
+/// An edge kind no source has an edge of is reported once, however many sources
+/// declare it.
+#[cfg(feature = "native-adapters")]
+#[test]
+fn an_edge_kind_empty_in_every_source_is_reported_once() {
+    let dir = Scratch::new();
+    toml_source(
+        &dir,
+        "a",
+        "[[req]]\nid = 'R-1'\n[[haz]]\nid = 'H-1'\n",
+        REQ_HAZ,
+        "",
+    );
+    toml_source(
+        &dir,
+        "b",
+        "[[req]]\nid = 'R-2'\n[[haz]]\nid = 'H-2'\n",
+        REQ_HAZ,
+        "",
+    );
+    let (code, fused) = toml_fuse(&dir, &["a", "b"], "edge_kinds: {}\n");
+    assert_eq!(code, Some(0), "{fused}");
+    assert_eq!(
+        empty_kind_messages(&fused),
+        ["edge kind 'controls' has no edge"],
+        "{fused}"
+    );
+}
+
+// Requirement: program-composition/Suppression in program composition
+
+/// The composed `EMPTY_KIND` takes the fuse profile's severity override, which
+/// `--strict` then promotes, and its `SUPPRESS`; each setting is used.
+#[cfg(feature = "native-adapters")]
+#[test]
+fn a_fuse_profile_overrides_and_suppresses_the_composed_empty_kind() {
+    let dir = Scratch::new();
+    toml_source(
+        &dir,
+        "a",
+        "[[req]]\nid = 'R-1'\n",
+        "node_kinds:\n  req: {id_pattern: '^R-[0-9]+$', orphan_ok: true}\n  haz: {id_pattern: '^H-[0-9]+$', orphan_ok: true}\nedge_kinds:\n  controls: {allowed: [[req, haz]]}\n",
+        "",
+    );
+    let severities = |profile: &str, strict: bool| {
+        write_fuse(&dir, &["a"], profile);
+        let mut args = vec!["fuse", "--manifest", "manifest.yaml"];
+        if strict {
+            args.push("--strict");
+        }
+        let (code, fused) = run_json(&dir, &args);
+        for unused in ["OVERRIDE_UNUSED", "SUPPRESS_UNUSED"] {
+            assert!(with_code(&fused, unused).is_empty(), "{fused}");
+        }
+        let mut found: Vec<(String, bool)> = with_code(&fused, "EMPTY_KIND")
+            .iter()
+            .map(|finding| {
+                (
+                    finding["severity"].as_str().unwrap().to_string(),
+                    finding["suppressed"] == true,
+                )
+            })
+            .collect();
+        found.sort();
+        (code, found)
+    };
+    let warning = "edge_kinds: {}\nvalidations:\n  - EMPTY_KIND: {severity: warning}\n";
+    let two = |severity: &str, suppressed: bool| vec![(severity.to_string(), suppressed); 2];
+    assert_eq!(severities(warning, false), (Some(0), two("warning", false)));
+    assert_eq!(severities(warning, true), (Some(1), two("error", false)));
+    let suppress = format!("{warning}  - SUPPRESS: {{code: EMPTY_KIND}}\n");
+    assert_eq!(severities(&suppress, true), (Some(0), two("error", true)));
+}
+
+/// Write source `a` with three annotated findings fuse withdraws and recomputes:
+/// `UNTRACED` on R-1, `UNREFERENCED` on H-9, and `VACANCY` on R-2, whose edge
+/// kind the fuse profile declares.
+#[cfg(feature = "native-adapters")]
+fn noted_source(dir: &Scratch) {
+    toml_source(
+        dir,
+        "a",
+        "[[req]]\nid = 'R-1'\n[[req]]\nid = 'R-2'\ncontrols = ['H-404']\n[[haz]]\nid = 'H-9'\n",
+        REQ_HAZ,
+        "- finding: {code: UNTRACED, node: R-1}\n  note: R-1 controls nothing yet.\n\
+         - finding: {code: UNREFERENCED, node: H-9}\n  note: incoming pending\n\
+         - finding: {code: VACANCY, node: R-2}\n  note: target pending\n",
+    );
+}
+
+/// Return the source's own finding for `code` on raw `node`, and the fuse's.
+#[cfg(feature = "native-adapters")]
+fn noted_pair(code: &str, node: &str) -> (Value, Value) {
+    let dir = Scratch::new();
+    noted_source(&dir);
+    let (_, alone) = run_json(&dir, &["validate", "--profile", "a.yaml", "--target", "a"]);
+    let (_, fused) = toml_fuse(&dir, &["a"], DECLARES_CONTROLS);
+    let source = one(&alone, code, node).clone();
+    assert!(!source["note"].is_null(), "{alone}");
+    (source, one(&fused, code, &format!("a:{node}")).clone())
+}
+
+// Requirement: program-composition/Member findings keep their notes
+// Requirement: finding-notes/Notes attach to findings
+
+#[cfg(feature = "native-adapters")]
+#[test]
+fn a_source_note_reaches_the_untraced_finding_fuse_recomputes() {
+    let (source, fused) = noted_pair("UNTRACED", "R-1");
+    assert_eq!(fused["note"], source["note"], "{fused}");
+}
+
+// Requirement: program-composition/Member findings keep their notes
+
+#[cfg(feature = "native-adapters")]
+#[test]
+fn a_source_note_reaches_the_unreferenced_finding_fuse_recomputes() {
+    let (source, fused) = noted_pair("UNREFERENCED", "H-9");
+    assert_eq!(fused["note"], source["note"], "{fused}");
+}
+
+// Requirement: program-composition/Member findings keep their notes
+
+/// The vacancy fuse judges replaces the source's, with fuse's own message; the
+/// note moves onto the replacement.
+#[cfg(feature = "native-adapters")]
+#[test]
+fn a_source_note_reaches_the_vacancy_fuse_replaces() {
+    let (source, fused) = noted_pair("VACANCY", "R-2");
+    assert!(
+        fused["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("edge 'a:R-2'->'H-404'"),
+        "{fused}"
+    );
+    assert_eq!(fused["note"], source["note"], "{fused}");
+}
+
+// Requirement: finding-notes/Notes attach to findings
+
+/// One note attaches to every finding with its code and node: each vacancy fuse
+/// judges on the node carries it.
+#[cfg(feature = "native-adapters")]
+#[test]
+fn a_source_note_reaches_every_replacement_vacancy_on_its_node() {
+    let dir = Scratch::new();
+    toml_source(
+        &dir,
+        "a",
+        "[[req]]\nid = 'R-2'\ncontrols = ['H-404', 'H-405']\n",
+        REQ_HAZ,
+        "- finding: {code: VACANCY, node: R-2}\n  note: targets pending\n",
+    );
+    let (_, fused) = toml_fuse(&dir, &["a"], DECLARES_CONTROLS);
+    let vacancies = at(&fused, "VACANCY", "a:R-2");
+    assert_eq!(vacancies.len(), 2, "{fused}");
+    assert!(
+        vacancies
+            .iter()
+            .all(|finding| finding["note"]["text"] == "targets pending"),
+        "{fused}"
+    );
+}
+
+// Requirement: program-composition/Member findings keep their notes
+
+/// A note belongs to its source: another source declaring the same raw ID does
+/// not receive it.
+#[cfg(feature = "native-adapters")]
+#[test]
+fn a_source_note_does_not_reach_another_source_with_the_same_raw_id() {
+    let dir = Scratch::new();
+    let note = "- finding: {code: UNTRACED, node: R-1}\n  note: a's own.\n";
+    toml_source(&dir, "a", "[[req]]\nid = 'R-1'\n", REQ_HAZ, note);
+    toml_source(&dir, "b", "[[req]]\nid = 'R-1'\n", REQ_HAZ, "");
+    let (_, fused) = toml_fuse(&dir, &["a", "b"], "edge_kinds: {}\n");
+    assert_eq!(
+        one(&fused, "UNTRACED", "a:R-1")["note"]["text"],
+        "a's own.",
+        "{fused}"
+    );
+    one(&fused, "UNTRACED", "b:R-1");
+    let on_b: Vec<&Value> = fused["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|finding| finding["node_id"] == "b:R-1")
+        .collect();
+    assert!(
+        on_b.iter().all(|finding| finding["note"].is_null()),
+        "{fused}"
+    );
+}
+
+// Requirement: program-composition/Member findings keep their notes
+
+/// A raw ID may hold the qualifier's separator; its note still finds it.
+#[cfg(feature = "native-adapters")]
+#[test]
+fn a_source_note_reaches_a_recomputed_finding_on_a_raw_id_with_a_colon() {
+    let dir = Scratch::new();
+    toml_source(
+        &dir,
+        "a",
+        "[[req]]\nid = 'R:1'\n",
+        &REQ_HAZ.replace("^R-[0-9]+$", "^R:[0-9]+$"),
+        "- finding: {code: UNTRACED, node: 'R:1'}\n  note: colon kept\n",
+    );
+    let (_, fused) = toml_fuse(&dir, &["a"], "edge_kinds: {}\n");
+    assert_eq!(
+        one(&fused, "UNTRACED", "a:R:1")["note"]["text"],
+        "colon kept",
+        "{fused}"
+    );
+}
+
+// Requirement: program-composition/Member findings keep their notes
+// Requirement: program-composition/Suppression in program composition
+
+/// A recomputed finding keeps the source's suppression and the whole expired
+/// note, and the source's `NOTE_EXPIRED` is neither lost nor repeated.
+#[cfg(feature = "native-adapters")]
+#[test]
+fn a_suppressed_finding_keeps_its_expired_note_through_recomputation() {
+    let dir = Scratch::new();
+    toml_source(
+        &dir,
+        "a",
+        "[[req]]\nid = 'R-1'\n",
+        &format!("{REQ_HAZ}validations:\n  - SUPPRESS: {{code: UNTRACED, node_ids: [R-1]}}\n"),
+        "- finding: {code: UNTRACED, node: R-1}\n  note: was due\n  until: 2020-01-01\n  by: jone\n  at: 2019-12-01\n",
+    );
+    let (_, alone) = run_json(&dir, &["validate", "--profile", "a.yaml", "--target", "a"]);
+    let source = one(&alone, "UNTRACED", "R-1");
+    assert_eq!(source["note"]["expired"], true, "{alone}");
+    assert_eq!(source["suppressed"], true, "{alone}");
+    let (_, fused) = toml_fuse(&dir, &["a"], "edge_kinds: {}\n");
+    let recomputed = one(&fused, "UNTRACED", "a:R-1");
+    assert_eq!(recomputed["suppressed"], true, "{fused}");
+    assert_eq!(recomputed["note"], source["note"], "{fused}");
+    assert_eq!(with_code(&alone, "NOTE_EXPIRED").len(), 1, "{alone}");
+    assert_eq!(with_code(&fused, "NOTE_EXPIRED").len(), 1, "{fused}");
+}
+
+// Requirement: program-composition/Member findings keep their notes
+
+/// Fuse copies notes a source attached; it does not read annotations against the
+/// composed graph, so a note that matched nothing in its source stays unattached.
+#[cfg(feature = "native-adapters")]
+#[test]
+fn a_source_note_that_matched_nothing_does_not_attach_to_a_fuse_finding() {
+    let dir = Scratch::new();
+    toml_source(
+        &dir,
+        "a",
+        "[[req]]\nid = 'R-1'\n",
+        "node_kinds:\n  req: {id_pattern: '^R-[0-9]+$', orphan_ok: true}\nedge_kinds: {}\n",
+        "- finding: {code: CONSTRAINT, node: R-1}\n  note: owner pending\n",
+    );
+    let (_, alone) = run_json(&dir, &["validate", "--profile", "a.yaml", "--target", "a"]);
+    assert_eq!(with_code(&alone, "NOTE_UNUSED").len(), 1, "{alone}");
+    let (_, fused) = toml_fuse(
+        &dir,
+        &["a"],
+        "edge_kinds: {}\nvalidations:\n  - CONSTRAINT: {kind: 'a:req', expect: {owner: {present: true}}}\n",
+    );
+    assert_eq!(
+        one(&fused, "CONSTRAINT", "a:R-1")["note"],
+        Value::Null,
+        "{fused}"
+    );
+}
+
+// Requirement: program-composition/Tri-format output
+
+/// A copied note renders in `plain` and `rich` as a source's own note does.
+#[cfg(feature = "native-adapters")]
+#[test]
+fn a_copied_note_renders_in_plain_and_rich() {
+    let dir = Scratch::new();
+    noted_source(&dir);
+    write_fuse(&dir, &["a"], DECLARES_CONTROLS);
+    for format in ["plain", "rich"] {
+        let (_, text) = run_in(
+            &dir,
+            &["fuse", "--manifest", "manifest.yaml", "--format", format],
+        );
+        for note in [
+            "R-1 controls nothing yet.",
+            "incoming pending",
+            "target pending",
+        ] {
+            assert!(text.contains(note), "{format} lacks '{note}':\n{text}");
+        }
+    }
+}
+
+// Requirement: program-composition/A source profile that cannot load is a source failure
+
+/// When assembly fails, the healthy source's findings arrive as it reported
+/// them: its own empty kinds, unqualified, and its notes.
+#[cfg(feature = "native-adapters")]
+#[test]
+fn a_failed_assembly_keeps_the_healthy_source_empty_kinds_and_notes() {
+    let dir = Scratch::new();
+    toml_source(
+        &dir,
+        "a",
+        "[[req]]\nid = 'R-1'\n",
+        REQ_HAZ,
+        "- finding: {code: UNTRACED, node: R-1}\n  note: kept\n",
+    );
+    fs::create_dir(dir.0.join("b")).unwrap();
+    dir.write("b.yaml", "name: b\nnode_kinds: [unloadable\n");
+    let (code, fused) = toml_fuse(&dir, &["a", "b"], "edge_kinds: {}\n");
+    assert_eq!(code, Some(2), "{fused}");
+    assert_eq!(
+        one(&fused, "UNTRACED", "a:R-1")["note"]["text"],
+        "kept",
+        "{fused}"
+    );
+    let mut empty: Vec<(&str, &str)> = with_code(&fused, "EMPTY_KIND")
+        .iter()
+        .map(|finding| {
+            (
+                finding["source"].as_str().unwrap(),
+                finding["message"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    empty.sort_unstable();
+    assert_eq!(
+        empty,
+        [
+            ("a", "edge kind 'controls' has no edge"),
+            ("a", "node kind 'haz' has no node"),
+        ],
+        "{fused}"
+    );
+}
+
+// Requirement: program-composition/Standard validators on the composed graph
+// Requirement: program-composition/Member findings keep their notes
+
+/// A malformed ID the source already reported is reported once: the source's
+/// finding, unchanged but for qualification, with its note.
+#[cfg(feature = "native-adapters")]
+#[test]
+fn a_source_id_format_finding_is_reported_once_as_the_source_reported_it() {
+    let dir = Scratch::new();
+    toml_source(
+        &dir,
+        "a",
+        "[[req]]\nid = 'BAD'\n",
+        REQ_HAZ,
+        "- finding: {code: ID_FORMAT, node: BAD}\n  note: legacy id\n",
+    );
+    let (alone_code, alone) = run_json(&dir, &["validate", "--profile", "a.yaml", "--target", "a"]);
+    let (fused_code, fused) = toml_fuse(&dir, &["a"], "edge_kinds: {}\n");
+    assert_eq!((alone_code, fused_code), (Some(1), Some(1)), "{fused}");
+    let source = one(&alone, "ID_FORMAT", "BAD");
+    let carried = one(&fused, "ID_FORMAT", "a:BAD");
+    for key in ["message", "file", "line", "severity", "suppressed", "note"] {
+        assert_eq!(carried[key], source[key], "{key}: {fused}");
+    }
+    assert_eq!(carried["note"]["text"], "legacy id");
+    assert_eq!(carried["source"], "a");
+}
+
+// Requirement: program-composition/Standard validators on the composed graph
+
+/// Fuse skips its own ID check only for the node a source already reported:
+/// another source's node with the same raw ID is still checked.
+#[test]
+fn the_composed_id_check_still_covers_a_node_its_source_did_not_report() {
+    let dir = Scratch::new();
+    let source_profile = "name: local\nprofile_version: '1.0.0'\nnode_kinds:\n  item: {id_pattern: '^[A-Z]+-[0-9]+$', orphan_ok: true}\nedge_kinds: {}\n";
+    dir.write("z.yaml", source_profile);
+    dir.write("a.yaml", source_profile);
+    let mut z = trace(json!([entry("BAD", json!([]))]));
+    z["entries"][0]["findings"] = json!([{"code": "ID_FORMAT", "severity": "error", "message": "z's own", "file": "x", "line": 1}]);
+    let report = report(
+        &dir,
+        z,
+        trace(json!([entry("BAD", json!([]))])),
+        "edge_kinds: {}",
+        false,
+    );
+    let mut nodes: Vec<(&str, &str)> = report
+        .findings
+        .iter()
+        .filter(|finding| finding.issue.code == "ID_FORMAT")
+        .map(|finding| {
+            (
+                finding.issue.node_id.as_deref().unwrap(),
+                finding.issue.message.as_str(),
+            )
+        })
+        .collect();
+    nodes.sort_unstable();
+    assert_eq!(nodes.len(), 2, "{nodes:?}");
+    assert_eq!(nodes[0].0, "a:BAD");
+    assert_eq!(nodes[1], ("z:BAD", "z's own"));
+}
+
+// Requirement: program-composition/Standard validators on the composed graph
+// Requirement: program-composition/Suppression in program composition
+
+/// A node kind belongs to one source, so its `EMPTY_KIND` follows the orphan
+/// rule: the fuse profile's override, else the source's, and the source's
+/// `SUPPRESS`. A shared edge kind's takes neither from a source.
+#[cfg(feature = "native-adapters")]
+#[test]
+fn a_node_kind_empty_kind_follows_its_source_profile_unless_the_fuse_overrides() {
+    let settings = |source: &str, fuse: &str| {
+        let dir = Scratch::new();
+        toml_source(
+            &dir,
+            "a",
+            "[[req]]\nid = 'R-1'\n",
+            &format!(
+                "node_kinds:\n  req: {{id_pattern: '^R-[0-9]+$', orphan_ok: true}}\n  haz: {{id_pattern: '^H-[0-9]+$'}}\nedge_kinds:\n  controls: {{allowed: [[req, haz]]}}\nvalidations:\n{source}"
+            ),
+            "",
+        );
+        let (_, fused) = toml_fuse(&dir, &["a"], &format!("edge_kinds: {{}}\n{fuse}"));
+        let of = |message: &str| {
+            let found = with_code(&fused, "EMPTY_KIND");
+            let finding = found
+                .iter()
+                .find(|finding| finding["message"] == message)
+                .unwrap_or_else(|| panic!("{message}: {fused}"));
+            (
+                finding["severity"].as_str().unwrap().to_string(),
+                finding["suppressed"] == true,
+            )
+        };
+        (
+            of("node kind 'a:haz' has no node"),
+            of("edge kind 'controls' has no edge"),
+        )
+    };
+    let at = |severity: &str, suppressed: bool| (severity.to_string(), suppressed);
+    assert_eq!(
+        settings("  - EMPTY_KIND: {severity: warning}\n", ""),
+        (at("warning", false), at("info", false))
+    );
+    assert_eq!(
+        settings(
+            "  - EMPTY_KIND: {severity: warning}\n",
+            "validations:\n  - EMPTY_KIND: {severity: hint}\n"
+        ),
+        (at("hint", false), at("hint", false))
+    );
+    assert_eq!(
+        settings("  - SUPPRESS: {code: EMPTY_KIND}\n", ""),
+        (at("info", true), at("info", false))
+    );
+}
+
+// Requirement: program-composition/Suppression in program composition
+
+/// A fuse `SUPPRESS` adds suppression and never clears it: an entry whose
+/// `node_ids` cannot match a node-less `EMPTY_KIND` leaves the source's
+/// suppression standing, and is itself reported unused.
+#[cfg(feature = "native-adapters")]
+#[test]
+fn a_fuse_suppress_that_matches_nothing_keeps_the_source_suppression() {
+    let dir = Scratch::new();
+    toml_source(
+        &dir,
+        "a",
+        "[[req]]\nid = 'R-1'\n",
+        "node_kinds:\n  req: {id_pattern: '^R-[0-9]+$', orphan_ok: true}\n  haz: {id_pattern: '^H-[0-9]+$'}\nedge_kinds: {}\nvalidations:\n  - EMPTY_KIND: {severity: error}\n  - SUPPRESS: {code: EMPTY_KIND}\n",
+        "",
+    );
+    let (code, fused) = toml_fuse(
+        &dir,
+        &["a"],
+        "edge_kinds: {}\nvalidations:\n  - SUPPRESS: {code: EMPTY_KIND, node_ids: ['a:R-1']}\n",
+    );
+    let found = with_code(&fused, "EMPTY_KIND");
+    assert_eq!(found.len(), 1, "{fused}");
+    assert_eq!(found[0]["message"], "node kind 'a:haz' has no node");
+    assert_eq!(found[0]["severity"], "error");
+    assert_eq!(found[0]["suppressed"], true, "{fused}");
+    assert_eq!(with_code(&fused, "SUPPRESS_UNUSED").len(), 1, "{fused}");
+    assert_eq!(code, Some(0), "{fused}");
+}
+
+// Requirement: program-composition/Member findings keep their notes
+
+/// Fuse's own judgements carry no source's note: `AMBIGUOUS_CROSS_REF` on a node
+/// whose source noted that code, and `CROSS_SOURCE_DUPLICATE_ID`, whose node is a
+/// raw ID that may spell another source's qualified one.
+#[test]
+fn a_source_note_does_not_reach_a_finding_only_fuse_makes() {
+    let dir = Scratch::new();
+    for name in ["a.yaml", "b.yaml", "c.yaml"] {
+        dir.write(name, SOURCE_PROFILE);
+    }
+    let manifest = load_manifest(&dir.write("fuse.yaml", "manifest_version: '1.0.0'\nname: sample\nversion: '2.0.0'\nfuse_profile: profile.yaml\nsources:\n  - {name: a, profile: a.yaml, adapter: a, target: .}\n  - {name: b, profile: b.yaml, adapter: b, target: .}\n  - {name: c, profile: c.yaml, adapter: c, target: .}\n")).unwrap();
+    let profile = load_fuse_profile(&dir.write(
+        "profile.yaml",
+        "edge_kinds:\n  links:\n    allowed: [[a:item, b:item], [a:item, c:item]]\n",
+    ))
+    .unwrap();
+    let noted = |code: &str| json!({"code": code, "severity": "error", "message": "m", "file": "x", "line": 1, "note": {"text": "a's own"}});
+    let mut a = trace(json!([entry("X", json!([edge("a:X")]))]));
+    a["entries"][0]["findings"] = json!([
+        noted("CROSS_SOURCE_DUPLICATE_ID"),
+        noted("AMBIGUOUS_CROSS_REF")
+    ]);
+    let b = trace(json!([entry("a:X", json!([]))]));
+    let c = trace(json!([entry("a:X", json!([]))]));
+    let report = assemble(
+        &manifest,
+        &profile,
+        vec![
+            parse_trace(&a.to_string(), "a").unwrap(),
+            parse_trace(&b.to_string(), "b").unwrap(),
+            parse_trace(&c.to_string(), "c").unwrap(),
+        ],
+        false,
+    )
+    .unwrap();
+    for code in ["CROSS_SOURCE_DUPLICATE_ID", "AMBIGUOUS_CROSS_REF"] {
+        let own: Vec<_> = report
+            .findings
+            .iter()
+            .filter(|f| f.issue.code == code && f.issue.message != "m")
+            .collect();
+        assert_eq!(own.len(), 1, "{code}: {:?}", report.findings);
+        assert_eq!(own[0].issue.node_id.as_deref(), Some("a:X"), "{code}");
+        assert_eq!(own[0].issue.note, None, "{code}");
+    }
+}
+
+// Requirement: finding-notes/Notes attach to findings
+
+/// A note reaches every finding with its code and node: the source's own
+/// `CONSTRAINT` and each fuse rule's, which stay distinct.
+#[cfg(feature = "native-adapters")]
+#[test]
+fn a_source_note_reaches_each_repeated_fuse_rule_on_its_node() {
+    let dir = Scratch::new();
+    toml_source(
+        &dir,
+        "a",
+        "[[req]]\nid = 'R-1'\n",
+        "node_kinds:\n  req: {id_pattern: '^R-[0-9]+$', orphan_ok: true}\nedge_kinds: {}\nvalidations:\n  - CONSTRAINT: {kind: req, expect: {owner: {present: true}}}\n",
+        "- finding: {code: CONSTRAINT, node: R-1}\n  note: owner pending\n",
+    );
+    let (_, fused) = toml_fuse(
+        &dir,
+        &["a"],
+        "edge_kinds: {}\nvalidations:\n  - CONSTRAINT: {kind: 'a:req', expect: {owner: {present: true}}}\n  - CONSTRAINT: {kind: 'a:req', expect: {title: {present: true}}}\n",
+    );
+    let found = at(&fused, "CONSTRAINT", "a:R-1");
+    assert_eq!(found.len(), 3, "{fused}");
+    assert!(
+        found
+            .iter()
+            .all(|finding| finding["note"]["text"] == "owner pending"),
+        "{fused}"
+    );
+}
+
+// Requirement: program-composition/A source profile that cannot load is a source failure
+
+/// A failed assembly recomputes nothing, but `--strict` still promotes the
+/// healthy source's warnings.
+#[cfg(feature = "native-adapters")]
+#[test]
+fn a_failed_assembly_still_promotes_healthy_warnings_under_strict() {
+    let dir = Scratch::new();
+    toml_source(
+        &dir,
+        "a",
+        "[[req]]\nid = 'R-1'\n",
+        &format!("{REQ_HAZ}validations:\n  - EMPTY_KIND: {{severity: warning}}\n"),
+        "",
+    );
+    fs::create_dir(dir.0.join("b")).unwrap();
+    dir.write("b.yaml", "name: b\nnode_kinds: [unloadable\n");
+    write_fuse(&dir, &["a", "b"], "edge_kinds: {}\n");
+    for (strict, severity) in [(false, "warning"), (true, "error")] {
+        let mut args = vec!["fuse", "--manifest", "manifest.yaml"];
+        if strict {
+            args.push("--strict");
+        }
+        let (code, fused) = run_json(&dir, &args);
+        assert_eq!(code, Some(2), "{fused}");
+        let found = with_code(&fused, "EMPTY_KIND");
+        assert_eq!(found.len(), 2, "{fused}");
+        assert!(
+            found.iter().all(|finding| finding["severity"] == severity),
+            "{fused}"
+        );
+    }
+}
+
+// Requirement: cli/CLI entry point
+
+/// A source whose profile suppresses its parse finding still leaves the fused
+/// run's plain output saying that input went unread.
+#[cfg(unix)]
+#[test]
+fn a_source_suppressed_parse_error_leaves_a_partial_input_notice() {
+    let dir = Scratch::new();
+    let manifest = manifest(&dir);
+    dir.write("profile.yaml", "edge_kinds: {}");
+    let source_profile = "name: local\nprofile_version: '1.0.0'\nnode_kinds: {item: {id_pattern: '.*', orphan_ok: true}}\nedge_kinds: {}\nvalidations:\n  - SUPPRESS: {code: PARSE_ERROR}\n";
+    dir.write("z.yaml", source_profile);
+    dir.write("a.yaml", source_profile);
+    for (name, findings) in [
+        (
+            "z",
+            json!([{"code": "PARSE_ERROR", "severity": "error", "message": "m",
+                    "provenance": {"file": "x", "line": 4}}]),
+        ),
+        ("a", json!([])),
+    ] {
+        let document = json!({"interface_version": "1.2", "findings": findings, "nodes": [
+            {"id": name.to_uppercase(), "kind": "item", "attrs": {}, "provenance": {"file": "x", "line": 1}}
+        ]});
+        executable(
+            &dir,
+            name,
+            &format!("#!/bin/sh\ncat <<'PAYLOAD'\n{document}\nPAYLOAD\n"),
+        );
+    }
+    let run = |format: &str| {
+        Command::new(env!("CARGO_BIN_EXE_latt"))
+            .args(["fuse", "--manifest"])
+            .arg(&manifest)
+            .args(["--format", format])
+            .output()
+            .unwrap()
+    };
+    let plain = run("plain");
+    assert_eq!(plain.status.code(), Some(0), "{plain:?}");
+    assert_eq!(
+        String::from_utf8_lossy(&plain.stderr),
+        "Partial input: the profile suppresses 1 PARSE_ERROR; --format json lists it\n"
+    );
+    let json = run("json");
+    assert_eq!(String::from_utf8_lossy(&json.stderr), "");
+}
+
+// Requirement: program-composition/Suppression in program composition
+
+/// Fuse two sources through real `latt trace` runs: `z` declares `ids` with a
+/// self-edge each, `a` the same ids with no edges, and the fuse profile
+/// redirects `z`'s edges into `a`. Each source profile gives `SUPPRESS_UNUSED`
+/// an error severity and a message template, as a source run renders it.
+#[cfg(unix)]
+fn templated_unused_report(
+    ids: &[&str],
+    z_suppress: &str,
+    a_suppress: &str,
+) -> latt_core::types::FuseReport {
+    let dir = Scratch::new();
+    let manifest = manifest(&dir);
+    dir.write(
+        "profile.yaml",
+        "edge_kinds: {links: {allowed: [[z:item, a:item]]}}\nvalidations:\n  - SUPPRESS: {code: CROSS_SOURCE_DUPLICATE_ID}\n",
+    );
+    for (name, suppress, edges) in [("z", z_suppress, true), ("a", a_suppress, false)] {
+        dir.write(
+            &format!("{name}.yaml"),
+            &format!(
+                "name: local\nprofile_version: '1.0.0'\nnode_kinds: {{item: {{id_pattern: '.*'}}}}\n\
+                 edge_kinds: {{links: {{allowed: [[item, item]]}}}}\nvalidations:\n\
+                 \x20 - SUPPRESS: {suppress}\n\
+                 \x20 - SUPPRESS_UNUSED: {{severity: error, message: 'review suppression: {{message}}'}}\n"
+            ),
+        );
+        let nodes: Vec<Value> = ids
+            .iter()
+            .map(|id| json!({"id": id, "kind": "item", "attrs": {}, "provenance": {"file": "x", "line": 1}}))
+            .collect();
+        let links: Vec<Value> = if edges {
+            ids.iter()
+                .map(|id| json!({"src": id, "tgt": id, "kind": "links", "provenance": {"file": "x", "line": 2}}))
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let document = json!({"interface_version": "1.2", "nodes": nodes, "edges": links});
+        executable(
+            &dir,
+            name,
+            &format!("#!/bin/sh\ncat <<'PAYLOAD'\n{document}\nPAYLOAD\n"),
+        );
+    }
+    latt_core::fuse::fuse(&manifest, Path::new(env!("CARGO_BIN_EXE_latt")), false).unwrap()
+}
+
+/// A source's templated `SUPPRESS_UNUSED` is reconciled against the composed
+/// graph as its default text is: withdrawn when the composed graph uses the
+/// entry, rewritten keeping the template when it uses part of it, and added
+/// with the template when the source run used an entry the composed graph does not.
+#[cfg(unix)]
+#[test]
+fn suppress_a_source_message_template_survives_reconciliation() {
+    let errors = |report: &latt_core::types::FuseReport| -> Vec<(Option<String>, String)> {
+        report
+            .findings
+            .iter()
+            .filter(|f| f.issue.code == "SUPPRESS_UNUSED")
+            .inspect(|f| assert_eq!(f.issue.severity, latt_core::types::Severity::Error))
+            .map(|f| (f.source.clone(), f.issue.message.clone()))
+            .collect()
+    };
+    let none = "{code: UNTRACED, node_ids: [NONE]}";
+
+    // `z`'s run saw no orphan; the composed graph orphans z:X, which the entry suppresses.
+    let used = templated_unused_report(&["X"], "{code: UNREFERENCED}", none);
+    assert_eq!(
+        errors(&used)
+            .iter()
+            .filter(|(source, _)| source.as_deref() == Some("z"))
+            .count(),
+        0,
+        "{:?}",
+        errors(&used)
+    );
+
+    // The composed graph uses X of [X, W]: the rewrite names W and keeps the template.
+    let partial = templated_unused_report(&["X"], "{code: UNREFERENCED, node_ids: [X, W]}", none);
+    assert!(
+        errors(&partial).contains(&(
+            Some("z".to_string()),
+            "review suppression: SUPPRESS entry for 'UNREFERENCED' matched no finding for \
+             node_ids [\"W\"]: 'UNREFERENCED' is a built-in code; findings carried it this \
+             run, but none for those node_ids"
+                .to_string()
+        )),
+        "{:?}",
+        errors(&partial)
+    );
+
+    // `a`'s run used its entry on A; the composed graph gives a:A an incoming edge.
+    let added = templated_unused_report(&["A"], none, "{code: UNREFERENCED, node_ids: [A]}");
+    assert!(
+        errors(&added).contains(&(
+            Some("a".to_string()),
+            "review suppression: SUPPRESS entry for 'UNREFERENCED' matched no finding for \
+             node_ids [\"A\"]: 'UNREFERENCED' is a built-in code; no finding carried it this run"
+                .to_string()
+        )),
+        "{:?}",
+        errors(&added)
+    );
+}
+
+// Requirement: program-composition/Read a fuse manifest
+#[test]
+fn cli_unreadable_manifest_names_its_cause_once_on_one_line() {
+    let dir = Scratch::new();
+    let malformed = dir.write("bad.yaml", "manifest_version: [\n");
+    let directory = dir.0.join("manifest-dir");
+    fs::create_dir(&directory).unwrap();
+    for (path, cause, line) in [
+        (&malformed, "did not find expected node content", 2),
+        (&directory, "Is a directory", 0),
+    ] {
+        let plain = cli(path, "plain");
+        assert_eq!(plain.status.code(), Some(2));
+        let text = String::from_utf8_lossy(&plain.stdout);
+        assert_eq!(text.matches(cause).count(), 1, "{text}");
+        let json: Value = serde_json::from_slice(&cli(path, "json").stdout).unwrap();
+        let findings = json["findings"].as_array().unwrap();
+        // The header line, then one line per finding.
+        assert_eq!(text.lines().count(), 1 + findings.len(), "{text}");
+        let [finding] = findings.as_slice() else {
+            panic!("one finding: {findings:?}");
+        };
+        assert_eq!(finding["code"], "FUSE_ERROR");
+        assert_eq!(finding["file"], path.display().to_string());
+        assert_eq!(finding["line"], line, "{finding}");
+        let message = finding["message"].as_str().unwrap();
+        assert!(!message.contains('\n'), "{message}");
+        assert!(message.contains(&path.display().to_string()), "{message}");
+    }
+}
+// Requirement: program-composition/Run each source through latt trace
+#[cfg(unix)]
+#[test]
+fn failed_trace_stderr_is_one_line_naming_the_exit_code_once() {
+    let dir = Scratch::new();
+    let path = manifest(&dir);
+    dir.write("profile.yaml", "edge_kinds: {}");
+    for name in ["z", "a"] {
+        dir.write(
+            &format!("{name}.yaml"),
+            "name: s\nprofile_version: '1.0.0'\nnode_kinds: {}\nedge_kinds: {}\n",
+        );
+        stub::write_stub(
+            &dir.0.join(name),
+            "#!/bin/sh\necho 'first line' >&2\necho 'second line' >&2\nexit 2\n",
+        );
+    }
+    let plain = cli(&path, "plain");
+    assert_eq!(plain.status.code(), Some(2));
+    let text = String::from_utf8_lossy(&plain.stdout);
+    let json: Value = serde_json::from_slice(&cli(&path, "json").stdout).unwrap();
+    let findings = json["findings"].as_array().unwrap();
+    assert_eq!(text.lines().count(), 1 + findings.len(), "{text}");
+    for finding in findings {
+        assert_eq!(finding["code"], "SOURCE_FAILURE");
+        let message = finding["message"].as_str().unwrap();
+        assert!(!message.contains('\n'), "{message}");
+        assert!(!message.contains("exit status"), "{message}");
+        assert!(message.starts_with("trace exited 2: "), "{message}");
+        assert!(message.contains("first line; second line"), "{message}");
+    }
 }

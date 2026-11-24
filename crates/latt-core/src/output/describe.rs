@@ -1,4 +1,6 @@
-use super::{RESET, color_for, ljust, render_json, rjust, validate};
+use std::fmt::Write as _;
+
+use super::{RESET, color_for, ljust, render_json, rjust, sanitize_text, validate};
 use crate::types::{DescribeReport, Issue, Severity};
 
 /// Indent a YAML block two spaces per line, so it reads as a child of its label.
@@ -10,42 +12,63 @@ fn indented(block: &str) -> String {
         .join("\n")
 }
 
+/// The adapter's YAML block, indented, each line escaped: its line breaks are
+/// the layout, the text inside a line is the profile's.
+fn config_block(config: &str) -> String {
+    indented(
+        &config
+            .lines()
+            .map(sanitize_text)
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
+}
+
 fn pairs(allowed: &[(String, String)]) -> String {
     allowed
         .iter()
-        .map(|(src, tgt)| format!("{src}->{tgt}"))
+        .map(|(src, tgt)| format!("{}->{}", sanitize_text(src), sanitize_text(tgt)))
         .collect::<Vec<_>>()
         .join(", ")
 }
 
 pub(super) fn format_describe_plain(report: &DescribeReport) -> String {
     let mut lines = vec![
-        format!("profile {} {}", report.profile.name, report.profile.version),
-        format!("adapter {}", report.adapter.name),
+        format!(
+            "profile {} {}",
+            sanitize_text(&report.profile.name),
+            sanitize_text(&report.profile.version)
+        ),
+        format!("adapter {}", sanitize_text(&report.adapter.name)),
     ];
     if let Some(config) = &report.adapter.config_yaml {
         lines.push("adapter.config:".to_owned());
-        lines.push(indented(config));
+        lines.push(config_block(config));
     }
     for kind in &report.node_kinds {
-        let mut line = format!("node {} {} {}", kind.kind, kind.id_pattern, kind.count);
+        let mut line = format!(
+            "node {} {} {}",
+            sanitize_text(&kind.kind),
+            sanitize_text(&kind.id_pattern),
+            kind.count
+        );
         if !kind.files.is_empty() {
-            line.push_str(&format!(" files {}", kind.files.join(", ")));
+            let _ = write!(line, " files {}", sanitize_text(&kind.files.join(", ")));
         }
         lines.push(line);
     }
     for kind in &report.edge_kinds {
         lines.push(format!(
             "edge {} {} allowed {}",
-            kind.kind,
+            sanitize_text(&kind.kind),
             kind.count,
             pairs(&kind.allowed)
         ));
     }
     for validation in &report.validations {
-        let mut line = format!("validation {}", validation.code);
+        let mut line = format!("validation {}", sanitize_text(&validation.code));
         if let Some(severity) = validation.severity {
-            line.push_str(&format!(" severity {}", severity.as_str()));
+            let _ = write!(line, " severity {}", severity.as_str());
         }
         lines.push(line);
     }
@@ -151,30 +174,31 @@ pub(super) fn format_describe_rich(report: &DescribeReport) -> String {
     let mut lines = vec![
         format!(
             "Profile {} ({})",
-            report.profile.name, report.profile.version
+            sanitize_text(&report.profile.name),
+            sanitize_text(&report.profile.version)
         ),
-        format!("Adapter {}", report.adapter.name),
+        format!("Adapter {}", sanitize_text(&report.adapter.name)),
     ];
     if let Some(config) = &report.adapter.config_yaml {
-        lines.push(indented(config));
+        lines.push(config_block(config));
     }
     lines.push("Node kinds".to_owned());
     for kind in &report.node_kinds {
         lines.push(format!(
             "  {} {} {}",
-            ljust(&kind.kind, 20),
+            ljust(&sanitize_text(&kind.kind), 20),
             rjust(&kind.count.to_string(), 5),
-            kind.id_pattern
+            sanitize_text(&kind.id_pattern)
         ));
         for file in &kind.files {
-            lines.push(format!("    {file}"));
+            lines.push(format!("    {}", sanitize_text(file)));
         }
     }
     lines.push("Edge kinds".to_owned());
     for kind in &report.edge_kinds {
         lines.push(format!(
             "  {} {} {}",
-            ljust(&kind.kind, 20),
+            ljust(&sanitize_text(&kind.kind), 20),
             rjust(&kind.count.to_string(), 5),
             pairs(&kind.allowed)
         ));
@@ -184,7 +208,10 @@ pub(super) fn format_describe_rich(report: &DescribeReport) -> String {
         let severity = validation.severity.map_or_else(String::new, |severity| {
             format!("{}{}{}", color_for(severity), severity.as_str(), RESET)
         });
-        lines.push(format!("  {} {severity}", ljust(&validation.code, 20)));
+        lines.push(format!(
+            "  {} {severity}",
+            ljust(&sanitize_text(&validation.code), 20)
+        ));
     }
     lines.push("Findings".to_owned());
     let findings: Vec<&Issue> = report.findings.iter().collect();

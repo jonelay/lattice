@@ -7,11 +7,15 @@ explicit input attribution and compatible CLI execution.
 ### Requirement: Supported borrowed graph execution
 Lattice SHALL expose a synchronous supported service over borrowed coherent graph,
 resolved profile and host context, returning owned reports for reach, path, orphans,
-counts, coverage, at, validation, summary, trace and supplied-view comparison. It SHALL
+counts, incidence coverage, direct rule coverage, at, validation, summary, trace and supplied-view comparison. It SHALL
 reuse existing structural semantics, preserve public IDs, parallel edges, undeclared
 endpoints and deterministic ordering, and SHALL NOT perform filesystem/network I/O,
 mutate input, or retain cross-snapshot state during execution. Host orchestration SHALL
 supply filesystem existence facts for at selection independently of graph execution.
+
+A trace that consumes the graph instead of borrowing it (`execute_trace_owned`) SHALL
+answer with `Response<TraceReport>`, as `compare` answers with `Response<DiffReport>`, holding
+the report `execute` gives for `Request::Trace` over the same graph.
 
 Verified by: `cargo test -p latt --test service` and `cargo test --doc -p latt-core`.
 

@@ -18,10 +18,15 @@ mod validate;
 pub use validate::scope_line;
 
 use std::borrow::Cow;
+use std::fmt::Write as _;
+use std::io;
+
+use serde_json::ser::{Formatter as JsonFormatter, PrettyFormatter};
 
 use crate::types::{
     AtReport, CountsReport, CoverageReport, DiffReport, FuseReport, Issue, Note, OrphansReport,
-    PathReport, PathwayEntry, ReachReport, Severity, SummaryReport, TraceReport, Until,
+    PathReport, PathwayEntry, ReachReport, RuleCoverageReport, Severity, SummaryReport,
+    TraceReport, Until,
 };
 use serde::Serialize as DeriveSerialize;
 use serde::ser::{Serialize, SerializeSeq, Serializer};
@@ -77,35 +82,72 @@ fn capitalize(text: &str) -> String {
     }
 }
 
-/// Escape every non-ASCII character as `\uXXXX`, the way Python's `json.dumps`
-/// does by default.
+/// `serde_json`'s pretty layout, with every non-ASCII character in a string
+/// escaped as `\uXXXX` the way Python's `json.dumps` does by default.
 ///
 /// `serde_json` emits raw UTF-8, so a finding quoting non-ASCII source text
-/// would serialize differently from the reference core. Applied to the
-/// rendered document rather than through a custom `Formatter`: non-ASCII can
-/// only occur inside JSON string literals.
-fn escape_non_ascii(json: &str) -> Cow<'_, str> {
-    const HEX: [char; 16] = [
-        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f',
-    ];
-    if json.is_ascii() {
-        return Cow::Borrowed(json);
-    }
-    let mut out = String::with_capacity(json.len());
-    for c in json.chars() {
-        if c.is_ascii() {
-            out.push(c);
-        } else {
-            let mut buf = [0u16; 2];
-            for &unit in c.encode_utf16(&mut buf).iter() {
-                out.push_str("\\u");
-                for shift in [12, 8, 4, 0] {
-                    out.push(HEX[usize::from((unit >> shift) & 0xf)]);
-                }
+/// would serialize differently from the reference core. Escaping as the
+/// serializer writes keeps the document in one buffer: non-ASCII can only occur
+/// inside JSON string literals, which reach `write_string_fragment`.
+struct AsciiPretty(PrettyFormatter<'static>);
+
+impl JsonFormatter for AsciiPretty {
+    fn write_string_fragment<W: ?Sized + io::Write>(
+        &mut self,
+        writer: &mut W,
+        fragment: &str,
+    ) -> io::Result<()> {
+        const HEX: &[u8; 16] = b"0123456789abcdef";
+        let mut rest = fragment;
+        while let Some(at) = rest.find(|c: char| !c.is_ascii()) {
+            writer.write_all(&rest.as_bytes()[..at])?;
+            let c = rest[at..].chars().next().expect("found at this offset");
+            let mut units = [0u16; 2];
+            for &unit in c.encode_utf16(&mut units).iter() {
+                let digits = [12, 8, 4, 0].map(|shift| HEX[usize::from((unit >> shift) & 0xf)]);
+                writer.write_all(b"\\u")?;
+                writer.write_all(&digits)?;
             }
+            rest = &rest[at + c.len_utf8()..];
         }
+        writer.write_all(rest.as_bytes())
     }
-    Cow::Owned(out)
+
+    fn begin_array<W: ?Sized + io::Write>(&mut self, w: &mut W) -> io::Result<()> {
+        self.0.begin_array(w)
+    }
+    fn end_array<W: ?Sized + io::Write>(&mut self, w: &mut W) -> io::Result<()> {
+        self.0.end_array(w)
+    }
+    fn begin_array_value<W: ?Sized + io::Write>(
+        &mut self,
+        w: &mut W,
+        first: bool,
+    ) -> io::Result<()> {
+        self.0.begin_array_value(w, first)
+    }
+    fn end_array_value<W: ?Sized + io::Write>(&mut self, w: &mut W) -> io::Result<()> {
+        self.0.end_array_value(w)
+    }
+    fn begin_object<W: ?Sized + io::Write>(&mut self, w: &mut W) -> io::Result<()> {
+        self.0.begin_object(w)
+    }
+    fn end_object<W: ?Sized + io::Write>(&mut self, w: &mut W) -> io::Result<()> {
+        self.0.end_object(w)
+    }
+    fn begin_object_key<W: ?Sized + io::Write>(
+        &mut self,
+        w: &mut W,
+        first: bool,
+    ) -> io::Result<()> {
+        self.0.begin_object_key(w, first)
+    }
+    fn begin_object_value<W: ?Sized + io::Write>(&mut self, w: &mut W) -> io::Result<()> {
+        self.0.begin_object_value(w)
+    }
+    fn end_object_value<W: ?Sized + io::Write>(&mut self, w: &mut W) -> io::Result<()> {
+        self.0.end_object_value(w)
+    }
 }
 
 #[derive(DeriveSerialize)]
@@ -186,13 +228,18 @@ pub(crate) fn note_text(note: &Note) -> String {
     if note.expired {
         text.push_str("(expired) ");
     }
-    text.push_str(&note.text);
-    let mut qualifiers: Vec<String> = note.by.iter().cloned().collect();
+    text.push_str(&sanitize_text(&note.text));
+    let mut qualifiers: Vec<String> = note
+        .by
+        .iter()
+        .map(|by| sanitize_text(by).into_owned())
+        .collect();
     if let Some(until) = &note.until {
-        qualifiers.push(format!("until {}", crate::notes::until_text(until)));
+        let until = crate::notes::until_text(until);
+        qualifiers.push(format!("until {}", sanitize_text(&until)));
     }
     if !qualifiers.is_empty() {
-        text.push_str(&format!(" [{}]", qualifiers.join(", ")));
+        let _ = write!(text, " [{}]", qualifiers.join(", "));
     }
     text
 }
@@ -262,11 +309,13 @@ struct PathwayEntryJson<'a> {
 /// keys in byte order whatever `serde_json` features a host unified. This is
 /// not `json.dumps(sort_keys=True)`: some structs are not alphabetical.
 fn render_json(value: &(impl Serialize + ?Sized)) -> String {
-    let rendered = serde_json::to_string_pretty(value).expect("payloads are serializable");
-    match escape_non_ascii(&rendered) {
-        Cow::Borrowed(_) => rendered,
-        Cow::Owned(escaped) => escaped,
-    }
+    let mut out = Vec::new();
+    let mut serializer =
+        serde_json::Serializer::with_formatter(&mut out, AsciiPretty(PrettyFormatter::new()));
+    value
+        .serialize(&mut serializer)
+        .expect("payloads are serializable");
+    String::from_utf8(out).expect("the serializer emits UTF-8")
 }
 
 /// Drop ANSI escape sequences from rendered output.
@@ -302,6 +351,60 @@ pub fn strip_ansi(text: &str) -> String {
         }
     }
     out
+}
+
+/// Write terminal control text in `text` as a visible escape, for `plain` and
+/// `rich` output and stderr notices.
+///
+/// Register text (a node ID, a message, a path) reaches the terminal through
+/// the human formats; an escape sequence or a newline in it could recolour the
+/// screen, plant a link or forge a finding line. Escaped: C0 controls except
+/// tab, DEL, C1 controls, the bidi controls and U+2028/U+2029. A newline is
+/// written `\n`, a carriage return `\r`, anything else `\u{..}` in lower-case
+/// hex. Text with none of them comes back borrowed. `json` stays raw: it is
+/// the lossless channel.
+///
+/// ```
+/// use latt_core::output::sanitize_text;
+/// assert_eq!(sanitize_text("a\u{1b}[2Jb\nc\td"), "a\\u{1b}[2Jb\\nc\td");
+/// ```
+#[deny(missing_docs, clippy::missing_errors_doc, clippy::missing_panics_doc)]
+#[must_use]
+#[doc(hidden)]
+pub fn sanitize_text(text: &str) -> Cow<'_, str> {
+    let Some(first) = text.find(is_terminal_control) else {
+        return Cow::Borrowed(text);
+    };
+    let mut out = String::with_capacity(text.len() + 8);
+    out.push_str(&text[..first]);
+    for c in text[first..].chars() {
+        match c {
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            c if is_terminal_control(c) => {
+                let _ = write!(out, "\\u{{{:x}}}", u32::from(c));
+            }
+            c => out.push(c),
+        }
+    }
+    Cow::Owned(out)
+}
+
+/// The characters [`sanitize_text`] escapes.
+fn is_terminal_control(c: char) -> bool {
+    matches!(
+        c,
+        '\u{0}'..='\u{8}'
+            | '\u{a}'..='\u{1f}'
+            | '\u{7f}'..='\u{9f}'
+            | '\u{61c}'
+            | '\u{200e}'
+            | '\u{200f}'
+            | '\u{202a}'..='\u{202e}'
+            | '\u{2066}'..='\u{2069}'
+            | '\u{2028}'
+            | '\u{2029}'
+    )
 }
 
 /// The renderings every payload has. `--format` parses straight into it, so an
@@ -416,11 +519,13 @@ pub enum Payload<'a> {
     Counts(&'a CountsReport),
     /// A coverage query's answer.
     Coverage(&'a CoverageReport),
+    /// A direct coverage rule with its input uncertainty.
+    RuleCoverage(&'a RuleCoverageReport),
     /// A comparison of two registers.
     Diff(&'a DiffReport),
 }
 
-// Service reports select the same payload; no transport envelope enters legacy output.
+// Service reports select the same payload; no transport envelope enters the rendered output.
 impl<'a> From<&'a crate::service::Report> for Payload<'a> {
     fn from(report: &'a crate::service::Report) -> Self {
         use crate::service::Report;
@@ -434,6 +539,7 @@ impl<'a> From<&'a crate::service::Report> for Payload<'a> {
             Report::Orphans(value) => Self::Orphans(value),
             Report::Counts(value) => Self::Counts(value),
             Report::Coverage(value) => Self::Coverage(value),
+            Report::RuleCoverage(value) => Self::RuleCoverage(value),
         }
     }
 }
@@ -509,6 +615,12 @@ impl<'a> From<&'a OrphansReport> for Payload<'a> {
 impl<'a> From<&'a CountsReport> for Payload<'a> {
     fn from(report: &'a CountsReport) -> Self {
         Payload::Counts(report)
+    }
+}
+
+impl<'a> From<&'a RuleCoverageReport> for Payload<'a> {
+    fn from(report: &'a RuleCoverageReport) -> Self {
+        Payload::RuleCoverage(report)
     }
 }
 
@@ -674,6 +786,15 @@ pub fn output_result<'a>(payload: impl Into<Payload<'a>>, format: Format) -> Str
                 query::format_counts_rich,
             ],
         ),
+        Payload::RuleCoverage(report) => pick(
+            format,
+            report,
+            [
+                query::format_rule_coverage_plain,
+                query::format_rule_coverage_json,
+                query::format_rule_coverage_rich,
+            ],
+        ),
         Payload::Coverage(report) => pick(
             format,
             report,
@@ -692,5 +813,111 @@ pub fn output_result<'a>(payload: impl Into<Payload<'a>>, format: Format) -> Str
                 query::format_diff_rich,
             ],
         ),
+    }
+}
+
+#[cfg(test)]
+mod sanitize_tests {
+    use std::borrow::Cow;
+
+    use proptest::prelude::*;
+
+    use super::sanitize_text;
+
+    /// Each escaped character with the text it must become, written out by
+    /// hand so the expectation does not come from the function under test.
+    const ESCAPES: &[(char, &str)] = &[
+        ('\u{0}', r"\u{0}"),
+        ('\u{7}', r"\u{7}"),
+        ('\u{8}', r"\u{8}"),
+        ('\n', r"\n"),
+        ('\u{b}', r"\u{b}"),
+        ('\r', r"\r"),
+        ('\u{1b}', r"\u{1b}"),
+        ('\u{1f}', r"\u{1f}"),
+        ('\u{7f}', r"\u{7f}"),
+        ('\u{80}', r"\u{80}"),
+        ('\u{85}', r"\u{85}"),
+        ('\u{9f}', r"\u{9f}"),
+        ('\u{61c}', r"\u{61c}"),
+        ('\u{200e}', r"\u{200e}"),
+        ('\u{200f}', r"\u{200f}"),
+        ('\u{202a}', r"\u{202a}"),
+        ('\u{202e}', r"\u{202e}"),
+        ('\u{2028}', r"\u{2028}"),
+        ('\u{2029}', r"\u{2029}"),
+        ('\u{2066}', r"\u{2066}"),
+        ('\u{2069}', r"\u{2069}"),
+    ];
+
+    /// The escaped set, from the rule rather than from `ESCAPES`.
+    fn escaped(c: char) -> bool {
+        matches!(c, '\u{0}'..='\u{8}' | '\u{a}'..='\u{1f}' | '\u{7f}'..='\u{9f}')
+            || matches!(
+                c,
+                '\u{61c}'
+                    | '\u{200e}'
+                    | '\u{200f}'
+                    | '\u{202a}'..='\u{202e}'
+                    | '\u{2066}'..='\u{2069}'
+                    | '\u{2028}'
+                    | '\u{2029}'
+            )
+    }
+
+    #[test]
+    fn sanitize_text_escapes_controls_and_bidi_and_borrows_clean_text() {
+        assert_eq!(
+            sanitize_text("a\u{1b}]8;;http://x\u{7}b\nc\rd\u{202e}e\u{85}f\u{7f}\tg"),
+            r"a\u{1b}]8;;http://x\u{7}b\nc\rd\u{202e}e\u{85}f\u{7f}".to_owned() + "\tg"
+        );
+        assert!(matches!(
+            sanitize_text("clean ünïcode\tand a \\ backslash"),
+            Cow::Borrowed("clean ünïcode\tand a \\ backslash")
+        ));
+    }
+
+    /// Text with no escaped character: letters, digits, punctuation, a tab, a
+    /// backslash and non-ASCII outside the escaped ranges.
+    fn clean_part() -> impl Strategy<Value = String> {
+        "[a-zA-Z0-9 \t\\\\{}\\[\\];'éü€\u{a0}\u{2010}\u{202f}]{0,8}"
+    }
+
+    /// Any characters, the escaped ones well represented: `any::<String>()`
+    /// draws from `\PC` and would never produce a control.
+    fn hostile_text() -> impl Strategy<Value = String> {
+        let controls: Vec<char> = ESCAPES.iter().map(|(c, _)| *c).collect();
+        prop::collection::vec(
+            prop_oneof![any::<char>(), prop::sample::select(controls)],
+            0..16,
+        )
+        .prop_map(|chars| chars.into_iter().collect())
+    }
+
+    proptest! {
+        /// Parts joined by one chosen control come back joined by its escape.
+        #[test]
+        fn a_control_between_clean_parts_becomes_its_escape(
+            parts in prop::collection::vec(clean_part(), 1..5),
+            pick in 0..ESCAPES.len(),
+        ) {
+            let (control, escape) = ESCAPES[pick];
+            let input = parts.join(&control.to_string());
+            prop_assert_eq!(sanitize_text(&input).into_owned(), parts.join(escape));
+        }
+
+        /// Clean text comes back borrowed and unchanged.
+        #[test]
+        fn clean_text_is_borrowed(text in clean_part()) {
+            prop_assert!(matches!(sanitize_text(&text), Cow::Borrowed(t) if t == text));
+        }
+
+        /// No escaped character survives, and a second pass changes nothing.
+        #[test]
+        fn the_output_is_free_of_controls_and_a_fixed_point(text in hostile_text()) {
+            let once = sanitize_text(&text).into_owned();
+            prop_assert!(!once.chars().any(escaped), "{:?}", once);
+            prop_assert_eq!(sanitize_text(&once).into_owned(), once);
+        }
     }
 }

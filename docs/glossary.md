@@ -49,9 +49,8 @@ finding about one file carries its provenance, one about a whole input does not.
 promoted by `--strict`; a profile override may raise it), `hint` (never promoted by
 anything).
 
-**Issue.** The Rust type a finding is held in, `latt_core::types::Issue` (also
-exported from `latt_core::service`), and what [embedding.md](embedding.md) calls it.
-Not an issue in a tracker such as GitHub or GitLab.
+**Issue.** The Rust type a finding is held in, `latt_core::service::Issue`, and what
+[embedding.md](embedding.md) calls it. Not an issue in a tracker such as GitHub or GitLab.
 
 **Finding code.** Stable machine-readable name for a class of finding: `VACANCY`,
 `UNREFERENCED`, `UNTRACED`, `COVERAGE`, `CONSTRAINT`, etc. Default severity is

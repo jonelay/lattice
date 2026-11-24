@@ -69,7 +69,9 @@ lists an unmarked key the output does not carry; the stderr findings envelope of
 blocks they SHALL name no tracked repository path that `tools/install-files` leaves out
 of the install, and every relative link SHALL resolve to a file the install holds, its `#fragment`, if
 any, naming a heading of that page. A link
-to the repository on GitHub SHALL pin the tag of the workspace version and name a tracked
+to the repository on GitHub SHALL pin the tag of the workspace version, or for a pre-release
+the tag of the release it is heading for (`0.8.1-rc.1` pins `v0.8.1`), since GitHub carries
+release tags alone, and name a tracked
 path. Where a page states a fact in place of pointing at a contract file, the gate SHALL
 compare the two.
 
@@ -148,6 +150,10 @@ Verified by: `./tools/verify.sh`, `cd crates/latt-core && ../../tools/verify.sh`
 #### Scenario: Run the contributor gate
 - **WHEN** a prepared contributor runs `./tools/verify.sh`
 - **THEN** it builds the benchmark, executes each benchmark routine once with its fixture checks, and executes the same correctness contract layers represented in CI without treating a timing movement as failure
+
+#### Scenario: Run the gate in a release snapshot
+- **WHEN** a contributor runs `./tools/verify.sh --snapshot` in snapshot history that lacks the API baseline
+- **THEN** the Rust tooling gate receives `--no-api-compat`, runs coverage and RustSec checks, and reports the skipped API comparison
 
 #### Scenario: A benchmark fixture check fails in the gate
 - **WHEN** a benchmark routine or a fixture's pinned result fails during the gate's single execution
@@ -324,12 +330,15 @@ When `refuse_patch_breaks` in `tools/verify-rust-tooling.sh` is `yes`, the
 reconciliation SHALL also be given the release in `contracts/released/VERSION`
 (`--released`) and SHALL refuse every failing lint, listed or not, when the workspace
 version is a patch release after it, as the contract pins' check does. A pre-release
-of that release is still on its way to it. The switch is `no` until 0.8.0 is
-published, so that a re-cut of 0.8.0 may still carry a listed break.
+of that release is still on its way to it. The switch is `yes` once the release in
+`contracts/released/VERSION` is published; before that it is `no`, so that a re-cut of
+the release may still carry a listed break.
 
-A cut is two commits. The first advances the baseline to its parent, whose Rust tree
-the cut ships; the second changes only version metadata and the changelog and is
-tagged. The check is green at both. Before the first, every surface SHALL be compared
+A cut that advances the baseline is two commits. The first advances the baseline to its
+parent, whose Rust tree the cut ships; the second changes only version metadata and the
+changelog and is tagged. The check is green at both. A patch cut breaks nothing, so its
+baseline stays at the last release and the cut is one tagged commit: version metadata,
+the changelog, and the docs and baselines that name the version. Before the first, every surface SHALL be compared
 by hand against the previous immutable release-candidate or release tag, and every lint
 that fails there SHALL be listed under Breaking for the cut.
 
@@ -612,20 +621,37 @@ Verified by: `cargo tree -p latt-core --edges normal --locked`,
 
 ### Requirement: End-to-end performance records compare revisions on one runner
 The repository SHALL provide a deterministic end-to-end scenario that crosses process,
-profile, filesystem, adapter, graph, validation, and output boundaries. Its collector
-SHALL resolve requested Git refs to immutable commits, build their locked release
+profile, filesystem, adapter, graph, validation, and output boundaries, at
+`benchmarks/e2e/scenario.json`. It is the default scenario, and release qualification
+SHALL use it. The collector SHALL accept another scenario manifest by path. A manifest
+SHALL name the profile it runs under, defaulting to `benchmarks/e2e/profile.yaml`, and
+its measured command SHALL be the manifest's `command` template with the revision's
+binary, adapter, profile and fixture substituted; the template's subcommand SHALL be
+`validate` or `trace`. Two further scenarios SHALL guard trace peak RSS on the default
+scenario's chain size with 1 KiB of text on every node: `trace-large-text-v1` with ASCII
+text, and `trace-sparse-non-ascii-v1` with two ASCII bytes of each text replaced by one
+`é`. Their fixture generator SHALL refuse a text size that the replacement cannot fit.
+Routine scheduled collection SHALL run both after the default scenario over the same refs.
+The collector SHALL resolve requested Git refs to immutable commits, build their locked release
 binaries outside measured regions, and execute all compared revisions on the same host
-and fixture. The default comparison SHALL use `v0.7.1` as the previous release and
-`main` as the developing candidate. Release qualification SHALL run `v0.7.1`, an exact
-development-baseline main commit, and an immutable `v0.8.0-rc.N` tag in the same job
-rather than replacing main or combining separate-run records.
+and fixture. The previous release is the one `contracts/released/VERSION` names, as a
+`v`-prefixed tag. The default comparison SHALL use it as the baseline and `main` as the
+developing candidate, and CI SHALL use it when no baseline ref is given. Release
+qualification SHALL run the previous release, an exact development-baseline main commit,
+and an immutable `vX.Y.Z-rc.N` tag on the same or a later numeric release line in the
+same job rather than replacing main or combining separate-run records. Compare the
+numeric `X.Y.Z` tuple, not SemVer prerelease precedence. A reopened release line SHALL
+keep the previous frozen release as its baseline; `contracts/released/` changes only
+at a release cut.
 
 The structured record SHALL identify the commits, toolchain, host, scenario and fixture
 hashes, measurement policy, command shape, and release build configuration. For every
 revision it SHALL retain raw wall-time and peak-RSS samples, absolute summaries, exit
 status, output digest and size, and parsed finding counts by code and severity. It SHALL
 report every pairwise movement in argument order without enforcing a numeric threshold
-during 0.8. Samples SHALL be retained per requested ref even when two refs resolve to
+during 0.8. A peak-RSS movement SHALL be reported for the minimum and maximum samples
+beside the median, since one binary's peak RSS can fall in either of two modes from run
+to run. Samples SHALL be retained per requested ref even when two refs resolve to
 the same commit. Per-revision evidence SHALL identify the compiler resolved in that
 revision's exported source tree, and each sample SHALL match the scenario's declared
 expected exit status.
@@ -635,14 +661,22 @@ counts per kind, edge counts per kind, and finding tallies per code and severity
 sums agree with its declared node and edge counts. Before measuring, the collector SHALL
 check every revision against them in an untimed preflight through that revision's
 `summary --format json`, so the measured command carries no extra work, and each
-measured output's finding tallies SHALL match them too. A revision that violates one
+measured output's finding tallies SHALL match them too. A measured `trace` output's tallies
+SHALL count the findings under every entry and the unattachable findings, and its entry
+count and outgoing-edge count SHALL equal the declared node and edge counts. A process
+started from the collector reports at least the collector's own peak RSS, so the collector
+SHALL hold no measured output in memory while samples run, and SHALL fail collection when
+a sample's peak RSS does not exceed its own. A revision that violates one
 SHALL fail collection with a message naming the revision, the invariant, the expected
 value and the observed one. The record SHALL carry the scenario's expectations and each
 revision's observed preflight. Cross-revision output identity SHALL remain reported,
 not enforced, since output bytes may change legitimately between versions.
 
 New records SHALL declare schema version 1.2 and validate against
-`benchmarks/e2e/report.schema.json`. They SHALL embed available CI provider,
+`benchmarks/e2e/report.schema.json`; a scenario's optional profile and text keys SHALL
+not change the version, and the record's profile hash SHALL be that of the profile the
+scenario names. A record of the default scenario keeps its default output path, and a
+record of another scenario SHALL default to a path carrying the scenario's ID. They SHALL embed available CI provider,
 pipeline/run, job, and runner identity. Retained schema-1.1 records predate the
 preflight and SHALL still validate against the schema. Retained schema-1.0 records that
 predate per-revision compiler and expected-exit enforcement SHALL remain historical
@@ -650,18 +684,44 @@ provenance and SHALL NOT qualify a release candidate.
 
 Verified by: a short local three-revision alias collection, scheduled/manual CI
 configuration, record inspection, malformed/inconsistent sample traps, and preflight
-traps over stub summaries with a dropped node and a wrong finding tally.
+traps over stub summaries with a dropped node and a wrong finding tally, and trace-output
+traps over a dropped entry, a dropped edge and an unattachable finding, in
+`tests/test_benchmark_tools.py`.
+
+#### Scenario: Trace peak RSS is compared across revisions
+- **WHEN** the collector runs with `--scenario benchmarks/e2e/trace-large-text-v1.json` or the sparse non-ASCII manifest
+- **THEN** each revision's `trace --format json` over the text-carrying chain is measured, and the record carries the peak-RSS movement between them
+
+#### Scenario: Peak RSS falls in two modes
+- **WHEN** a revision's peak-RSS samples fall in two modes and the median lands on one of them
+- **THEN** the comparison reports the minimum's and the maximum's movement beside the median's, so a mode flip is told apart from a change in either mode
+
+#### Scenario: A trace output drops an entry or an edge
+- **WHEN** a measured trace output holds fewer entries or outgoing edges than the scenario declares, even with the expected findings
+- **THEN** collection fails, naming the revision, the invariant, the expected value and the observed one
+
+#### Scenario: A sample reports the collector's floor
+- **WHEN** a measured sample's peak RSS is at or below the collector's own peak RSS
+- **THEN** collection fails, naming both values, rather than recording the collector's memory as the revision's
+
+#### Scenario: The default scenario is unchanged
+- **WHEN** the collector runs without `--scenario`
+- **THEN** it measures `validate` over `benchmarks/e2e/scenario.json` under `benchmarks/e2e/profile.yaml` and writes `target/benchmarks/lattice-e2e-v1.json`, as before the option existed
 
 #### Scenario: Compare previous release with main
 - **WHEN** the collector runs with its default refs
-- **THEN** release binaries for `v0.7.1` and `main` run sequentially on the same host and produce one comparison record
+- **THEN** release binaries for the previous release and `main` run sequentially on the same host and produce one comparison record
 
 #### Scenario: Qualify the release candidate
-- **WHEN** release qualification supplies the eventual 0.8.0 candidate ref
-- **THEN** the unchanged scenario compares `v0.7.1`, an exact main baseline commit, and the immutable candidate tag in one job and reports all three pairwise movements
+- **WHEN** release qualification supplies the next release's candidate ref
+- **THEN** the unchanged scenario compares the previous release, an exact main baseline commit, and the immutable candidate tag in one job and reports all three pairwise movements
+
+#### Scenario: Qualify a reopened release line
+- **WHEN** the frozen release is `v0.8.1` and release qualification supplies an exact main baseline commit and the immutable tag `v0.8.1-rc.6`
+- **THEN** qualification accepts the three refs and compares them in one job without changing the frozen contract baseline
 
 #### Scenario: Release qualification receives moving or untagged refs
-- **WHEN** release-qualification mode receives a main branch name, a candidate that is not a `v0.8.0-rc.N` tag, or a ref count other than three
+- **WHEN** release-qualification mode receives a main branch name, a baseline other than the previous release, a candidate that is not a `vX.Y.Z-rc.N` tag on the same or a later numeric release line, or a ref count other than three
 - **THEN** collection fails before building or measuring revisions
 
 #### Scenario: Two labels resolve to one commit
@@ -742,6 +802,11 @@ without a code change is still checked. It SHALL fail when the corpus is empty, 
 name the case in every failure. The expected messages SHALL be regenerated with
 `LATTICE_REGEN_BASELINES=1`, the repository's one regeneration switch, and the diff is the
 review.
+Before writing or comparing a case's baseline, the test SHALL require exit 2.
+`show` profile refusals SHALL write no stdout; a fuse refusal MAY carry its
+`FUSE_ERROR` report on stdout. Native-document baselines SHALL use the shared
+regeneration guard: only `LATTICE_REGEN_BASELINES=1` outside CI permits writing,
+and `0`, `false`, or any value in CI SHALL fail before a write.
 
 The corpus SHALL hold at least: each retired finding code, the retired operator `not`,
 each lint-level severity word (`warn`, `deny`, `allow`), an unknown placeholder and an
@@ -753,6 +818,10 @@ Verified by: `cargo test -p latt --locked --test rejected_profiles`
 #### Scenario: A case's message drifts
 - **WHEN** a loader's refusal text changes and the corpus is not regenerated
 - **THEN** the corpus test fails naming the case and showing both messages
+
+#### Scenario: Accepted profile cannot replace a refusal baseline
+- **WHEN** a rejected-profile case unexpectedly exits 0 during regeneration
+- **THEN** its test fails before writing `expected.json`
 
 #### Scenario: A new case needs no code change
 - **WHEN** a case file is added to the corpus and nothing else changes
@@ -815,6 +884,9 @@ stating that law, beside the example tests that pin chosen inputs. Property test
 use the workspace's dev-only `proptest` dependency, SHALL run as ordinary `#[test]`s
 in the crate's `cargo test`, and SHALL use the default case count unless the test
 documents why it needs another.
+The public reach and path queries SHALL be checked on generated graphs against
+an independent queue over the generated edge triples, including vacant endpoints,
+edge-kind filtering, both reach directions, and alternate insertion orders.
 
 A failing seed proptest persists under the crate's `proptest-regressions/` directory SHALL
 be committed when it records a defect or a regression, so every run replays it first; a
@@ -840,4 +912,25 @@ and `cargo test -p latt-core --locked`, each of which runs the crate's propertie
 #### Scenario: A property finds a defect in the implementation
 - **WHEN** the failing input is a real defect rather than a generator mistake
 - **THEN** the property's generator is narrowed with the exclusion documented, the seed is committed, and a failing `#[ignore]`d test records the defect for a separate change
+
+### Requirement: CI tests the adapter templates in every language
+Both CI definitions SHALL test all three adapter templates against `expected.json`. The
+Rust template is a workspace member, so the `rust-check` steps cover it. The Python
+template runs in `python-check` through `tests/test_adapter_templates.py`. The Go
+template SHALL be checked with `gofmt -l`, `go vet ./...` and `go test ./...` in
+`examples/adapters/go`: in GitLab
+CI in a job on a `golang` image pinned by version, and in GitHub CI with the Go that the
+runner carries, its version printed in the log. A green pipeline therefore never leaves
+the Go template unchecked, even though the Python suite skips it on a host without Go.
+
+Verified by: inspection of `.gitlab-ci.yml` and `.github/workflows/ci.yml`, and the Go
+job's log.
+
+#### Scenario: The Go template drifts
+- **WHEN** a change makes the Go template's output differ from `expected.json`
+- **THEN** the Go job fails in both CI definitions, whatever the Python suite reports
+
+#### Scenario: The Go image is pinned
+- **WHEN** the GitLab Go job runs
+- **THEN** its image names an exact Go version, so a new Go release cannot change the result with no change in the repository
 

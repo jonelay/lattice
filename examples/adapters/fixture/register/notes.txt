@@ -1,0 +1,1 @@
+Not selected: the profile reads only files ending in .reg.

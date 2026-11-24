@@ -18,11 +18,10 @@ llvm_cov_version='cargo-llvm-cov 0.9.1'
 semver_checks_version='cargo-semver-checks 0.51.0'
 # Verbatim: cargo-audit's version line repeats its subcommand name.
 audit_version='cargo-audit-audit 0.22.2'
-api_baseline='2c6172111d418afa444dc579d14a9be568ac04a6'
+api_baseline='b5f1e601556d3812fb8796ee9389bd7750937e02'
 # yes: a baseline advance on a patch line after contracts/released/VERSION is refused
-# even when listed. Turned on when 0.8.0 is published; until then a re-cut of 0.8.0
-# may still carry a listed break.
-refuse_patch_breaks=no
+# even when listed. no lets a re-cut of an unpublished release carry a listed break.
+refuse_patch_breaks=yes
 coverage_report='target/coverage/lcov.info'
 
 actual_llvm_cov=$(cargo llvm-cov --version 2>/dev/null || true)

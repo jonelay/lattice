@@ -2,7 +2,7 @@
 
 ``tests/ci_recipes.py`` is the guard; the consumer CI job runs it directly
 against an install with no toolchain. Here it runs against an install built
-from ``target/debug`` by ``tools/make-install.sh``, with one item per recipe
+from the Cargo debug build by ``tools/make-install.sh``, with one item per recipe
 and revision, plus tests of the guard itself over synthetic pages.
 """
 from __future__ import annotations
@@ -17,19 +17,15 @@ import pytest
 
 import ci_recipes
 from ci_recipes import Fixture, Recipe
+from conftest import CORE_BIN, REPO_ROOT, needs_core, require_binary
 
-REPO_ROOT = Path(__file__).parent.parent
-DEBUG = REPO_ROOT / "target" / "debug"
+DEBUG = CORE_BIN.parent
 DOC = REPO_ROOT / "docs" / "ci.md"
 if DOC.exists():
     DOC_RECIPES, DOC_PROBLEMS = ci_recipes.parse_doc(DOC.read_text())
 else:
     DOC_RECIPES, DOC_PROBLEMS = [], ["docs/ci.md is missing"]
 RECIPE_NAMES = sorted(set(ci_recipes.INVENTORY) | {r.name for r in DOC_RECIPES})
-
-needs_core = pytest.mark.skipif(
-    not (DEBUG / "latt").exists(), reason="core not built; run: cargo build"
-)
 
 GITLAB = """\
 lattice:
@@ -50,8 +46,7 @@ def page(*recipes: tuple[str, str, str]) -> str:
 
 @pytest.fixture(scope="session")
 def install(tmp_path_factory) -> Path:
-    if not (DEBUG / "latt").exists():
-        pytest.skip("core not built; run: cargo build")
+    require_binary(CORE_BIN)
     dest = tmp_path_factory.mktemp("install")
     result = subprocess.run(
         [str(REPO_ROOT / "tools" / "make-install.sh"), str(DEBUG), str(dest)],
@@ -194,7 +189,7 @@ def test_install_the_checkout_cannot_rescue_a_broken_install(
     broken = tmp_path / "latt"
     shutil.copytree(install, broken, symlinks=True)
     (broken / "bin" / "latt-adapter-entomologist").unlink()
-    monkeypatch.setenv("CARGO_TARGET_DIR", str(REPO_ROOT / "target"))
+    monkeypatch.setenv("CARGO_TARGET_DIR", str(DEBUG.parent))
     env = ci_recipes.recipe_env(broken / "bin", tmp_path / "home")
     problems = ci_recipes.check_install(broken, tmp_path, env)
     assert [p for p in problems if p.startswith("adapters/entomologist ")], problems
@@ -210,6 +205,12 @@ def doc_recipe(name: str) -> Recipe:
 # Requirement: ci-recipes/Recipes cover four postures and state their outcomes
 def test_markers_the_page_is_well_formed() -> None:
     assert DOC_PROBLEMS == []
+
+
+# Requirement: ci-recipes/Recipes cover four postures and state their outcomes
+def test_inventory_requires_the_coverage_report_recipe() -> None:
+    assert ci_recipes.INVENTORY.get("coverage-report") == ("report", "sh")
+    assert doc_recipe("coverage-report").posture == "report"
 
 
 # Requirement: ci-recipes/Recipes cover four postures and state their outcomes
@@ -230,3 +231,100 @@ def test_recipe(name: str, rev: str, fixture: Fixture, env: dict[str, str]) -> N
 @pytest.mark.parametrize("name", RECIPE_NAMES)
 def test_recipe_without_lattice(name: str, fixture: Fixture, env: dict[str, str]) -> None:
     assert ci_recipes.check_without_lattice(doc_recipe(name), fixture, env) == []
+
+
+def gate_fence() -> str:
+    """The Empty-read gate section's YAML fence from docs/ci.md."""
+    text = DOC.read_text()
+    section = text.split("## Empty-read gate", 1)[1].split("\n## ", 1)[0]
+    return section.split("```yaml\n", 1)[1].split("```", 1)[0]
+
+
+def gated_consumer(tmp_path: Path, *, opt_in: bool) -> Path:  # one call per tmp_path
+    """A copy of the clean consumer whose `validations` list gains the fence's entries."""
+    import yaml
+
+    dest = tmp_path / "consumer"
+    shutil.copytree(ci_recipes.FIXTURE / "clean", dest)
+    fence = gate_fence()
+    if opt_in:
+        fence = fence.replace("# - EMPTY_KIND", "- EMPTY_KIND")
+    profile = yaml.safe_load((dest / "lattice.yaml").read_text())
+    profile["validations"] += yaml.safe_load(fence)["validations"]
+    text = yaml.safe_dump(profile, sort_keys=False)
+    assert text.count("\nvalidations:") == 1
+    (dest / "lattice.yaml").write_text(text)
+    return dest
+
+
+def validate(profile_dir: Path, target: Path, env: dict[str, str], *flags: str):
+    return subprocess.run(
+        ["latt", "validate", *flags, "--profile", str(profile_dir / "lattice.yaml"),
+         "--adapter", "md", "--target", str(target)],
+        env=env, capture_output=True, text=True,
+    )
+
+
+# Requirement: ci-recipes/Recipes cover four postures and state their outcomes
+def test_empty_read_gate_snippet_fails_an_empty_target(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    plain = tmp_path / "plain"
+    shutil.copytree(ci_recipes.FIXTURE / "clean", plain)
+    before = validate(plain, empty, env)
+    assert before.returncode == 0, before.stdout + before.stderr
+    assert "NO_MATCHING_FILES" in before.stdout
+    after = validate(gated_consumer(tmp_path, opt_in=False), empty, env)
+    assert after.returncode == 1, after.stdout + after.stderr
+    assert "ERROR" in after.stdout and "NO_MATCHING_FILES" in after.stdout
+
+
+# Requirement: ci-recipes/Recipes cover four postures and state their outcomes
+def test_empty_read_gate_snippet_still_fails_under_strict(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    plain = tmp_path / "plain"
+    shutil.copytree(ci_recipes.FIXTURE / "clean", plain)
+    before = validate(plain, empty, env, "--strict")
+    assert before.returncode == 0, before.stdout + before.stderr
+    after = validate(gated_consumer(tmp_path, opt_in=False), empty, env, "--strict")
+    assert after.returncode == 1, after.stdout + after.stderr
+
+
+# Requirement: ci-recipes/Recipes cover four postures and state their outcomes
+def test_empty_kind_opt_in_fails_a_matched_file_with_no_rows(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    target = tmp_path / "headeronly"
+    target.mkdir()
+    (target / "requirements.md").write_text("| ID | Description | Status | Traces To |\n| --- | --- | --- | --- |\n")
+    alone = validate(gated_consumer(tmp_path, opt_in=False), target, env)
+    assert alone.returncode == 0, alone.stdout + alone.stderr
+    (tmp_path / "opt").mkdir()
+    opted = validate(gated_consumer(tmp_path / "opt", opt_in=True), target, env)
+    assert opted.returncode == 1, opted.stdout + opted.stderr
+    assert opted.stdout.count("ERROR EMPTY_KIND") == 2, opted.stdout
+
+
+# Requirement: ci-recipes/Recipes cover four postures and state their outcomes
+def test_coverage_report_exits_zero_despite_gap(
+    fixture: Fixture, env: dict[str, str]
+) -> None:
+    import json
+
+    clone = fixture.clone("warning")
+    report = _run(["coverage", "--rule", "1", "--profile", "lattice.yaml", "--adapter", "md",
+                   "--target", ".", "--format", "json"], clone, env)
+    assert report.returncode == 0, report.stderr
+    assert [m["id"] for m in json.loads(report.stdout)["missing"]] == ["REQ-3"]
+    gate = ["validate", "--profile", "lattice.yaml", "--adapter", "md", "--target", "."]
+    assert _run(gate, clone, env).returncode == 0
+    assert _run([*gate, "--strict"], clone, env).returncode == 1
+
+
+def _run(args: list[str], cwd: Path, env: dict[str, str]) -> subprocess.CompletedProcess:
+    return subprocess.run(["latt", *args], cwd=cwd, env=env, capture_output=True, text=True)

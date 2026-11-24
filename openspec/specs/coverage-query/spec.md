@@ -244,3 +244,67 @@ to `hint`.
   the kind (profile-schema spec, coverage entries name declared kinds); on the
   profile `fuse` composes the entry instead emits `CONFIG_ERROR` and performs no
   check, and a valid entry beside it still runs
+
+### Requirement: Rule-specific coverage report
+`latt coverage --rule N` SHALL report one direct `COVERAGE` entry, selected by its
+one-based ordinal among `COVERAGE` entries in the resolved profile. Without `--rule`,
+existing coverage output and semantics SHALL remain unchanged. A missing, zero,
+out-of-range or severity-only selection SHALL be refused. `COVERAGE_DEEP` entries
+SHALL remain outside this selector.
+
+The report SHALL name the rule ordinal, target kind, incoming edge kind and direction,
+and the resolved `where` and `source_where` maps (empty maps when absent). Its `total`
+SHALL count explicit target-kind nodes matching `where`; `covered` SHALL count those
+with at least one selected incoming edge from an explicit source matching
+`source_where`, sharing direct coverage validation semantics. Duplicate edges SHALL
+count once. `covered_pct` SHALL be rounded to one decimal, with null for zero total.
+`missing` SHALL list every selected uncovered node in ID order, with ID, file, line
+(0 when unspecified) and the shared `unknown`/`unverified` coverage state.
+
+`uncertainty` SHALL accompany the aggregate on stdout in every format: allowed source
+kinds for this target, explicit source population matching `source_where`, the count
+with no outgoing selected edge, and every resolved adapter finding regardless of
+suppression. An outgoing edge to an absent target still attributes its source.
+`input_status` SHALL be `partial` with a `PARSE_ERROR` finding or a host-declared
+partial input, and `unknown` otherwise. Neither value asserts input completeness;
+other adapter caveats remain in findings. No count of unread records is inferred.
+
+The supported service SHALL expose this operation as `Request::RuleCoverage { rule }`
+and return `RuleCoverageReport` through `Report::RuleCoverage`. The payload SHALL
+retain the adapter findings also supplied by the service envelope; consumers SHALL
+avoid double-counting them. The CLI SHALL emit successful rule reports through
+`output_result` in plain, JSON and rich, with no duplicate findings on stderr.
+It SHALL exit 0 when answered, including gaps and adapter errors beside readable
+nodes, and 2 for request/setup/output failures or zero nodes with an error-severity
+adapter finding. It SHALL never exit 1. Failure diagnostics SHALL remain visible.
+
+**Verified by:** `cargo test -p latt-core --test rule_coverage`,
+`cargo test -p latt --test rule_coverage`, `cargo test -p latt --test service_cli_compat`
+
+#### Scenario: Structural edges leave missing evidence visible
+- **WHEN** every selected target has an incoming structural edge but lacks the
+  selected evidence edge, with an unread row reported by the adapter
+- **THEN** ordinary coverage keeps its incidence percentage and the rule report
+  counts zero covered, lists every missing node, and retains the parse finding
+  beside a partial input status, even when the profile suppresses that finding
+
+#### Scenario: Filtered populations and explicit sources
+- **WHEN** the rule declares target and source filters, duplicate evidence edges,
+  an edge from an absent source and an attributed source with an absent target
+- **THEN** each matching target counts once, excluded or absent sources cover
+  nothing, and the attributed source stays outside the unattributed count
+
+#### Scenario: Empty denominator
+- **WHEN** a readable register has no matching target nodes
+- **THEN** the report carries total 0, covered 0, a null percentage and an empty
+  missing list, with input completeness left unknown
+
+#### Scenario: Select a rule unambiguously
+- **WHEN** a resolved profile contains two direct rules and unrelated validations
+- **THEN** --rule 1 and --rule 2 select the direct rules in declaration order;
+  zero, an absent ordinal and a severity-only entry are refused
+
+#### Scenario: Partition the denominator
+- **WHEN** target declarations arrive in any order with arbitrary evidence membership
+- **THEN** covered plus the missing-list length equals total and missing IDs sort
+  deterministically

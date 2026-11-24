@@ -694,6 +694,7 @@ mod tests {
 
 #[cfg(test)]
 mod properties {
+    use std::fmt::Write as _;
     use std::ops::Range;
 
     use proptest::prelude::*;
@@ -775,7 +776,7 @@ mod properties {
             let mut line = String::new();
             for (span, heading) in &items {
                 let fence = "`".repeat(span.run);
-                line.push_str(&format!("{fence}{}{fence} see § `{heading}` then ", span.content));
+                let _ = write!(line, "{fence}{}{fence} see § `{heading}` then ", span.content);
             }
             line.push('\n');
             let read: Vec<String> = collect_xrefs(&line)

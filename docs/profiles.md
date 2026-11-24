@@ -154,7 +154,7 @@ node_kinds:
 
 | Key | Holds | Rules |
 |---|---|---|
-| `id_pattern` (required) | regex the ID must match (`ID_FORMAT`) | double backslashes in YAML (`\\d`); an invalid regex is a load error |
+| `id_pattern` (required) | regex the whole ID must match (anchors `^` and `$` are optional; a partial match fails `ID_FORMAT`) | double backslashes in YAML (`\\d`). Put alternatives in one group, such as `(?:A\|B)`, because an unbalanced top-level alternation such as `A)\|(?:B` can load and match only part of an ID. |
 | `summary_attr` | attr for trace's summary column | declared, and other than `list` |
 | `text_attrs` | attrs a text-ranking consumer reads, in order | `string` or `enum`; absent falls back to `summary_attr`; `[]` means no text |
 | `text_chunk_line_prefix` | literal line prefix where a ranking consumer splits text | rejected if blank, multi-line, or the kind has no rankable text |
@@ -333,6 +333,7 @@ validations:
 | `SUPPRESS_UNUSED` | a `SUPPRESS` entry matched nothing | info |
 | `OVERRIDE_UNUSED` | an override names a code no shipped component emits, and no finding carried it | info |
 | `NOTE_UNUSED` | a notes entry matched nothing | info |
+| `DEPRECATED_KEY` | the adapter's interface document uses a pre-1.2 key (`contract_version`, `issues`); written at `<adapter>` | info |
 | `COVERAGE_UNKNOWN` | evidence-bearing nodes attribute to nothing | hint |
 | `SUGGESTED_EDGE` | the suggestion sidecar proposes an edge | hint |
 | `SUGGESTION_UNRESOLVED` | a suggestion does not resolve | hint |
@@ -345,6 +346,7 @@ validations:
 | `PATHWAY_INVALID` | a declared pathway does not hold (adapter-emitted) | warning |
 | `SOURCE_MISSING` | an [`id_names`](#id_names) address names nothing (adapter-emitted) | warning |
 | `NO_MATCHING_FILES` | file globs matched nothing in a readable target (adapter-emitted) | info |
+| `UNFOLLOWED_LINK` | a symlinked directory beneath the target was not walked; written at its path (adapter-emitted) | info |
 | `FUSE_ERROR` | the manifest or a path it names cannot be read, parsed or resolved; fuse still reports and exits 2 (fuse) | error |
 | `SOURCE_FAILURE` | a source's run exited 2, crashed or wrote unreadable output (fuse) | error |
 | `CROSS_SOURCE_DUPLICATE_ID` | one raw ID declared in several sources (fuse) | error |
@@ -407,7 +409,12 @@ check, `{severity}` is the entry's; `--strict` promotes after rendering.
 `COVERAGE` asks for a direct incoming edge. Under `COVERAGE_DEEP` a node is covered by a
 direct `evidence` edge, **or** by incoming `via` edges whose sources are all covered,
 repeated until nothing changes. Leaves without evidence and evidence-free cycles stay
-uncovered. `where` (`CONSTRAINT` syntax) limits the targets checked:
+uncovered. Only nodes of `target_kind` join the rollup: a `via` edge whose source is
+another kind, or was never declared, contributes no child, so `COVERAGE_DEEP` does not walk
+a requirement-design-implementation-test chain across kinds; use one `COVERAGE` entry per
+link of the chain (see [Per-item obligations](#per-item-obligations)). A direct `evidence`
+edge covers a parent even when its children are uncovered. Cycle membership in a finding
+explains the uncovered nodes; coverage itself is a least fixed point. `where` (`CONSTRAINT` syntax) limits the targets checked:
 
 ```yaml
   - COVERAGE_DEEP:
@@ -428,6 +435,80 @@ tests) cover nothing and leave the `COVERAGE_UNKNOWN` population, whose hint the
       source_where:
         status: {ne: retired}
 ```
+
+
+### Per-item obligations
+
+Lattice has no per-item `Needs` field. A profile expresses the same obligation as a boolean attr on the item plus one `COVERAGE` entry per provider kind, and rejects a provider nobody asked for with `EDGE_WHERE`. The set of provider kinds is fixed in the profile; the per-item choice is authored in the register. Declare each flag `required: true`: a design that omits it gets `ATTR_REQUIRED` and is never exempt by omission. Both entries default to warning, and a warning fails a run only under `--strict`; the `severity: error` lines below make these findings fail a plain run. `EDGE_WHERE` renders `{id}` as the source node of the edge, so the message names the test or implementation that points at the design.
+
+```yaml
+name: obligations
+profile_version: "1.0.0"
+
+adapter:
+  native: toml
+  paths:
+    files: ["registers/*.toml"]
+  tables:
+    dsn:
+      kind: dsn
+      id_key: id
+      key_map: { needs_impl: needs_impl, needs_test: needs_test }
+      edge_keys: {}
+    impl:
+      kind: impl
+      id_key: id
+      key_map: {}
+      edge_keys: { implements: implements }
+    test:
+      kind: test
+      id_key: id
+      key_map: {}
+      edge_keys: { verifies: verifies }
+
+node_kinds:
+  dsn:
+    id_pattern: "^D-[0-9]+$"
+    orphan_ok: true
+    attrs:
+      needs_impl: { type: bool, required: true }
+      needs_test: { type: bool, required: true }
+  impl:
+    id_pattern: "^I-[0-9]+$"
+    orphan_ok: true
+  test:
+    id_pattern: "^T-[0-9]+$"
+    orphan_ok: true
+
+edge_kinds:
+  implements: { allowed: [[impl, dsn]] }
+  verifies: { allowed: [[test, dsn]] }
+
+validations:
+  - COVERAGE:
+      target_kind: dsn
+      edge_kind: implements
+      where: { needs_impl: { eq: true } }
+      severity: error
+      message: "{id} needs an implementation and has none"
+  - COVERAGE:
+      target_kind: dsn
+      edge_kind: verifies
+      where: { needs_test: { eq: true } }
+      severity: error
+  - EDGE_WHERE:
+      edge_kind: verifies
+      reject: { target: { needs_test: { eq: false } } }
+      message: "{id} verifies a design that asks for no test"
+      severity: error
+  - EDGE_WHERE:
+      edge_kind: implements
+      reject: { target: { needs_impl: { eq: false } } }
+      message: "{id} implements a design that asks for no implementation"
+      severity: error
+```
+
+Limits: provider kinds are finite and named in the profile, and obligations do not chain across kinds (`COVERAGE_DEEP` rolls up within one kind; see Deep coverage). A `NO_MATCHING_FILES` guard fires only when no file matched; it does not prove the register is complete, so compare `latt query counts` with what you expect.
 
 ### SUMMARY
 
@@ -463,14 +544,14 @@ must hold and no `reject` condition may.
 `expect` and `reject` together need at least one condition. `message` is a string
 ([Messages](#messages)).
 
-| Operator | Holds when the attr | Trustfall |
-|---|---|---|
-| `eq: <value>` | equals value | `=` |
-| `ne: <value>` | is absent or differs | `!=`, except `ne` also holds for absent |
-| `in: [v1, v2]` | is a listed value | `one_of` |
-| `lt`, `gt`, `lte`, `gte` | is less, greater, ≤, ≥ | `<`, `>`, `<=`, `>=` |
-| `matches: <regex>` | matches unanchored as text; numbers and booleans convert, lists, maps and null fail | `regex` |
-| `present: true` / `false` | exists (even empty or null) / does not | `is_null` cannot tell absent from null |
+| Operator | Holds when the attr |
+|---|---|
+| `eq: <value>` | equals value |
+| `ne: <value>` | is absent or differs |
+| `in: [v1, v2]` | is a listed value |
+| `lt`, `gt`, `lte`, `gte` | is less, greater, ≤, ≥ |
+| `matches: <regex>` | matches unanchored as text (unlike `id_pattern`); numbers and booleans convert, lists, maps and null fail |
+| `present: true` / `false` | exists (even empty or null) / does not |
 
 - Comparison is type-aware: `"42"` does not match `42`. A missing attr or type
   mismatch fails the condition.
@@ -478,7 +559,6 @@ must hold and no `reject` condition may.
   `YYYY-MM-DD` dates order chronologically.
 - `matches` is a Rust [`regex`](https://docs.rs/regex); anchor with `^` and `$`.
 - Unknown operators, and the retired `not` (use `ne`), are load errors.
-- Future operators follow their Trustfall counterpart.
 
 ### EDGE_WHERE
 
@@ -551,6 +631,11 @@ Marks a finding as expected.
 
 - A suppressed finding skips exit code 1 and `plain`/`rich`, and stays in `json` with
   `"suppressed": true`.
+- A suppressed `PARSE_ERROR` still leaves one line on stderr in `plain`/`rich`,
+  `Partial input: the profile suppresses N PARSE_ERROR; --format json lists it`, since an
+  answer over input the adapter could not read is incomplete. No entry removes it, and it
+  changes no exit code. `coverage --rule` keeps the parse findings in its report instead
+  ([cli.md](cli.md#rule-coverage)).
 - Entries for one code merge `node_ids`; one without `node_ids` covers all.
 - Runs **after** `--strict`. `CONFIG_ERROR` cannot be suppressed.
 - Unmatched entries give `SUPPRESS_UNUSED`, itself suppressible; override it to `warning` to gate on them.
@@ -578,7 +663,9 @@ resolved beside the declaring profile (the nearest under `extends`).
 - `NOTE_INVALID` covers a missing `finding` or `note`, unknown keys, impossible dates,
   unknown pathways or positions, and repeats; the entry is skipped.
 - A notes file other than a YAML list is a load error (exit 2). Fuse profiles cannot
-  declare `annotations`; fuse keeps the notes each source's profile attached.
+  declare `annotations`; fuse keeps the notes each source's profile attached, and
+  copies each onto fuse's own findings with the same code and node
+  ([fuse.md](fuse.md#4-validation)).
 
 ## Pathways
 
@@ -616,7 +703,8 @@ validations:
 ```
 
 Scalars: child wins. Lists: child replaces. Mappings: deep merge. `profile_version` is
-the child's. Parent node kinds come first. Chains work; cycles are load errors.
+the child's. Parent node kinds come first. Chains work, including long acyclic
+chains; cycles are load errors.
 
 ## Versioning
 

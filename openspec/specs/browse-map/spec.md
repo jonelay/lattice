@@ -176,6 +176,12 @@ The graph SHALL compute betweenness centrality over the current edge-kind
 filter set and visually distinguish high-centrality nodes (bold or
 brighter style). Centrality SHALL be recomputed when the edge-kind
 filter changes.
+Scores SHALL remain finite and within `[0, 1]` even when a directed graph has
+more shortest paths than a floating-point count can represent.
+
+#### Scenario: Deep diamond graph
+- **WHEN** a directed graph has 1,027 two-node layers joined by every next-layer edge
+- **THEN** every centrality score is finite and in `[0, 1]`, and peers in a layer have equal scores
 
 #### Scenario: Hub node stands out
 - **WHEN** a node has high betweenness centrality in the filtered graph
@@ -199,4 +205,3 @@ back SHALL preserve all graph state.
 - **WHEN** the user sets a radius and kind filter in the graph, switches
   to node list (`1`), and returns to the graph (`5`)
 - **THEN** the graph's radius, filter, center, and cursor are preserved
-
